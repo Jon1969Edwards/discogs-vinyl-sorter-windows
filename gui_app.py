@@ -26,6 +26,7 @@ import subprocess
 
 # Local import of the core CLI module
 import discogs_app as core
+from core.models import ReleaseRow
 
 
 @dataclass
@@ -446,8 +447,8 @@ class App:
 
       rows_sorted = core.sort_rows(rows, cfg.various_policy)
       # Optional categories
-      rows45_sorted: list[core.ReleaseRow] = []
-      rows_cd_sorted: list[core.ReleaseRow] = []
+      rows45_sorted: list[ReleaseRow] = []
+      rows_cd_sorted: list[ReleaseRow] = []
       if cfg.include_45s:
         rows45 = core.collect_45_rows(
           headers=headers,
