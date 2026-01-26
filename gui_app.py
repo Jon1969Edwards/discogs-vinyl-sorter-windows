@@ -53,6 +53,8 @@ class RunConfig:
 
 
 class App:
+  CLEAN_OUTPUTS_LABEL = "Clean Outputs"
+
   def __init__(self, root: Tk) -> None:
     self.root = root
     root.title("Discogs LP Shelf Sorter – GUI")
@@ -180,7 +182,7 @@ class App:
     row += 1
     ttk.Button(btn_row, text="Run", command=self._run_clicked).grid(row=0, column=0, padx=4)
     ttk.Button(btn_row, text="Open Output", command=self._open_output).grid(row=0, column=1, padx=4)
-    ttk.Button(btn_row, text="Clean Outputs", command=self._clean_outputs).grid(row=0, column=2, padx=4)
+    ttk.Button(btn_row, text=self.CLEAN_OUTPUTS_LABEL, command=self._clean_outputs).grid(row=0, column=2, padx=4)
     self.theme_btn = ttk.Button(btn_row, text="☀️ Light Mode", command=self._toggle_theme)
     self.theme_btn.grid(row=0, column=3, padx=4)
 
@@ -333,14 +335,8 @@ class App:
     except Exception:
       webbrowser.open(str(p))
 
-  def _clean_outputs(self) -> None:
-    # Determine output directory
-    base = self.v_output_dir.get().strip() or str(Path.cwd())
-    out_dir = Path(base)
-    if not out_dir.exists():
-      messagebox.showinfo("Clean Outputs", f"Directory does not exist yet: {out_dir}")
-      return
-    # Known files produced by this app
+  def _collect_output_candidates(self, out_dir: Path) -> list[Path]:
+    """Collect output files to be deleted."""
     exact = [
       "vinyl_shelf_order.txt",
       "vinyl_shelf_order.csv",
@@ -353,7 +349,6 @@ class App:
       "cd_shelf_order.json",
       "all_media_shelf_order.json",
     ]
-    # Valuable files are pattern-based
     patterns = ["valuable_over_*kr.txt"]
     candidates = []
     for name in exact:
@@ -364,12 +359,22 @@ class App:
       for p in out_dir.glob(pat):
         if p.is_file():
           candidates.append(p)
+    return candidates
+
+  def _clean_outputs(self) -> None:
+    # Determine output directory
+    base = self.v_output_dir.get().strip() or str(Path.cwd())
+    out_dir = Path(base)
+    if not out_dir.exists():
+      messagebox.showinfo(self.CLEAN_OUTPUTS_LABEL, f"Directory does not exist yet: {out_dir}")
+      return
+    candidates = self._collect_output_candidates(out_dir)
     if not candidates:
-      messagebox.showinfo("Clean Outputs", "No generated output files found to delete.")
+      messagebox.showinfo(self.CLEAN_OUTPUTS_LABEL, "No generated output files found to delete.")
       return
     # Confirm
     names = "\n".join(str(p.name) for p in candidates)
-    if not messagebox.askyesno("Clean Outputs", f"Delete {len(candidates)} files in:\n{out_dir}\n\n{names}"):
+    if not messagebox.askyesno(self.CLEAN_OUTPUTS_LABEL, f"Delete {len(candidates)} files in:\n{out_dir}\n\n{names}"):
       return
     # Delete
     deleted = 0
@@ -380,7 +385,7 @@ class App:
         self.log_line(f"Deleted: {p}")
       except Exception as e:
         self.log_line(f"Failed to delete {p}: {e}")
-    messagebox.showinfo("Clean Outputs", f"Deleted {deleted} file(s).")
+    messagebox.showinfo(self.CLEAN_OUTPUTS_LABEL, f"Deleted {deleted} file(s).")
 
   def _run_clicked(self) -> None:
     cfg = RunConfig(
@@ -409,33 +414,14 @@ class App:
   def _run_task(self, cfg: RunConfig) -> None:
     try:
       self.log_line("Starting…")
-      token = core.get_token(cfg.token or None)
-      headers = core.discogs_headers(token, cfg.user_agent)
-      ident = core.get_identity(headers)
-      username = ident.get("username")
-      if not username:
-        raise RuntimeError("Could not determine username from token.")
-      self.log_line(f"User: {username}")
-
+      username, headers = self._authenticate(cfg)
       out_dir = Path(cfg.output_dir)
       out_dir.mkdir(parents=True, exist_ok=True)
       extra_articles = [a.strip() for a in (cfg.articles_extra or "").split(",") if a.strip()]
-
       dbg: dict[str, int] | None = {} if cfg.debug_stats else None
-      rows = core.collect_lp_rows(
-        headers=headers,
-        username=username,
-        per_page=cfg.per_page,
-        max_pages=cfg.max_pages,
-        extra_articles=extra_articles,
-        lp_strict=cfg.lp_strict,
-        debug_stats=dbg,
-        last_name_first=cfg.last_name_first,
-        lnf_allow_3=cfg.lnf_allow_3,
-        lnf_exclude={core._normalize_exclude_name(s) for s in (cfg.lnf_exclude.split(";") if cfg.lnf_exclude else []) if s.strip()},
-        lnf_safe_bands=cfg.lnf_safe_bands,
-      )
-      if not rows:
+
+      rows_sorted, rows45_sorted, rows_cd_sorted = self._collect_and_sort_rows(cfg, headers, username, extra_articles, dbg)
+      if not rows_sorted:
         self.log_line("No matching 33⅓ RPM LPs found.")
         return
 
@@ -445,122 +431,151 @@ class App:
           f"vinyl+LP={dbg.get('vinyl_lp', 0)}, vinyl+LP+33rpm={dbg.get('vinyl_lp_33', 0)}"
         )
 
-      rows_sorted = core.sort_rows(rows, cfg.various_policy)
-      # Optional categories
-      rows45_sorted: list[ReleaseRow] = []
-      rows_cd_sorted: list[ReleaseRow] = []
-      if cfg.include_45s:
-        rows45 = core.collect_45_rows(
-          headers=headers,
-          username=username,
-          per_page=cfg.per_page,
-          max_pages=cfg.max_pages,
-          extra_articles=extra_articles,
-          last_name_first=cfg.last_name_first,
-          lnf_allow_3=cfg.lnf_allow_3,
-          lnf_exclude={core._normalize_exclude_name(s) for s in (cfg.lnf_exclude.split(";") if cfg.lnf_exclude else []) if s.strip()},
-          lnf_safe_bands=cfg.lnf_safe_bands,
-        )
-        rows45_sorted = core.sort_rows(rows45, cfg.various_policy)
-      if cfg.include_cds:
-        rows_cd = core.collect_cd_rows(
-          headers=headers,
-          username=username,
-          per_page=cfg.per_page,
-          max_pages=cfg.max_pages,
-          extra_articles=extra_articles,
-          last_name_first=cfg.last_name_first,
-          lnf_allow_3=cfg.lnf_allow_3,
-          lnf_exclude={core._normalize_exclude_name(s) for s in (cfg.lnf_exclude.split(";") if cfg.lnf_exclude else []) if s.strip()},
-          lnf_safe_bands=cfg.lnf_safe_bands,
-        )
-        rows_cd_sorted = core.sort_rows(rows_cd, cfg.various_policy)
-
-      # Write files for LPs
-      txt_path = out_dir / "vinyl_shelf_order.txt"
-      csv_path = out_dir / "vinyl_shelf_order.csv"
-      core.write_txt(rows_sorted, txt_path, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)
-      core.write_csv(rows_sorted, csv_path)
-      self.log_line(f"Wrote: {txt_path}")
-      self.log_line(f"Wrote: {csv_path}")
-      if cfg.write_json:
-        json_path = out_dir / "vinyl_shelf_order.json"
-        core.write_json(rows_sorted, json_path)
-        self.log_line(f"Wrote: {json_path}")
-
-      # Write 45s/CDs if requested
-      if rows45_sorted:
-        txt45 = out_dir / "vinyl45_shelf_order.txt"
-        csv45 = out_dir / "vinyl45_shelf_order.csv"
-        core.write_txt(rows45_sorted, txt45, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)
-        core.write_csv(rows45_sorted, csv45)
-        self.log_line(f"Wrote: {txt45}")
-        self.log_line(f"Wrote: {csv45}")
-        if cfg.write_json:
-          json45 = out_dir / "vinyl45_shelf_order.json"
-          core.write_json(rows45_sorted, json45)
-          self.log_line(f"Wrote: {json45}")
-      if rows_cd_sorted:
-        txtcd = out_dir / "cd_shelf_order.txt"
-        csvcd = out_dir / "cd_shelf_order.csv"
-        core.write_txt(rows_cd_sorted, txtcd, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)
-        core.write_csv(rows_cd_sorted, csvcd)
-        self.log_line(f"Wrote: {txtcd}")
-        self.log_line(f"Wrote: {csvcd}")
-        if cfg.write_json:
-          jsoncd = out_dir / "cd_shelf_order.json"
-          core.write_json(rows_cd_sorted, jsoncd)
-          self.log_line(f"Wrote: {jsoncd}")
-
-      # Combined JSON
-      if cfg.write_json and (rows45_sorted or rows_cd_sorted):
-        import json as _json
-        combined = []
-        for r in rows_sorted:
-          combined.append({"media_type": "LP", **core.rows_to_json([r])[0]})
-        for r in rows45_sorted:
-          combined.append({"media_type": "45", **core.rows_to_json([r])[0]})
-        for r in rows_cd_sorted:
-          combined.append({"media_type": "CD", **core.rows_to_json([r])[0]})
-        combo_path = out_dir / "all_media_shelf_order.json"
-        with combo_path.open("w", encoding="utf-8") as f:
-          _json.dump(combined, f, ensure_ascii=False, indent=2)
-        self.log_line(f"Wrote: {combo_path}")
-
-      # Render output previews
-      self.out_q.put("LP:\n")
-      for i, line in enumerate(core.generate_txt_lines(rows_sorted, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)):
-        if i >= 300:
-          self.out_q.put("... (truncated)\n")
-          break
-        self.out_q.put(line + "\n")
-      if rows45_sorted:
-        self.out_q.put("45:\n")
-        for i, line in enumerate(core.generate_txt_lines(rows45_sorted, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)):
-          if i >= 300:
-            self.out_q.put("... (truncated)\n")
-            break
-          self.out_q.put(line + "\n")
-      if rows_cd_sorted:
-        self.out_q.put("CD:\n")
-        for i, line in enumerate(core.generate_txt_lines(rows_cd_sorted, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)):
-          if i >= 300:
-            self.out_q.put("... (truncated)\n")
-            break
-          self.out_q.put(line + "\n")
-
-      # Summary counts
-      parts = [f"LP: {len(rows_sorted)}"]
-      if rows45_sorted:
-        parts.append(f"45s: {len(rows45_sorted)}")
-      if rows_cd_sorted:
-        parts.append(f"CDs: {len(rows_cd_sorted)}")
-      self.log_line("Summary: " + " • ".join(parts))
+      self._write_outputs(cfg, out_dir, rows_sorted, rows45_sorted, rows_cd_sorted)
+      self._write_combined_json(cfg, out_dir, rows_sorted, rows45_sorted, rows_cd_sorted)
+      self._render_previews(cfg, rows_sorted, rows45_sorted, rows_cd_sorted)
+      self._log_summary(rows_sorted, rows45_sorted, rows_cd_sorted)
       self.log_line("Done.")
     except Exception as e:
       self.log_line(f"Error: {e}")
       self.log_line(traceback.format_exc())
       messagebox.showerror("Run failed", str(e))
+
+  def _authenticate(self, cfg: RunConfig):
+    token = core.get_token(cfg.token or None)
+    headers = core.discogs_headers(token, cfg.user_agent)
+    ident = core.get_identity(headers)
+    username = ident.get("username")
+    if not username:
+      raise RuntimeError("Could not determine username from token.")
+    self.log_line(f"User: {username}")
+    return username, headers
+
+  def _collect_and_sort_rows(self, cfg, headers, username, extra_articles, dbg):
+    rows = core.collect_lp_rows(
+      headers=headers,
+      username=username,
+      per_page=cfg.per_page,
+      max_pages=cfg.max_pages,
+      extra_articles=extra_articles,
+      lp_strict=cfg.lp_strict,
+      debug_stats=dbg,
+      last_name_first=cfg.last_name_first,
+      lnf_allow_3=cfg.lnf_allow_3,
+      lnf_exclude={core._normalize_exclude_name(s) for s in (cfg.lnf_exclude.split(";") if cfg.lnf_exclude else []) if s.strip()},
+      lnf_safe_bands=cfg.lnf_safe_bands,
+    )
+    rows_sorted = core.sort_rows(rows, cfg.various_policy)
+    rows45_sorted: list[ReleaseRow] = []
+    rows_cd_sorted: list[ReleaseRow] = []
+    if cfg.include_45s:
+      rows45 = core.collect_45_rows(
+        headers=headers,
+        username=username,
+        per_page=cfg.per_page,
+        max_pages=cfg.max_pages,
+        extra_articles=extra_articles,
+        last_name_first=cfg.last_name_first,
+        lnf_allow_3=cfg.lnf_allow_3,
+        lnf_exclude={core._normalize_exclude_name(s) for s in (cfg.lnf_exclude.split(";") if cfg.lnf_exclude else []) if s.strip()},
+        lnf_safe_bands=cfg.lnf_safe_bands,
+      )
+      rows45_sorted = core.sort_rows(rows45, cfg.various_policy)
+    if cfg.include_cds:
+      rows_cd = core.collect_cd_rows(
+        headers=headers,
+        username=username,
+        per_page=cfg.per_page,
+        max_pages=cfg.max_pages,
+        extra_articles=extra_articles,
+        last_name_first=cfg.last_name_first,
+        lnf_allow_3=cfg.lnf_allow_3,
+        lnf_exclude={core._normalize_exclude_name(s) for s in (cfg.lnf_exclude.split(";") if cfg.lnf_exclude else []) if s.strip()},
+        lnf_safe_bands=cfg.lnf_safe_bands,
+      )
+      rows_cd_sorted = core.sort_rows(rows_cd, cfg.various_policy)
+    return rows_sorted, rows45_sorted, rows_cd_sorted
+
+  def _write_outputs(self, cfg, out_dir, rows_sorted, rows45_sorted, rows_cd_sorted):
+    txt_path = out_dir / "vinyl_shelf_order.txt"
+    csv_path = out_dir / "vinyl_shelf_order.csv"
+    core.write_txt(rows_sorted, txt_path, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)
+    core.write_csv(rows_sorted, csv_path)
+    self.log_line(f"Wrote: {txt_path}")
+    self.log_line(f"Wrote: {csv_path}")
+    if cfg.write_json:
+      json_path = out_dir / "vinyl_shelf_order.json"
+      core.write_json(rows_sorted, json_path)
+      self.log_line(f"Wrote: {json_path}")
+
+    if rows45_sorted:
+      txt45 = out_dir / "vinyl45_shelf_order.txt"
+      csv45 = out_dir / "vinyl45_shelf_order.csv"
+      core.write_txt(rows45_sorted, txt45, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)
+      core.write_csv(rows45_sorted, csv45)
+      self.log_line(f"Wrote: {txt45}")
+      self.log_line(f"Wrote: {csv45}")
+      if cfg.write_json:
+        json45 = out_dir / "vinyl45_shelf_order.json"
+        core.write_json(rows45_sorted, json45)
+        self.log_line(f"Wrote: {json45}")
+    if rows_cd_sorted:
+      txtcd = out_dir / "cd_shelf_order.txt"
+      csvcd = out_dir / "cd_shelf_order.csv"
+      core.write_txt(rows_cd_sorted, txtcd, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)
+      core.write_csv(rows_cd_sorted, csvcd)
+      self.log_line(f"Wrote: {txtcd}")
+      self.log_line(f"Wrote: {csvcd}")
+      if cfg.write_json:
+        jsoncd = out_dir / "cd_shelf_order.json"
+        core.write_json(rows_cd_sorted, jsoncd)
+        self.log_line(f"Wrote: {jsoncd}")
+
+  def _write_combined_json(self, cfg, out_dir, rows_sorted, rows45_sorted, rows_cd_sorted):
+    if cfg.write_json and (rows45_sorted or rows_cd_sorted):
+      import json as _json
+      combined = []
+      for r in rows_sorted:
+        combined.append({"media_type": "LP", **core.rows_to_json([r])[0]})
+      for r in rows45_sorted:
+        combined.append({"media_type": "45", **core.rows_to_json([r])[0]})
+      for r in rows_cd_sorted:
+        combined.append({"media_type": "CD", **core.rows_to_json([r])[0]})
+      combo_path = out_dir / "all_media_shelf_order.json"
+      with combo_path.open("w", encoding="utf-8") as f:
+        _json.dump(combined, f, ensure_ascii=False, indent=2)
+      self.log_line(f"Wrote: {combo_path}")
+
+  def _render_previews(self, cfg, rows_sorted, rows45_sorted, rows_cd_sorted):
+    TRUNCATED_MSG = "... (truncated)\n"
+    self.out_q.put("LP:\n")
+    for i, line in enumerate(core.generate_txt_lines(rows_sorted, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)):
+      if i >= 300:
+        self.out_q.put(TRUNCATED_MSG)
+        break
+      self.out_q.put(line + "\n")
+    if rows45_sorted:
+      self.out_q.put("45:\n")
+      for i, line in enumerate(core.generate_txt_lines(rows45_sorted, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)):
+        if i >= 300:
+          self.out_q.put(TRUNCATED_MSG)
+          break
+        self.out_q.put(line + "\n")
+    if rows_cd_sorted:
+      self.out_q.put("CD:\n")
+      for i, line in enumerate(core.generate_txt_lines(rows_cd_sorted, dividers=cfg.dividers, align=cfg.txt_align, show_country=cfg.show_country)):
+        if i >= 300:
+          self.out_q.put(TRUNCATED_MSG)
+          break
+        self.out_q.put(line + "\n")
+
+  def _log_summary(self, rows_sorted, rows45_sorted, rows_cd_sorted):
+    parts = [f"LP: {len(rows_sorted)}"]
+    if rows45_sorted:
+      parts.append(f"45s: {len(rows45_sorted)}")
+    if rows_cd_sorted:
+      parts.append(f"CDs: {len(rows_cd_sorted)}")
+    self.log_line("Summary: " + " • ".join(parts))
 
 
 def main() -> None:
