@@ -679,6 +679,9 @@ def collect_lp_rows(
     stats = {"scanned": 0, "vinyl": 0, "vinyl_lp": 0, "vinyl_lp_33": 0}
     excluded_probable: List[Dict] = []
 
+    def basic_info(item: Dict) -> Dict:
+        return item.get("basic_information") or {}
+
     def update_stats(basic: Dict) -> None:
         stats["scanned"] += 1
         fmts = basic.get("formats", []) or []
@@ -697,13 +700,6 @@ def collect_lp_rows(
                 )
                 if lp_33_flag:
                     stats["vinyl_lp_33"] += 1
-
-    def should_exclude(basic: Dict) -> bool:
-        return not is_lp_33(basic, strict=lp_strict, probable=lp_probable)
-
-    def track_exclusion(basic: Dict) -> None:
-        if collect_exclusions and lp_probable and not lp_strict:
-            excluded_probable.append(basic)
 
     def build_row(basic: Dict, item: Dict) -> ReleaseRow:
         title = basic.get("title") or ""
@@ -744,8 +740,15 @@ def collect_lp_rows(
             cover_image_url=cover_image_url,
         )
 
-    def process_item(item: Dict):
-        basic = item.get("basic_information") or {}
+    def should_exclude(basic: Dict) -> bool:
+        return not is_lp_33(basic, strict=lp_strict, probable=lp_probable)
+
+    def track_exclusion(basic: Dict) -> None:
+        if collect_exclusions and lp_probable and not lp_strict:
+            excluded_probable.append(basic)
+
+    def process_item(item: Dict) -> None:
+        basic = basic_info(item)
         if not basic:
             return
         update_stats(basic)
