@@ -1244,7 +1244,7 @@ class App:
         pass
 
   def _build_ui(self, root: Tk) -> None:
-    pad = {"padx": 16, "pady": 12}  # Increased padding for more breathing room
+    pad = {"padx": 12, "pady": 8}  # Tighter padding
 
     # Main container - let ttkbootstrap handle styling
     import tkinter as tk
@@ -1252,7 +1252,8 @@ class App:
     frm.grid(row=0, column=0, sticky="nsew")
     root.columnconfigure(0, weight=1)
     root.rowconfigure(0, weight=1)
-    frm.columnconfigure(1, weight=1)
+    frm.columnconfigure(0, weight=0)  # Settings column (fixed width)
+    frm.columnconfigure(1, weight=1)  # Main content column (expands)
 
     row = 0
     # Colored header bar with accent strip
@@ -1304,7 +1305,13 @@ class App:
     self.theme_btn.grid(row=1, column=1, rowspan=2, sticky="e", padx=16, pady=8)
     row += 1
 
-    # Settings card - use tk.LabelFrame for dark mode color control
+    # ===== SIDE-BY-SIDE LAYOUT =====
+    # Left: Settings panel (fixed width)
+    # Right: Main content (search, buttons, shelf list)
+    
+    frm.rowconfigure(row, weight=1)  # This row expands
+    
+    # Settings card - LEFT COLUMN (narrow, fixed width)
     self._settings_frame = tk.LabelFrame(
       frm, 
       text="⚙️ Settings",
@@ -1316,13 +1323,12 @@ class App:
       padx=8,
       pady=8,
     )
-    self._settings_frame.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
-    self._settings_frame.columnconfigure(1, weight=1)
+    self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(12, 6), pady=8)
     settings = self._settings_frame  # Alias for backward compatibility
     srow = 0
     
     # Helper to create dark-themed entry widgets
-    def make_entry(parent, textvar, width=44, show=""):
+    def make_entry(parent, textvar, width=28, show=""):
       e = tk.Entry(
         parent, 
         textvariable=textvar, 
@@ -1340,43 +1346,43 @@ class App:
       )
       return e
 
-    tk.Label(settings, text="Token", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=srow, column=0, sticky="w", **pad)
-    self.token_entry = make_entry(settings, self.v_token, show="•")
-    self.token_entry.grid(row=srow, column=1, sticky="ew", **pad, ipady=6)
-    ttk.Checkbutton(settings, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility).grid(row=srow, column=2, sticky="w", **pad)
+    tk.Label(settings, text="Token", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=srow, column=0, sticky="w", padx=4, pady=4)
+    self.token_entry = make_entry(settings, self.v_token, width=24, show="•")
+    self.token_entry.grid(row=srow, column=1, sticky="ew", padx=4, pady=4, ipady=4)
+    ttk.Checkbutton(settings, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility).grid(row=srow, column=2, sticky="w", padx=4, pady=4)
     srow += 1
 
-    tk.Label(settings, text="User-Agent", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=srow, column=0, sticky="w", **pad)
+    # User-Agent - hidden but still in code for API requests
     self._useragent_entry = make_entry(settings, self.v_user_agent)
-    self._useragent_entry.grid(row=srow, column=1, sticky="ew", **pad, ipady=6)
-    srow += 1
+    # Don't grid it - hidden from UI
 
     self._out_row = tk.Frame(settings, bg=self._colors["panel"])
-    self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    self._out_row.columnconfigure(1, weight=1)
-    tk.Label(self._out_row, text="Output Dir", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
-    self._output_entry = make_entry(self._out_row, self.v_output_dir)
-    self._output_entry.grid(row=0, column=1, sticky="ew", padx=4, ipady=6)
+    self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    self._out_row.columnconfigure(0, weight=1)
+    tk.Label(self._out_row, text="Output Dir", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w", columnspan=2)
+    self._output_entry = make_entry(self._out_row, self.v_output_dir, width=20)
+    self._output_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0), ipady=4)
     # Use bootstyle for rounded buttons
     if TTKBOOTSTRAP_AVAILABLE:
-      self._browse_btn = ttk.Button(self._out_row, text="Browse", bootstyle="info-outline", command=self._choose_dir)
-      self._browse_btn.grid(row=0, column=2, sticky="e")
-      self._open_btn = ttk.Button(self._out_row, text="Open", bootstyle="secondary-outline", command=self._open_output_dir)
-      self._open_btn.grid(row=0, column=3, sticky="e", padx=(6, 0))
+      self._browse_btn = ttk.Button(self._out_row, text="📂", bootstyle="info-outline", command=self._choose_dir, width=3)
+      self._browse_btn.grid(row=1, column=1, sticky="e", padx=(4, 0))
     else:
-      self._browse_btn = ttk.Button(self._out_row, text="Browse", command=self._choose_dir)
-      self._browse_btn.grid(row=0, column=2, sticky="e")
-      self._open_btn = ttk.Button(self._out_row, text="Open", command=self._open_output_dir)
-      self._open_btn.grid(row=0, column=3, sticky="e", padx=(6, 0))
+      self._browse_btn = ttk.Button(self._out_row, text="📂", command=self._choose_dir, width=3)
+      self._browse_btn.grid(row=1, column=1, sticky="e", padx=(4, 0))
+    self._open_btn = None  # Removed to save space
     srow += 1
 
+    # Options in a more compact vertical layout
     self._opt_row = tk.Frame(settings, bg=self._colors["panel"])
-    self._opt_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    tk.Label(self._opt_row, text="Poll seconds", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
-    # Use tk.Spinbox for dark mode support
+    self._opt_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    
+    # Poll row
+    poll_frame = tk.Frame(self._opt_row, bg=self._colors["panel"])
+    poll_frame.grid(row=0, column=0, sticky="w", pady=2)
+    tk.Label(poll_frame, text="Poll (sec)", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
     self._poll_spin = tk.Spinbox(
-      self._opt_row, from_=15, to=3600, textvariable=self.v_poll, width=8,
-      font=(FONT_SEGOE_UI, 10),
+      poll_frame, from_=15, to=3600, textvariable=self.v_poll, width=6,
+      font=(FONT_SEGOE_UI, 9),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
       buttonbackground=self._colors["panel2"],
@@ -1387,16 +1393,21 @@ class App:
       highlightbackground=self._colors["panel2"],
       highlightcolor=self._colors["accent"],
     )
-    self._poll_spin.grid(row=0, column=1, padx=6, ipady=4)
-    self._json_check = ttk.Checkbutton(self._opt_row, text="Also JSON", variable=self.v_json)
-    self._json_check.grid(row=0, column=2, padx=6, sticky="w")
+    self._poll_spin.grid(row=0, column=1, padx=(4, 0), ipady=2)
+    
+    # Checkboxes - stacked vertically
+    self._json_check = ttk.Checkbutton(self._opt_row, text="Also export JSON", variable=self.v_json)
+    self._json_check.grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
     self._prices_check = ttk.Checkbutton(self._opt_row, text="Show Prices", variable=self.v_show_prices)
-    self._prices_check.grid(row=0, column=3, padx=6, sticky="w")
-    tk.Label(self._opt_row, text="Currency", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=4, sticky="w", padx=(6, 0))
-    # Use tk.OptionMenu for dark mode support instead of ttk.Combobox
-    self._currency_combo = tk.OptionMenu(self._opt_row, self.v_currency, "USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY")
+    self._prices_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
+    
+    # Currency row
+    currency_frame = tk.Frame(self._opt_row, bg=self._colors["panel"])
+    currency_frame.grid(row=3, column=0, columnspan=2, sticky="w", pady=2)
+    tk.Label(currency_frame, text="Currency", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+    self._currency_combo = tk.OptionMenu(currency_frame, self.v_currency, "USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY")
     self._currency_combo.config(
-      font=(FONT_SEGOE_UI, 10),
+      font=(FONT_SEGOE_UI, 9),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
       activebackground=self._colors["accent"],
@@ -1404,6 +1415,7 @@ class App:
       highlightthickness=0,
       bd=0,
       relief="flat",
+      width=6,
     )
     self._currency_combo["menu"].config(
       bg=self._colors["order_bg"],
@@ -1411,23 +1423,24 @@ class App:
       activebackground=self._colors["accent"],
       activeforeground="#ffffff",
     )
-    self._currency_combo.grid(row=0, column=5, padx=6)
+    self._currency_combo.grid(row=0, column=1, padx=(4, 0))
+    
     # Refresh prices button
     if TTKBOOTSTRAP_AVAILABLE:
       self._refresh_prices_btn = ttk.Button(self._opt_row, text="🔄 Refresh Prices", bootstyle="warning-outline", command=self._refresh_prices)
     else:
       self._refresh_prices_btn = ttk.Button(self._opt_row, text="🔄 Refresh Prices", command=self._refresh_prices)
-    self._refresh_prices_btn.grid(row=0, column=6, padx=6, sticky="w")
+    self._refresh_prices_btn.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
     srow += 1
 
     # Sort options row
     self._sort_row = tk.Frame(settings, bg=self._colors["panel"])
-    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    tk.Label(self._sort_row, text="📊 Sort By", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    tk.Label(self._sort_row, text="Sort By", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
     sort_options = ["artist", "title", "year", "price_asc", "price_desc"]
     self._sort_combo = tk.OptionMenu(self._sort_row, self.v_sort_by, *sort_options)
     self._sort_combo.config(
-      font=(FONT_SEGOE_UI, 10),
+      font=(FONT_SEGOE_UI, 9),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
       activebackground=self._colors["accent"],
@@ -1435,7 +1448,7 @@ class App:
       highlightthickness=0,
       bd=0,
       relief="flat",
-      width=12,
+      width=10,
     )
     self._sort_combo["menu"].config(
       bg=self._colors["order_bg"],
@@ -1443,22 +1456,26 @@ class App:
       activebackground=self._colors["accent"],
       activeforeground="#ffffff",
     )
-    self._sort_combo.grid(row=0, column=1, padx=6, sticky="w")
-    # Display friendly names but store values
-    tk.Label(self._sort_row, text="(Price sorting requires 'Show Prices' enabled)", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["muted"]).grid(row=0, column=2, sticky="w", padx=6)
+    self._sort_combo.grid(row=0, column=1, padx=(4, 0), sticky="w")
     srow += 1
-
-    # Price info note
+    
+    # Price info note (compact)
     self._price_info = tk.Frame(settings, bg=self._colors["panel"])
-    self._price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    tk.Label(self._price_info, text="ℹ️ Prices shown are the lowest currently listed for your specific pressing, not all versions.", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["muted"]).grid(row=0, column=0, sticky="w")
+    self._price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=(8, 4))
+    tk.Label(self._price_info, text="ℹ️ Prices = lowest listed\nfor your specific pressing", font=(FONT_SEGOE_UI, 8), bg=self._colors["panel"], fg=self._colors["muted"], justify="left").grid(row=0, column=0, sticky="w")
     srow += 1
 
-    row += 1
+    # ===== RIGHT COLUMN: Main content (Search, buttons, shelf list) =====
+    main_content = ttk.Frame(frm)
+    main_content.grid(row=row, column=1, sticky="nsew", padx=(6, 12), pady=8)
+    main_content.columnconfigure(0, weight=1)
+    main_content.rowconfigure(2, weight=1)  # Notebook row expands
+    
+    mc_row = 0
 
     # Search row with styled entry
-    search_row = ttk.Frame(frm)
-    search_row.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
+    search_row = ttk.Frame(main_content)
+    search_row.grid(row=mc_row, column=0, sticky="ew", pady=(0, 8))
     search_row.columnconfigure(1, weight=1)
     ttk.Label(search_row, text="🔍 Search").grid(row=0, column=0, sticky="w")
     
@@ -1476,7 +1493,7 @@ class App:
       highlightbackground=self._colors["panel2"],
       highlightcolor=self._colors["accent"],
     )
-    self._search_entry.grid(row=0, column=1, sticky="ew", padx=6, ipady=8)
+    self._search_entry.grid(row=0, column=1, sticky="ew", padx=6, ipady=6)
     # Use bootstyle for ttkbootstrap rounded buttons
     if TTKBOOTSTRAP_AVAILABLE:
       self._clear_btn = ttk.Button(search_row, text="✕ Clear", bootstyle="secondary-outline", command=lambda: self.v_search.set(""))
@@ -1486,11 +1503,11 @@ class App:
       self._clear_btn.grid(row=0, column=2, sticky="e")
     ttk.Label(search_row, textvariable=self.v_match).grid(row=0, column=3, sticky="e", padx=6)
     self.v_search.trace_add("write", lambda *_: self._on_search_change())
-    row += 1
+    mc_row += 1
 
-    # Action buttons row with styled buttons - better spacing
-    btn = ttk.Frame(frm)
-    btn.grid(row=row, column=0, columnspan=2, sticky="ew", padx=16, pady=(8, 16))
+    # Action buttons row with styled buttons
+    btn = ttk.Frame(main_content)
+    btn.grid(row=mc_row, column=0, sticky="ew", pady=(0, 8))
     btn.columnconfigure(0, weight=1)
     btn.columnconfigure(1, weight=1)
     btn.columnconfigure(2, weight=1)
@@ -1498,28 +1515,27 @@ class App:
     
     # Use ttkbootstrap bootstyle for rounded corners, or fall back to custom styles
     if TTKBOOTSTRAP_AVAILABLE:
-      self._refresh_btn = ttk.Button(btn, text="🔄  Refresh", bootstyle="primary", command=self._refresh_now)
-      self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=6)
-      self._export_btn = ttk.Button(btn, text="📁  Export", bootstyle="success", command=self._export_files)
-      self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=6)
-      self._print_btn = ttk.Button(btn, text="🖨️  Print", bootstyle="secondary", command=self._print_current)
-      self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 10), pady=6)
-      self._stop_btn = ttk.Button(btn, text="⏹️  Stop", bootstyle="danger", command=self._stop_app)
-      self._stop_btn.grid(row=0, column=3, sticky="ew", pady=6)
+      self._refresh_btn = ttk.Button(btn, text="🔄 Refresh", bootstyle="primary", command=self._refresh_now)
+      self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
+      self._export_btn = ttk.Button(btn, text="📁 Export", bootstyle="success", command=self._export_files)
+      self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=4)
+      self._print_btn = ttk.Button(btn, text="🖨️ Print", bootstyle="secondary", command=self._print_current)
+      self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
+      self._stop_btn = ttk.Button(btn, text="⏹️ Stop", bootstyle="danger", command=self._stop_app)
+      self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
     else:
-      self._refresh_btn = ttk.Button(btn, text="🔄  Refresh", style="Primary.TButton", command=self._refresh_now)
-      self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=6)
-      self._export_btn = ttk.Button(btn, text="📁  Export", style="Success.TButton", command=self._export_files)
-      self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=6)
-      self._print_btn = ttk.Button(btn, text="🖨️  Print", style="Secondary.TButton", command=self._print_current)
-      self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 10), pady=6)
-      self._stop_btn = ttk.Button(btn, text="⏹️  Stop", style="Danger.TButton", command=self._stop_app)
-      self._stop_btn.grid(row=0, column=3, sticky="ew", pady=6)
-    row += 1
+      self._refresh_btn = ttk.Button(btn, text="🔄 Refresh", style="Primary.TButton", command=self._refresh_now)
+      self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
+      self._export_btn = ttk.Button(btn, text="📁 Export", style="Success.TButton", command=self._export_files)
+      self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=4)
+      self._print_btn = ttk.Button(btn, text="🖨️ Print", style="Secondary.TButton", command=self._print_current)
+      self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
+      self._stop_btn = ttk.Button(btn, text="⏹️ Stop", style="Danger.TButton", command=self._stop_app)
+      self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
+    mc_row += 1
 
-    nb = ttk.Notebook(frm)
-    nb.grid(row=row, column=0, columnspan=2, sticky="nsew", **pad)
-    frm.rowconfigure(row, weight=1)
+    nb = ttk.Notebook(main_content)
+    nb.grid(row=mc_row, column=0, sticky="nsew")
 
     order_fr = ttk.Frame(nb)
     nb.add(order_fr, text="📋 Shelf Order")
@@ -1573,16 +1589,12 @@ class App:
     order_toolbar.columnconfigure(1, weight=1)
 
     order_wrap = ttk.Frame(order_fr)
-    order_wrap.grid(row=1, column=0, sticky="nsew")
+    order_wrap.grid(row=1, column=0, sticky="nsew", padx=(12, 0), pady=(0, 8))
     order_wrap.rowconfigure(0, weight=1)
     order_wrap.columnconfigure(0, weight=1)
 
     order_scroll = ttk.Scrollbar(order_wrap, orient="vertical")
     order_scroll.grid(row=0, column=1, sticky="ns")
-    
-    # Horizontal scrollbar
-    order_scroll_h = ttk.Scrollbar(order_wrap, orient="horizontal")
-    order_scroll_h.grid(row=1, column=0, sticky="ew")
 
     # Use Treeview for drag-and-drop support
     columns = ("#", "Artist", "Title", "Year", "Label", "Price")
@@ -1595,28 +1607,31 @@ class App:
       columns=columns,
       show="headings",
       yscrollcommand=order_scroll.set,
-      xscrollcommand=order_scroll_h.set,
       selectmode="browse",  # Single selection for drag-drop
       style=tree_style,
     )
     self.order_tree.grid(row=0, column=0, sticky="nsew")
     order_scroll.config(command=self.order_tree.yview)
-    order_scroll_h.config(command=self.order_tree.xview)
     
     # Configure column headings and widths
-    self.order_tree.heading("#", text="#", anchor="e")
+    self.order_tree.heading("#", text="#", anchor="center")
     self.order_tree.heading("Artist", text="Artist", anchor="w")
     self.order_tree.heading("Title", text="Title", anchor="w")
     self.order_tree.heading("Year", text="Year", anchor="center")
     self.order_tree.heading("Label", text="Label / Cat#", anchor="w")
     self.order_tree.heading("Price", text="Price", anchor="e")
     
-    self.order_tree.column("#", width=50, minwidth=40, stretch=False, anchor="e")
-    self.order_tree.column("Artist", width=200, minwidth=100, anchor="w")
-    self.order_tree.column("Title", width=250, minwidth=100, anchor="w")
-    self.order_tree.column("Year", width=60, minwidth=50, stretch=False, anchor="center")
-    self.order_tree.column("Label", width=180, minwidth=80, anchor="w")
-    self.order_tree.column("Price", width=100, minwidth=60, stretch=False, anchor="e")
+    # Column widths - text columns stretch proportionally to fill width
+    self.order_tree.column("#", width=40, minwidth=35, stretch=False, anchor="center")
+    self.order_tree.column("Artist", width=220, minwidth=100, stretch=True, anchor="w")
+    self.order_tree.column("Title", width=280, minwidth=120, stretch=True, anchor="w")
+    self.order_tree.column("Year", width=55, minwidth=50, stretch=False, anchor="center")
+    self.order_tree.column("Label", width=300, minwidth=100, stretch=True, anchor="w")
+    self.order_tree.column("Price", width=85, minwidth=70, stretch=False, anchor="e")
+    
+    # Initially hide Price column if Show Prices is disabled
+    if not self.v_show_prices.get():
+      self.order_tree.column("Price", width=0, minwidth=0, stretch=False)
     
     # Configure row tags for alternating colors (with foreground for dark mode)
     self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
@@ -1732,7 +1747,6 @@ class App:
     ToolTip(self.token_entry, "Your Discogs personal access token.\nGet one at discogs.com/settings/developers")
     ToolTip(self._output_entry, "Directory where sorted lists will be saved (TXT, CSV, JSON)")
     ToolTip(self._browse_btn, "Browse for an output folder")
-    ToolTip(self._open_btn, "Open the output folder in File Explorer")
     ToolTip(self._poll_spin, "How often to check for collection changes (seconds)")
     ToolTip(self._json_check, "Also save output as JSON file")
     ToolTip(self._prices_check, "Fetch marketplace prices. Cached locally for 7 days.\nEnable this, then click Refresh to load prices.")
@@ -2280,8 +2294,14 @@ class App:
     # Store rows for drag-drop operations
     self._tree_rows = list(rows)
     
-    # Populate treeview
+    # Show/hide Price column based on setting
     show_prices = self.v_show_prices.get()
+    if show_prices:
+      self.order_tree.column("Price", width=90, minwidth=70, stretch=False)
+    else:
+      self.order_tree.column("Price", width=0, minwidth=0, stretch=False)
+    
+    # Populate treeview
     for i, row in enumerate(rows):
       tag = "row_odd" if i % 2 == 1 else "row_even"
       
