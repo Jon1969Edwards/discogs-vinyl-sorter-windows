@@ -11,14 +11,7 @@ if exist ".venv\Scripts\python.exe" (
     goto :run
 )
 
-REM Try python3 command
-where python3 >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    set PYTHON_BIN=python3
-    goto :run
-)
-
-REM Try python command
+REM Try python command directly
 where python >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     set PYTHON_BIN=python
