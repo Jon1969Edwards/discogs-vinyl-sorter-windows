@@ -185,7 +185,9 @@ def _should_retry(status: int) -> bool:
   return status == 429 or 500 <= status < 600
 
 
-def _retry_sleep_seconds(resp: requests.Response, attempt: int, backoff: float) -> float:
+from typing import Any
+
+def _retry_sleep_seconds(resp: Any, attempt: int, backoff: float) -> float:
   retry_after = resp.headers.get("Retry-After")
   if retry_after:
     try:
@@ -195,7 +197,7 @@ def _retry_sleep_seconds(resp: requests.Response, attempt: int, backoff: float) 
   return min(backoff * (2 ** attempt), 10.0)
 
 
-def _polite_rate_limit_pause(resp: requests.Response) -> None:
+def _polite_rate_limit_pause(resp) -> None:
   try:
     remaining = int(resp.headers.get("X-Discogs-Ratelimit-Remaining", "5"))
     if remaining <= 1:
@@ -204,8 +206,10 @@ def _polite_rate_limit_pause(resp: requests.Response) -> None:
     pass
 
 
+from requests import Response
+
 def api_get(url: str, headers: Dict[str, str], params: Optional[Dict[str, str]] = None,
-            retries: int = 3, backoff: float = 1.0) -> requests.Response:
+            retries: int = 3, backoff: float = 1.0) -> Response:
   if requests is None:
     raise RuntimeError("Missing dependency 'requests'. Install requirements.txt (pip install -r requirements.txt).")
   last_error: Optional[Exception] = None
@@ -436,6 +440,58 @@ def _normalize_exclude_name(s: str) -> str:
   return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 
+def is_band_like(first: str, last: str) -> bool:
+  band_adjectives = {
+    "big", "small", "little",
+    "bad", "good", "great",
+    "new", "old", "young",
+    "black", "white", "blue", "red", "green",
+    "wild", "sweet",
+  }
+  band_terms = {
+    "band", "trio", "quartet", "quintet", "sextet", "septet", "octet", "nonet",
+    "orchestra", "ensemble", "choir", "chorale", "collective", "project", "group",
+    "crew", "players", "brothers", "sisters", "family", "experience"
+  }
+  common_first_names = {
+    "john","james","michael","robert","david","william","richard","thomas","charles","joseph",
+    "christopher","daniel","paul","mark","donald","george","kenneth","steven","edward","brian",
+    "ronald","anthony","kevin","jason","matthew","gary","timothy","jose","larry","jeffrey",
+    "frank","scott","eric","stephen","andrew","raymond","gregory","joshua","jerry","dennis",
+    "walter","patrick","peter","harold","douglas","henry","carl","arthur","ryan","roger",
+    "joe","juan","jack","albert","jonathan","justin","terry","gerald","keith","samuel","willie",
+    "ralph","lawrence","nicholas","roy","benjamin","bruce","brandon","adam","harry","fred","wayne",
+    "billy","steve","louis","jeremy","aaron","randy","howard","eugene","carlos","russell","bobby",
+    "victor","martin","ernest","phillip","todd","jesse","craig","alan","shawn","clarence","sean",
+    "philip","chris","johnny","earl","jimmy","antonio","danny","bryan","tony","luis","miles","bruce",
+    "neil","nick","lou","chuck","ian","alex","noel","bobby","billy"
+  }
+  first_low, last_low = first.lower(), last.lower()
+  if last_low in band_terms:
+    return True
+  if last_low.endswith('s') and first_low not in common_first_names:
+    return True
+  if first_low in band_adjectives and last_low not in common_first_names:
+    return True
+  return False
+
+def is_valid_two_word(tokens: list[str]) -> bool:
+  if not all(re.match(r"[A-Za-z'\-]+$", t) for t in tokens):
+    return False
+  if any(t.lower() in {"the", "and", "&"} for t in tokens):
+    return False
+  return True
+
+def flip_three_word(tokens: list[str]) -> Optional[str]:
+  first, middle, last = tokens
+  if first.lower() in {"the", "and", "&"}:
+    return None
+  middle_norm = middle.lower().strip('.')
+  particles = {"de", "del", "van", "von", "da", "di", "la", "le", "du", "do", "dos", "das", "st"}
+  if len(middle_norm) == 1 or middle.endswith('.') or middle_norm in particles:
+    return f"{last}, {first} {middle}".lower()
+  return None
+
 def _last_name_first_key(artist_clean: str, allow_3: bool, exclude_set: Set[str], safe_bands: bool = False) -> Optional[str]:
   """Last-name-first heuristic with options:
   - Only flips two-word personal names by default.
@@ -447,59 +503,13 @@ def _last_name_first_key(artist_clean: str, allow_3: bool, exclude_set: Set[str]
     return None
   tokens = [t for t in re.split(r"\s+", artist_clean) if t]
   if len(tokens) == 2:
-    # Optional: avoid flipping obvious band-like two-word names
-    if safe_bands:
-      first, last = tokens[0], tokens[1]
-      first_low, last_low = first.lower(), last.lower()
-      # Common adjective-like band starters that frequently indicate a group name
-      # (e.g., Big Star, Bad Company). Keep this conservative.
-      band_adjectives = {
-        "big", "small", "little",
-        "bad", "good", "great",
-        "new", "old", "young",
-        "black", "white", "blue", "red", "green",
-        "wild", "sweet",
-      }
-      band_terms = {
-        "band", "trio", "quartet", "quintet", "sextet", "septet", "octet", "nonet",
-        "orchestra", "ensemble", "choir", "chorale", "collective", "project", "group",
-        "crew", "players", "brothers", "sisters", "family", "experience"
-      }
-      common_first_names = {
-        "john","james","michael","robert","david","william","richard","thomas","charles","joseph",
-        "christopher","daniel","paul","mark","donald","george","kenneth","steven","edward","brian",
-        "ronald","anthony","kevin","jason","matthew","gary","timothy","jose","larry","jeffrey",
-        "frank","scott","eric","stephen","andrew","raymond","gregory","joshua","jerry","dennis",
-        "walter","patrick","peter","harold","douglas","henry","carl","arthur","ryan","roger",
-        "joe","juan","jack","albert","jonathan","justin","terry","gerald","keith","samuel","willie",
-        "ralph","lawrence","nicholas","roy","benjamin","bruce","brandon","adam","harry","fred","wayne",
-        "billy","steve","louis","jeremy","aaron","randy","howard","eugene","carlos","russell","bobby",
-        "victor","martin","ernest","phillip","todd","jesse","craig","alan","shawn","clarence","sean",
-        "philip","chris","johnny","earl","jimmy","antonio","danny","bryan","tony","luis","miles","bruce",
-        "neil","nick","lou","chuck","ian","alex","noel","bobby","billy"
-      }
-      # If the last token is a clear band noun OR a likely plural noun and first isn't a common first name, skip flipping.
-      if last_low in band_terms:
-        return None
-      if last_low.endswith('s') and first_low not in common_first_names:
-        return None
-      # If the first token looks like a common band adjective and the second token is not a common first name,
-      # treat as band-like and skip flipping.
-      if first_low in band_adjectives and last_low not in common_first_names:
-        return None
-    if not all(re.match(r"[A-Za-z'\-]+$", t) for t in tokens):
+    if safe_bands and is_band_like(tokens[0], tokens[1]):
       return None
-    if any(t.lower() in {"the", "and", "&"} for t in tokens):
+    if not is_valid_two_word(tokens):
       return None
     return f"{tokens[1]}, {tokens[0]}".lower()
   if allow_3 and len(tokens) == 3:
-    first, middle, last = tokens
-    if first.lower() in {"the", "and", "&"}:
-      return None
-    middle_norm = middle.lower().strip('.')
-    particles = {"de", "del", "van", "von", "da", "di", "la", "le", "du", "do", "dos", "das", "st"}
-    if len(middle_norm) == 1 or middle.endswith('.') or middle_norm in particles:
-      return f"{last}, {first} {middle}".lower()
+    return flip_three_word(tokens)
   return None
 
 
@@ -647,110 +657,113 @@ def build_release_row(
   )
 
 def collect_lp_rows(
-  headers: Dict[str, str],
-  username: str,
-  per_page: int,
-  max_pages: Optional[int],
-  extra_articles: List[str],
-  lp_strict: bool = False,
-  lp_probable: bool = False,
-  debug_stats: Optional[Dict[str, int]] = None,
-  last_name_first: bool = False,
-  lnf_allow_3: bool = False,
-  lnf_exclude: Optional[Set[str]] = None,
-  lnf_safe_bands: bool = False,
-  collect_exclusions: bool = False,
+    headers: Dict[str, str],
+    username: str,
+    per_page: int,
+    max_pages: Optional[int],
+    extra_articles: List[str],
+    lp_strict: bool = False,
+    lp_probable: bool = False,
+    debug_stats: Optional[Dict[str, int]] = None,
+    last_name_first: bool = False,
+    lnf_allow_3: bool = False,
+    lnf_exclude: Optional[Set[str]] = None,
+    lnf_safe_bands: bool = False,
+    collect_exclusions: bool = False,
 ) -> List[ReleaseRow]:
-  rows: List[ReleaseRow] = []
-  stats = {"scanned": 0, "vinyl": 0, "vinyl_lp": 0, "vinyl_lp_33": 0}
+    """
+    Collects LP rows from a Discogs collection, filtering and tracking stats/exclusions.
+    Refactored to reduce cognitive complexity by splitting logic into helpers.
+    """
+    rows: List[ReleaseRow] = []
+    stats = {"scanned": 0, "vinyl": 0, "vinyl_lp": 0, "vinyl_lp_33": 0}
+    excluded_probable: List[Dict] = []
 
-  def basic_info(item: Dict) -> Dict:
-    return item.get("basic_information") or {}
+    def update_stats(basic: Dict) -> None:
+        stats["scanned"] += 1
+        fmts = basic.get("formats", []) or []
+        is_vinyl = any((f.get("name") or "").strip().lower() == "vinyl" for f in fmts)
+        if is_vinyl:
+            stats["vinyl"] += 1
+            lp_flag = any(
+                any((d.strip().lower() in {"lp", "album"}) for d in (f.get("descriptions") or []))
+                for f in fmts if (f.get("name") or "").strip().lower() == "vinyl"
+            )
+            if lp_flag:
+                stats["vinyl_lp"] += 1
+                lp_33_flag = any(
+                    any(("33" in d.strip().lower() and "rpm" in d.strip().lower()) for d in (f.get("descriptions") or []))
+                    for f in fmts if (f.get("name") or "").strip().lower() == "vinyl"
+                )
+                if lp_33_flag:
+                    stats["vinyl_lp_33"] += 1
 
-  def classify_formats(basic: Dict) -> Tuple[bool, bool, bool]:
-    fmts = basic.get("formats", []) or []
-    is_vinyl = False
-    lp_flag = False
-    lp_33_flag = False
-    for f in fmts:
-      if (f.get("name") or "").strip().lower() == "vinyl":
-        is_vinyl = True
-      for d in (f.get("descriptions") or []):
-        d_low = d.strip().lower()
-        if d_low in {"lp", "album"}:
-          lp_flag = True
-        if lp_flag and ("33" in d_low and "rpm" in d_low):
-          lp_33_flag = True
-    return is_vinyl, lp_flag, lp_33_flag
+    def should_exclude(basic: Dict) -> bool:
+        return not is_lp_33(basic, strict=lp_strict, probable=lp_probable)
 
-  def build_row(basic: Dict, item: Dict) -> ReleaseRow:
-    title = basic.get("title") or ""
-    artist_disp = build_artist_display(basic)
-    year_raw = basic.get("year")
-    year = int(year_raw) if (year_raw and str(year_raw).isdigit()) else None
-    label, catno = label_and_catno(basic)
-    fmt_desc = format_string(basic)
-    rel_id = basic.get("id")
-    master_id_raw = basic.get("master_id")
-    url = f"https://www.discogs.com/release/{rel_id}" if rel_id else ""
-    # Get thumbnail URLs - Discogs provides 'thumb' (small) and 'cover_image' (larger)
-    thumb_url = basic.get("thumb") or ""
-    cover_image_url = basic.get("cover_image") or ""
-    sort_artist, sort_title = make_sort_keys(
-      artist_disp,
-      title,
-      extra_articles,
-      last_name_first=last_name_first,
-      lnf_allow_3=lnf_allow_3,
-      lnf_exclude=lnf_exclude,
-      lnf_safe_bands=lnf_safe_bands,
-    )
-    return ReleaseRow(
-      artist_display=artist_disp,
-      title=title,
-      year=year,
-      label=label,
-      catno=catno,
-      country=basic.get("country") or "",
-      format_str=fmt_desc,
-      discogs_url=url,
-      notes=(item.get("notes") or ""),
-      release_id=int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None,
-      master_id=int(master_id_raw) if isinstance(master_id_raw, int) or (isinstance(master_id_raw, str) and master_id_raw.isdigit()) else None,
-      sort_artist=sort_artist,
-      sort_title=sort_title,
-      thumb_url=thumb_url,
-      cover_image_url=cover_image_url,
-    )
+    def track_exclusion(basic: Dict) -> None:
+        if collect_exclusions and lp_probable and not lp_strict:
+            excluded_probable.append(basic)
 
-  excluded_probable: List[Dict] = []  # raw basic_information dicts
-  for item in iterate_collection(headers, username, per_page=per_page, max_pages=max_pages):
-    basic = basic_info(item)
-    if not basic:
-      continue
-    stats["scanned"] += 1
-    is_vinyl, lp_flag, lp_33_flag = classify_formats(basic)
-    if is_vinyl:
-      stats["vinyl"] += 1
-      if lp_flag:
-        stats["vinyl_lp"] += 1
-        if lp_33_flag:
-          stats["vinyl_lp_33"] += 1
-    passed = is_lp_33(basic, strict=lp_strict, probable=lp_probable)
-    if passed:
-      rows.append(build_row(basic, item))
-    else:
-      # Track probable exclusions only when requested and in probable mode (not strict)
-      if collect_exclusions and lp_probable and not lp_strict:
-        excluded_probable.append(basic)
+    def build_row(basic: Dict, item: Dict) -> ReleaseRow:
+        title = basic.get("title") or ""
+        artist_disp = build_artist_display(basic)
+        year_raw = basic.get("year")
+        year = int(year_raw) if (year_raw and str(year_raw).isdigit()) else None
+        label, catno = label_and_catno(basic)
+        fmt_desc = format_string(basic)
+        rel_id = basic.get("id")
+        master_id_raw = basic.get("master_id")
+        url = f"https://www.discogs.com/release/{rel_id}" if rel_id else ""
+        thumb_url = basic.get("thumb") or ""
+        cover_image_url = basic.get("cover_image") or ""
+        sort_artist, sort_title = make_sort_keys(
+            artist_disp,
+            title,
+            extra_articles,
+            last_name_first=last_name_first,
+            lnf_allow_3=lnf_allow_3,
+            lnf_exclude=lnf_exclude,
+            lnf_safe_bands=lnf_safe_bands,
+        )
+        return ReleaseRow(
+            artist_display=artist_disp,
+            title=title,
+            year=year,
+            label=label,
+            catno=catno,
+            country=basic.get("country") or "",
+            format_str=fmt_desc,
+            discogs_url=url,
+            notes=(item.get("notes") or ""),
+            release_id=int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None,
+            master_id=int(master_id_raw) if isinstance(master_id_raw, int) or (isinstance(master_id_raw, str) and master_id_raw.isdigit()) else None,
+            sort_artist=sort_artist,
+            sort_title=sort_title,
+            thumb_url=thumb_url,
+            cover_image_url=cover_image_url,
+        )
 
-  if debug_stats is not None:
-    debug_stats.clear()
-    debug_stats.update(stats)
-  if collect_exclusions and lp_probable and not lp_strict:
-    # Attach excluded basics list to a special attribute for later retrieval (only if rows is a custom class)
-    pass
-  return rows
+    def process_item(item: Dict):
+        basic = item.get("basic_information") or {}
+        if not basic:
+            return
+        update_stats(basic)
+        if should_exclude(basic):
+            track_exclusion(basic)
+            return
+        rows.append(build_row(basic, item))
+
+    for item in iterate_collection(headers, username, per_page=per_page, max_pages=max_pages):
+        process_item(item)
+
+    if debug_stats is not None:
+        debug_stats.clear()
+        debug_stats.update(stats)
+    # Attach excluded basics list to a special attribute for later retrieval (if needed)
+    if collect_exclusions and lp_probable and not lp_strict:
+        setattr(rows, "excluded_probable_basics", excluded_probable)
+    return rows
 
 
 def collect_45_rows(
@@ -815,100 +828,124 @@ def collect_cd_rows(
   return rows
 
 
-def sort_rows(rows: List[ReleaseRow], various_policy: str, sort_by: str = "artist") -> List[ReleaseRow]:
-  """Sort rows by the specified field.
-  
-  Args:
-    rows: List of ReleaseRow objects
-    various_policy: How to handle Various Artists ("normal", "last", "title")
-    sort_by: Field to sort by ("artist", "title", "price_asc", "price_desc", "year")
-  """
-  def is_various(artist_disp: str) -> bool:
+def is_various_artist(artist_disp: str) -> bool:
     a = (artist_disp or "").strip().lower()
     return a in {"various", "various artists"}
 
-  if sort_by == "price_desc":
-    # Sort by price descending (highest first), None values at end
-    return sorted(rows, key=lambda r: (r.lowest_price is None, -(r.lowest_price or 0)))
-  
-  if sort_by == "price_asc":
-    # Sort by price ascending (lowest first), None values at end
-    return sorted(rows, key=lambda r: (r.lowest_price is None, r.lowest_price or 0))
-  
-  if sort_by == "year":
-    # Sort by year ascending
-    return sorted(rows, key=lambda r: (r.year or 9999, r.sort_artist, r.sort_title))
+def sort_key_price_desc(r: ReleaseRow):
+    return (r.lowest_price is None, -(r.lowest_price or 0))
 
-  def key(r: ReleaseRow) -> Tuple[int, str, str, int, str]:
-    is_var = is_various(r.artist_display)
+def sort_key_price_asc(r: ReleaseRow):
+    return (r.lowest_price is None, r.lowest_price or 0)
+
+def sort_key_year(r: ReleaseRow):
+    return (r.year or 9999, r.sort_artist, r.sort_title)
+
+def sort_key_general(r: ReleaseRow, various_policy: str, sort_by: str) -> tuple:
+    is_var = is_various_artist(r.artist_display)
     var_flag = 1 if (various_policy == "last" and is_var) else 0
     year_val = r.year if isinstance(r.year, int) else 9999
 
     if various_policy == "title" and is_var:
-      # File Various Artists releases by title (so they land under the title letter)
-      primary = r.sort_title
-      secondary = r.sort_title
-      tie = r.sort_artist
+        primary = r.sort_title
+        secondary = r.sort_title
+        tie = r.sort_artist
     elif sort_by == "title":
-      primary = r.sort_title
-      secondary = r.sort_artist
-      tie = r.sort_title
+        primary = r.sort_title
+        secondary = r.sort_artist
+        tie = r.sort_title
     else:
-      # Default: sort by artist
-      primary = r.sort_artist
-      secondary = r.sort_title
-      tie = r.sort_artist
+        primary = r.sort_artist
+        secondary = r.sort_title
+        tie = r.sort_artist
 
     return (var_flag, primary, secondary, year_val, tie)
 
-  return sorted(rows, key=key)
+def sort_rows(rows: List[ReleaseRow], various_policy: str, sort_by: str = "artist") -> List[ReleaseRow]:
+    """Sort rows by the specified field.
+
+    Args:
+        rows: List of ReleaseRow objects
+        various_policy: How to handle Various Artists ("normal", "last", "title")
+        sort_by: Field to sort by ("artist", "title", "price_asc", "price_desc", "year")
+    """
+    if sort_by == "price_desc":
+        return sorted(rows, key=sort_key_price_desc)
+
+    if sort_by == "price_asc":
+        return sorted(rows, key=sort_key_price_asc)
+
+    if sort_by == "year":
+        return sorted(rows, key=sort_key_year)
+
+    return sorted(rows, key=lambda r: sort_key_general(r, various_policy, sort_by))
 
 
-def generate_txt_lines(rows: List[ReleaseRow], dividers: bool = False,
-                       align: bool = False, show_country: bool = False,
-                       show_price: bool = False) -> List[str]:
-  """Return the lines that would appear in the TXT output.
-
-  Used by both CLI writer and GUI preview to avoid duplication.
-  """
-  artist_width = max((len(r.artist_display) for r in rows), default=0) if align else 0
-  title_width = max((len(r.title) for r in rows), default=0) if align else 0
-
-  def divider_line(r: ReleaseRow, current: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+def get_divider_line(r: ReleaseRow, current: Optional[str], dividers: bool) -> Tuple[Optional[str], Optional[str]]:
     if not dividers:
-      return current, None
+        return current, None
     sa = r.sort_artist.strip()
     first = sa[0].upper() if sa else "#"
     if not first.isalpha():
-      first = "#"
+        first = "#"
     if current != first:
-      return first, f"=== {first} ==="
+        return first, f"=== {first} ==="
     return current, None
 
-  def formatted_line(r: ReleaseRow) -> str:
-    year_str = f" ({r.year})" if r.year else ""
-    label_part = f" [{r.label} {r.catno}]".rstrip() if (r.label or r.catno) else ""
-    country_part = f" {{{r.country}}}" if (show_country and r.country) else ""
-    price_part = ""
-    if show_price:
-      if r.lowest_price is not None and r.num_for_sale and r.num_for_sale > 0:
-        # Show price and number of copies for sale
-        # Note: This is for this specific pressing, not all versions
-        price_part = f" - {r.lowest_price:.0f} {r.price_currency}+ ({r.num_for_sale} for sale)"
-      else:
-        price_part = f" [Not listed]"
+def get_year_str(r: ReleaseRow) -> str:
+    return f" ({r.year})" if r.year else ""
+
+def get_label_part(r: ReleaseRow) -> str:
+    return f" [{r.label} {r.catno}]".rstrip() if (r.label or r.catno) else ""
+
+def get_country_part(r: ReleaseRow, show_country: bool) -> str:
+    return f" {{{r.country}}}" if (show_country and r.country) else ""
+
+def get_price_part(r: ReleaseRow, show_price: bool) -> str:
+    if not show_price:
+        return ""
+    if r.lowest_price is not None and r.num_for_sale and r.num_for_sale > 0:
+        return f" - {r.lowest_price:.0f} {r.price_currency}+ ({r.num_for_sale} for sale)"
+    return " [Not listed]"
+
+def format_txt_line(
+    r: ReleaseRow,
+    artist_width: int,
+    title_width: int,
+    align: bool,
+    show_country: bool,
+    show_price: bool
+) -> str:
+    year_str = get_year_str(r)
+    label_part = get_label_part(r)
+    country_part = get_country_part(r, show_country)
+    price_part = get_price_part(r, show_price)
     if align:
-      return f"{r.artist_display.ljust(artist_width)} | {r.title.ljust(title_width)}{year_str}{label_part}{country_part}{price_part}".rstrip()
+        return f"{r.artist_display.ljust(artist_width)} | {r.title.ljust(title_width)}{year_str}{label_part}{country_part}{price_part}".rstrip()
     return f"{r.artist_display} — {r.title}{year_str}{label_part}{country_part}{price_part}".rstrip()
 
-  lines: List[str] = []
-  current_div: Optional[str] = None
-  for r in rows:
-    current_div, div_line = divider_line(r, current_div)
-    if div_line:
-      lines.append(div_line)
-    lines.append(formatted_line(r))
-  return lines
+def generate_txt_lines(
+    rows: List[ReleaseRow],
+    dividers: bool = False,
+    align: bool = False,
+    show_country: bool = False,
+    show_price: bool = False
+) -> List[str]:
+    """Return the lines that would appear in the TXT output.
+
+    Used by both CLI writer and GUI preview to avoid duplication.
+    """
+    artist_width = max((len(r.artist_display) for r in rows), default=0) if align else 0
+    title_width = max((len(r.title) for r in rows), default=0) if align else 0
+
+    lines: List[str] = []
+    current_div: Optional[str] = None
+    for r in rows:
+        current_div, div_line = get_divider_line(r, current_div, dividers)
+        if div_line:
+            lines.append(div_line)
+        lines.append(format_txt_line(r, artist_width, title_width, align, show_country, show_price))
+    return lines
 
 
 def write_txt(rows: List[ReleaseRow], out_path: Path, dividers: bool = False,
@@ -992,210 +1029,241 @@ def write_csv(rows: List[ReleaseRow], out_path: Path) -> None:
 
 
 def main() -> None:
-  args = parse_args()
-  token = get_token(args.token)
-  headers = discogs_headers(token, args.user_agent)
+    args = parse_args()
+    token = get_token(args.token)
+    headers = discogs_headers(token, args.user_agent)
 
-  # Banner
-  print(f"Discogs LP Sorter v{VERSION}")
+    print(f"Discogs LP Sorter v{VERSION}")
 
-  ident = get_identity(headers)
-  username = ident.get("username")
-  if not username:
-    sys.exit("Error: Could not determine username from token.")
+    ident = get_identity(headers)
+    username = ident.get("username")
+    if not username:
+        sys.exit("Error: Could not determine username from token.")
 
-  out_dir = Path(args.output_dir)
-  out_dir.mkdir(parents=True, exist_ok=True)
-  extra_articles = [a.strip() for a in (args.articles_extra or "").split(",") if a.strip()]
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    extra_articles = [a.strip() for a in (args.articles_extra or "").split(",") if a.strip()]
 
-  print(f"Fetching collection for user '{username}'...")
-  dbg: Optional[Dict[str, int]] = {} if args.debug_stats else None
-  rows = collect_lp_rows(
-    headers=headers,
-    username=username,
-    per_page=max(1, min(int(args.per_page), 100)),
-    max_pages=args.max_pages,
-    extra_articles=extra_articles,
-    lp_strict=bool(args.lp_strict),
-    lp_probable=bool(getattr(args, "lp_probable_33", False)),
-    debug_stats=dbg,
-    last_name_first=bool(args.last_name_first),
-    lnf_allow_3=bool(getattr(args, "lnf_allow_3", False)),
-    lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
-    lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
-    collect_exclusions=bool(getattr(args, "report_filters", False)),
-  )
-  if not rows:
-    print("No matching 33⅓ RPM LPs found.")
-    if args.debug_stats:
-      # We cannot access _debug_stats if rows is empty; so recompute quickly
-      print("Tip: Re-run without strict RPM requirement (default) or enable debug stats with --debug-stats.")
-    return
+    rows, _ = fetch_and_report_lp_rows(args, headers, username, extra_articles)
+    if not rows:
+        return
 
-  if args.debug_stats and dbg is not None:
-    print(
-      f"Stats: scanned={dbg.get('scanned', 0)}, vinyl={dbg.get('vinyl', 0)}, "
-      f"vinyl+LP={dbg.get('vinyl_lp', 0)}, vinyl+LP+33rpm={dbg.get('vinyl_lp_33', 0)}"
+    rows_sorted = sort_rows(rows, args.various_policy)
+    write_main_outputs(args, out_dir, rows_sorted)
+
+    rows45_sorted = handle_optional_45s(args, headers, username, extra_articles, out_dir)
+    rows_cd_sorted = handle_optional_cds(args, headers, username, extra_articles, out_dir)
+
+    print_category_summary(rows_sorted, rows45_sorted, rows_cd_sorted)
+
+    handle_combined_json(args, out_dir, rows_sorted, rows45_sorted, rows_cd_sorted)
+    handle_probable_exclusions(args, out_dir, rows)
+    handle_valuable_export(args, out_dir, headers, rows_sorted, rows45_sorted, rows_cd_sorted)
+
+def fetch_and_report_lp_rows(args, headers, username, extra_articles):
+    dbg: Optional[Dict[str, int]] = {} if args.debug_stats else None
+    print(f"Fetching collection for user '{username}'...")
+    rows = collect_lp_rows(
+        headers=headers,
+        username=username,
+        per_page=max(1, min(int(args.per_page), 100)),
+        max_pages=args.max_pages,
+        extra_articles=extra_articles,
+        lp_strict=bool(args.lp_strict),
+        lp_probable=bool(getattr(args, "lp_probable_33", False)),
+        debug_stats=dbg,
+        last_name_first=bool(args.last_name_first),
+        lnf_allow_3=bool(getattr(args, "lnf_allow_3", False)),
+        lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
+        lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
+        collect_exclusions=bool(getattr(args, "report_filters", False)),
     )
-    # If reporting exclusions in probable mode, show a count
-    if getattr(args, "report_filters", False) and getattr(args, "lp_probable_33", False) and not getattr(args, "lp_strict", False):
-      excl = getattr(rows, "excluded_probable_basics", [])
-      print(f"Probable exclusions (explicit 45/78): {len(excl)}")
+    if not rows:
+        print("No matching 33⅓ RPM LPs found.")
+        if args.debug_stats:
+            print("Tip: Re-run without strict RPM requirement (default) or enable debug stats with --debug-stats.")
+        return [], dbg
+    if args.debug_stats and dbg is not None:
+        print(
+            f"Stats: scanned={dbg.get('scanned', 0)}, vinyl={dbg.get('vinyl', 0)}, "
+            f"vinyl+LP={dbg.get('vinyl_lp', 0)}, vinyl+LP+33rpm={dbg.get('vinyl_lp_33', 0)}"
+        )
+        if getattr(args, "report_filters", False) and getattr(args, "lp_probable_33", False) and not getattr(args, "lp_strict", False):
+            excl = getattr(rows, "excluded_probable_basics", [])
+            print(f"Probable exclusions (explicit 45/78): {len(excl)}")
+    return rows, dbg
 
-  rows_sorted = sort_rows(rows, args.various_policy)
-
-  txt_path = out_dir / "vinyl_shelf_order.txt"
-  csv_path = out_dir / "vinyl_shelf_order.csv"
-  write_txt(rows_sorted, txt_path, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
-  write_csv(rows_sorted, csv_path)
-  if args.json:
-    json_path = out_dir / "vinyl_shelf_order.json"
-    write_json(rows_sorted, json_path)
-
-  print(f"Wrote: {txt_path}")
-  print(f"Wrote: {csv_path}")
-  if args.json:
-    print(f"Wrote: {json_path}")
-
-  # Optional: 7" 45 RPM singles
-  rows45_sorted: List[ReleaseRow] = []
-  if getattr(args, "include_45s", False):
-    rows45 = collect_45_rows(
-      headers=headers,
-      username=username,
-      per_page=max(1, min(int(args.per_page), 100)),
-      max_pages=args.max_pages,
-      extra_articles=extra_articles,
-      last_name_first=bool(args.last_name_first),
-      lnf_allow_3=bool(getattr(args, "lnf_allow_3", False)),
-      lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
-      lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
-    )
-    rows45_sorted = sort_rows(rows45, args.various_policy)
-    txt45 = out_dir / "vinyl45_shelf_order.txt"
-    csv45 = out_dir / "vinyl45_shelf_order.csv"
-    write_txt(rows45_sorted, txt45, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
-    write_csv(rows45_sorted, csv45)
+def write_main_outputs(args, out_dir, rows_sorted):
+    txt_path = out_dir / "vinyl_shelf_order.txt"
+    csv_path = out_dir / "vinyl_shelf_order.csv"
+    write_txt(rows_sorted, txt_path, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
+    write_csv(rows_sorted, csv_path)
     if args.json:
-      json45 = out_dir / "vinyl45_shelf_order.json"
-      write_json(rows45_sorted, json45)
-    print(f"Wrote: {txt45}")
-    print(f"Wrote: {csv45}")
+        json_path = out_dir / "vinyl_shelf_order.json"
+        write_json(rows_sorted, json_path)
+    print(f"Wrote: {txt_path}")
+    print(f"Wrote: {csv_path}")
     if args.json:
-      print(f"Wrote: {json45}")
+        print(f"Wrote: {json_path}")
 
-  # Optional: CDs
-  rows_cd_sorted: List[ReleaseRow] = []
-  if getattr(args, "include_cds", False):
-    rows_cd = collect_cd_rows(
-      headers=headers,
-      username=username,
-      per_page=max(1, min(int(args.per_page), 100)),
-      max_pages=args.max_pages,
-      extra_articles=extra_articles,
-      last_name_first=bool(args.last_name_first),
-      lnf_allow_3=bool(getattr(args, "lnf_allow_3", False)),
-      lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
-      lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
-    )
-    rows_cd_sorted = sort_rows(rows_cd, args.various_policy)
-    txtcd = out_dir / "cd_shelf_order.txt"
-    csvcd = out_dir / "cd_shelf_order.csv"
-    write_txt(rows_cd_sorted, txtcd, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
-    write_csv(rows_cd_sorted, csvcd)
-    if args.json:
-      jsoncd = out_dir / "cd_shelf_order.json"
-      write_json(rows_cd_sorted, jsoncd)
-    print(f"Wrote: {txtcd}")
-    print(f"Wrote: {csvcd}")
-    if args.json:
-      print(f"Wrote: {jsoncd}")
+def handle_optional_45s(args, headers, username, extra_articles, out_dir):
+    rows45_sorted: List[ReleaseRow] = []
+    if getattr(args, "include_45s", False):
+        rows45 = collect_45_rows(
+            headers=headers,
+            username=username,
+            per_page=max(1, min(int(args.per_page), 100)),
+            max_pages=args.max_pages,
+            extra_articles=extra_articles,
+            last_name_first=bool(args.last_name_first),
+            lnf_allow_3=bool(getattr(args, "lnf_allow_3", False)),
+            lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
+            lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
+        )
+        rows45_sorted = sort_rows(rows45, args.various_policy)
+        txt45 = out_dir / "vinyl45_shelf_order.txt"
+        csv45 = out_dir / "vinyl45_shelf_order.csv"
+        write_txt(rows45_sorted, txt45, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
+        write_csv(rows45_sorted, csv45)
+        if args.json:
+            json45 = out_dir / "vinyl45_shelf_order.json"
+            write_json(rows45_sorted, json45)
+        print(f"Wrote: {txt45}")
+        print(f"Wrote: {csv45}")
+        if args.json:
+            print(f"Wrote: {json45}")
+    return rows45_sorted
 
-  # Category summary
-  summary_parts = [f"LP: {len(rows_sorted)}"]
-  if rows45_sorted:
-    summary_parts.append(f"45s: {len(rows45_sorted)}")
-  if rows_cd_sorted:
-    summary_parts.append(f"CDs: {len(rows_cd_sorted)}")
-  print("Summary: " + " • ".join(summary_parts))
+def handle_optional_cds(args, headers, username, extra_articles, out_dir):
+    rows_cd_sorted: List[ReleaseRow] = []
+    if getattr(args, "include_cds", False):
+        rows_cd = collect_cd_rows(
+            headers=headers,
+            username=username,
+            per_page=max(1, min(int(args.per_page), 100)),
+            max_pages=args.max_pages,
+            extra_articles=extra_articles,
+            last_name_first=bool(args.last_name_first),
+            lnf_allow_3=bool(getattr(args, "lnf_allow_3", False)),
+            lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
+            lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
+        )
+        rows_cd_sorted = sort_rows(rows_cd, args.various_policy)
+        txtcd = out_dir / "cd_shelf_order.txt"
+        csvcd = out_dir / "cd_shelf_order.csv"
+        write_txt(rows_cd_sorted, txtcd, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
+        write_csv(rows_cd_sorted, csvcd)
+        if args.json:
+            jsoncd = out_dir / "cd_shelf_order.json"
+            write_json(rows_cd_sorted, jsoncd)
+        print(f"Wrote: {txtcd}")
+        print(f"Wrote: {csvcd}")
+        if args.json:
+            print(f"Wrote: {jsoncd}")
+    return rows_cd_sorted
 
-  # Combined JSON export (media_type) if JSON requested and any extra categories
-  if args.json and (rows45_sorted or rows_cd_sorted):
-    import json as _json
-    combined = []
-    for r in rows_sorted:
-      combined.append({"media_type": "LP", **rows_to_json([r])[0]})
-    for r in rows45_sorted:
-      combined.append({"media_type": "45", **rows_to_json([r])[0]})
-    for r in rows_cd_sorted:
-      combined.append({"media_type": "CD", **rows_to_json([r])[0]})
-    combo_path = out_dir / "all_media_shelf_order.json"
-    with combo_path.open("w", encoding="utf-8") as f:
-      _json.dump(combined, f, ensure_ascii=False, indent=2)
-    print(f"Wrote: {combo_path}")
+def print_category_summary(rows_sorted, rows45_sorted, rows_cd_sorted):
+    summary_parts = [f"LP: {len(rows_sorted)}"]
+    if rows45_sorted:
+        summary_parts.append(f"45s: {len(rows45_sorted)}")
+    if rows_cd_sorted:
+        summary_parts.append(f"CDs: {len(rows_cd_sorted)}")
+    print("Summary: " + " • ".join(summary_parts))
 
-  # Report file for probable exclusions
-  if getattr(args, "report_filters", False) and getattr(args, "lp_probable_33", False) and not getattr(args, "lp_strict", False):
-    excl_basics = getattr(rows, "excluded_probable_basics", [])
-    if excl_basics:
-      report_path = out_dir / "excluded_probable_lp.txt"
-      with report_path.open("w", encoding="utf-8") as f:
+def handle_combined_json(args, out_dir, rows_sorted, rows45_sorted, rows_cd_sorted):
+    if args.json and (rows45_sorted or rows_cd_sorted):
+        import json as _json
+        combined = []
+        for r in rows_sorted:
+            combined.append({"media_type": "LP", **rows_to_json([r])[0]})
+        for r in rows45_sorted:
+            combined.append({"media_type": "45", **rows_to_json([r])[0]})
+        for r in rows_cd_sorted:
+            combined.append({"media_type": "CD", **rows_to_json([r])[0]})
+        combo_path = out_dir / "all_media_shelf_order.json"
+        with combo_path.open("w", encoding="utf-8") as f:
+            _json.dump(combined, f, ensure_ascii=False, indent=2)
+        print(f"Wrote: {combo_path}")
+
+def _write_probable_exclusion_report(excl_basics, out_dir):
+    report_path = out_dir / "excluded_probable_lp.txt"
+    with report_path.open("w", encoding="utf-8") as f:
         f.write("=== LPs excluded in probable 33 mode (explicit 45/78 descriptors) ===\n")
         for b in excl_basics:
-          title = b.get("title") or ""
-          artists = build_artist_display(b)
-          desc_tokens = []
-          for fmt in (b.get("formats") or []):
-            if (fmt.get("name") or "").strip().lower() == "vinyl":
-              desc_tokens.extend([d for d in (fmt.get("descriptions") or []) if d])
-          line = f"{artists} — {title} | descriptors: {', '.join(desc_tokens)}"
-          f.write(line + "\n")
-      print(f"Wrote: {report_path}")
+            title = b.get("title") or ""
+            artists = build_artist_display(b)
+            desc_tokens = []
+            for fmt in (b.get("formats") or []):
+                if (fmt.get("name") or "").strip().lower() == "vinyl":
+                    desc_tokens.extend([d for d in (fmt.get("descriptions") or []) if d])
+            line = f"{artists} — {title} | descriptors: {', '.join(desc_tokens)}"
+            f.write(line + "\n")
+    print(f"Wrote: {report_path}")
 
-  # Valuable items export (threshold in SEK)
-  if getattr(args, "valuable_sek", None):
+def handle_probable_exclusions(args, out_dir, rows):
+    should_report = (
+        getattr(args, "report_filters", False)
+        and getattr(args, "lp_probable_33", False)
+        and not getattr(args, "lp_strict", False)
+    )
+    if not should_report:
+        return
+    excl_basics = getattr(rows, "excluded_probable_basics", [])
+    if excl_basics:
+        _write_probable_exclusion_report(excl_basics, out_dir)
+
+def handle_valuable_export(args, out_dir, headers, rows_sorted, rows45_sorted, rows_cd_sorted):
+    if not getattr(args, "valuable_sek", None):
+        return
     threshold = float(args.valuable_sek)
-    # Build candidate list in current shelf order: LPs first, then 45s, then CDs
+    candidates = _gather_valuable_candidates(rows_sorted, rows45_sorted, rows_cd_sorted)
+    print(f"Evaluating prices for {len(candidates)} items (threshold: {threshold:.0f} SEK)…")
+    valuable = _find_valuable_items(candidates, headers, threshold)
+    _write_valuable_report(valuable, threshold, args, out_dir)
+
+def _gather_valuable_candidates(rows_sorted, rows45_sorted, rows_cd_sorted):
     candidates: List[ReleaseRow] = []
     candidates.extend(rows_sorted)
     if rows45_sorted:
-      candidates.extend(rows45_sorted)
+        candidates.extend(rows45_sorted)
     if rows_cd_sorted:
-      candidates.extend(rows_cd_sorted)
-    # Fetch lowest_price per unique release id
-    def lowest_price_sek(rel_id: int) -> Optional[float]:
-      url = f"{API_BASE}/releases/{rel_id}"
-      resp = api_get(url, headers, params={"curr_abbr": "SEK"})
-      try:
+        candidates.extend(rows_cd_sorted)
+    return candidates
+
+def _lowest_price_sek(rel_id: int, headers) -> Optional[float]:
+    url = f"{API_BASE}/releases/{rel_id}"
+    resp = api_get(url, headers, params={"curr_abbr": "SEK"})
+    try:
         lp = resp.json().get("lowest_price")
         return float(lp) if lp is not None else None
-      except Exception:
+    except Exception:
         return None
 
+def _find_valuable_items(candidates, headers, threshold):
     price_cache: Dict[int, Optional[float]] = {}
     valuable: List[tuple[ReleaseRow, float]] = []
-    print(f"Evaluating prices for {len(candidates)} items (threshold: {threshold:.0f} SEK)…")
     for r in candidates:
-      rid = r.release_id
-      if not isinstance(rid, int):
-        continue
-      if rid not in price_cache:
-        price_cache[rid] = lowest_price_sek(rid)
-      p = price_cache[rid]
-      if p is not None and p >= threshold:
-        valuable.append((r, p))
+        rid = r.release_id
+        if not isinstance(rid, int):
+            continue
+        if rid not in price_cache:
+            price_cache[rid] = _lowest_price_sek(rid, headers)
+        p = price_cache[rid]
+        if p is not None and p >= threshold:
+            valuable.append((r, p))
+    return valuable
+
+def _write_valuable_report(valuable, threshold, args, out_dir):
     if valuable:
-      # Keep the current shelf order (don’t resort by price)
-      out_path = out_dir / f"valuable_over_{int(threshold)}kr.txt"
-      with out_path.open("w", encoding="utf-8") as f:
-        f.write(f"=== Valuable items >= {int(threshold)} SEK ===\n")
-        for r, p in valuable:
-          # Reuse formatted TXT line and append price hint
-          line = generate_txt_lines([r], dividers=False, align=False, show_country=bool(args.show_country))[0]
-          f.write(f"{line} [~{p:.0f} SEK]\n")
-      print(f"Wrote: {out_path} ({len(valuable)} items)")
+        out_path = out_dir / f"valuable_over_{int(threshold)}kr.txt"
+        with out_path.open("w", encoding="utf-8") as f:
+            f.write(f"=== Valuable items >= {int(threshold)} SEK ===\n")
+            for r, p in valuable:
+                line = generate_txt_lines([r], dividers=False, align=False, show_country=bool(args.show_country))[0]
+                f.write(f"{line} [~{p:.0f} SEK]\n")
+        print(f"Wrote: {out_path} ({len(valuable)} items)")
     else:
-      print(f"No items found at or above {int(threshold)} SEK.")
+        print(f"No items found at or above {int(threshold)} SEK.")
 
 
 if __name__ == "__main__":
