@@ -48,6 +48,7 @@ from tkinter import Tk, StringVar, BooleanVar, IntVar, filedialog, messagebox
 import tkinter as tk
 
 import discogs_app as core
+from core.models import ReleaseRow, BuildResult
 
 
 POLL_SECONDS_DEFAULT = 300  # 5 minutes
@@ -348,7 +349,7 @@ class ManualOrderManager:
     self._data["enabled"] = True
     self._save()
   
-  def apply_order(self, rows: list[core.ReleaseRow]) -> list[core.ReleaseRow]:
+  def apply_order(self, rows: list[ReleaseRow]) -> list[ReleaseRow]:
     """Apply manual ordering to a list of rows.
     
     Returns rows reordered according to manual order.
@@ -530,7 +531,7 @@ class ThumbnailCache:
     self._preview_cache.clear()
     self._placeholder = None
   
-  def load_preview(self, release_id: int, thumb_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
+  def load_preview(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
     """Load a larger preview image for hover display."""
     if not self._pil_available:
       return None
@@ -551,7 +552,36 @@ class ThumbnailCache:
       except Exception:
         pass
     
-    # First, try to upscale the small thumbnail (fast, no network)
+    # If we have a cover_url, download the larger image
+    if cover_url and headers:
+      try:
+        import requests
+        from PIL import Image, ImageTk
+        from io import BytesIO
+        
+        resp = requests.get(cover_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+          img = Image.open(BytesIO(resp.content))
+          img = img.convert("RGBA")
+          
+          # Resize to preview size while maintaining aspect ratio
+          img.thumbnail(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
+          
+          # Create a square canvas and center the image
+          square = Image.new("RGBA", self.PREVIEW_SIZE, (30, 30, 50, 255))
+          offset = ((self.PREVIEW_SIZE[0] - img.width) // 2, (self.PREVIEW_SIZE[1] - img.height) // 2)
+          square.paste(img, offset)
+          
+          # Save to cache
+          square.save(preview_path, "PNG")
+          
+          photo = ImageTk.PhotoImage(square)
+          self._preview_cache[release_id] = photo
+          return photo
+      except Exception:
+        pass
+    
+    # Fall back to upscaling the small thumbnail
     small_path = self._get_cache_path(release_id, preview=False)
     if small_path.exists():
       try:
@@ -696,11 +726,7 @@ def get_collection_count(headers: dict[str, str], username: str) -> int:
   return int(data.get("pagination", {}).get("items", 0))
 
 
-@dataclass
-class BuildResult:
-  username: str
-  rows_sorted: list[core.ReleaseRow]
-  lines: list[str]
+
 
 
 class ProgressDialog:
@@ -1952,7 +1978,7 @@ class App:
     # Don't grid it - it's just for compatibility with existing code
     
     # Store reference to rows for drag-drop operations
-    self._tree_rows: list[core.ReleaseRow] = []
+    self._tree_rows: list[ReleaseRow] = []
 
     log_fr = ttk.Frame(nb)
     nb.add(log_fr, text="📜 Log")
@@ -2191,10 +2217,18 @@ class App:
       
       self._hover_release_id = row.release_id
       
-      # Show the preview popup (no network download, just upscale cached thumb)
+      # Get headers for downloading larger image
+      try:
+        from discogs_app import make_headers
+        headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+      except Exception:
+        headers = {"User-Agent": "Mozilla/5.0"}
+      
+      # Show the preview popup with cover_image_url for high-res preview
       screen_x = event.x_root
       screen_y = event.y_root
-      self._image_preview.show(row.release_id, None, None, screen_x, screen_y)
+      cover_url = getattr(row, 'cover_image_url', '') or row.thumb_url
+      self._image_preview.show(row.release_id, cover_url, headers, screen_x, screen_y)
     except Exception as e:
       print(f"Hover error: {e}")
   

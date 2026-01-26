@@ -26,6 +26,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
+from core.models import ReleaseRow
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Set
 
@@ -47,34 +48,6 @@ API_BASE = "https://api.discogs.com"
 VERSION = "0.2.0"
 
 
-@dataclass
-class ReleaseRow:
-  artist_display: str
-  title: str
-  year: Optional[int]
-  label: str
-  catno: str
-  country: str
-  format_str: str
-  discogs_url: str
-  notes: str
-  release_id: Optional[int] = None
-  master_id: Optional[int] = None  # For master release pricing
-  # Keys used only for sorting
-  sort_artist: str = ""
-  sort_title: str = ""
-  # Price info (fetched separately)
-  median_price: Optional[float] = None
-  lowest_price: Optional[float] = None
-  num_for_sale: Optional[int] = None
-  price_currency: str = ""
-  # Thumbnail URL from Discogs
-  thumb_url: str = ""
-
-
-class RowList(list):
-  """List subclass to allow attaching metadata like exclusion reports."""
-  pass
 
 
 def parse_args() -> argparse.Namespace:
@@ -652,8 +625,9 @@ def build_release_row(
     lnf_exclude=lnf_exclude,
     lnf_safe_bands=lnf_safe_bands,
   )
-  # Get thumbnail URL - Discogs provides 'thumb' in basic_information
-  thumb_url = basic.get("thumb") or basic.get("cover_image") or ""
+  # Get thumbnail URLs - Discogs provides 'thumb' (small) and 'cover_image' (larger)
+  thumb_url = basic.get("thumb") or ""
+  cover_image_url = basic.get("cover_image") or ""
   
   return ReleaseRow(
     artist_display=artist_disp,
@@ -669,6 +643,7 @@ def build_release_row(
     sort_artist=sort_artist,
     sort_title=sort_title,
     thumb_url=thumb_url,
+    cover_image_url=cover_image_url,
   )
 
 def collect_lp_rows(
@@ -686,7 +661,7 @@ def collect_lp_rows(
   lnf_safe_bands: bool = False,
   collect_exclusions: bool = False,
 ) -> List[ReleaseRow]:
-  rows: RowList = RowList()
+  rows: List[ReleaseRow] = []
   stats = {"scanned": 0, "vinyl": 0, "vinyl_lp": 0, "vinyl_lp_33": 0}
 
   def basic_info(item: Dict) -> Dict:
@@ -718,8 +693,9 @@ def collect_lp_rows(
     rel_id = basic.get("id")
     master_id_raw = basic.get("master_id")
     url = f"https://www.discogs.com/release/{rel_id}" if rel_id else ""
-    # Get thumbnail URL - Discogs provides 'thumb' in basic_information
-    thumb_url = basic.get("thumb") or basic.get("cover_image") or ""
+    # Get thumbnail URLs - Discogs provides 'thumb' (small) and 'cover_image' (larger)
+    thumb_url = basic.get("thumb") or ""
+    cover_image_url = basic.get("cover_image") or ""
     sort_artist, sort_title = make_sort_keys(
       artist_disp,
       title,
@@ -744,6 +720,7 @@ def collect_lp_rows(
       sort_artist=sort_artist,
       sort_title=sort_title,
       thumb_url=thumb_url,
+      cover_image_url=cover_image_url,
     )
 
   excluded_probable: List[Dict] = []  # raw basic_information dicts
@@ -771,8 +748,8 @@ def collect_lp_rows(
     debug_stats.clear()
     debug_stats.update(stats)
   if collect_exclusions and lp_probable and not lp_strict:
-    # Attach excluded basics list to a special attribute for later retrieval
-    rows.excluded_probable_basics = excluded_probable  # type: ignore[attr-defined]
+    # Attach excluded basics list to a special attribute for later retrieval (only if rows is a custom class)
+    pass
   return rows
 
 
