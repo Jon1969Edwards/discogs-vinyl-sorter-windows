@@ -68,6 +68,8 @@ class ReleaseRow:
   lowest_price: Optional[float] = None
   num_for_sale: Optional[int] = None
   price_currency: str = ""
+  # Thumbnail URL from Discogs
+  thumb_url: str = ""
 
 
 class RowList(list):
@@ -650,6 +652,9 @@ def build_release_row(
     lnf_exclude=lnf_exclude,
     lnf_safe_bands=lnf_safe_bands,
   )
+  # Get thumbnail URL - Discogs provides 'thumb' in basic_information
+  thumb_url = basic.get("thumb") or basic.get("cover_image") or ""
+  
   return ReleaseRow(
     artist_display=artist_disp,
     title=title,
@@ -663,8 +668,8 @@ def build_release_row(
     release_id=int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None,
     sort_artist=sort_artist,
     sort_title=sort_title,
+    thumb_url=thumb_url,
   )
-
 
 def collect_lp_rows(
   headers: Dict[str, str],
@@ -713,6 +718,8 @@ def collect_lp_rows(
     rel_id = basic.get("id")
     master_id_raw = basic.get("master_id")
     url = f"https://www.discogs.com/release/{rel_id}" if rel_id else ""
+    # Get thumbnail URL - Discogs provides 'thumb' in basic_information
+    thumb_url = basic.get("thumb") or basic.get("cover_image") or ""
     sort_artist, sort_title = make_sort_keys(
       artist_disp,
       title,
@@ -736,6 +743,7 @@ def collect_lp_rows(
       master_id=int(master_id_raw) if isinstance(master_id_raw, int) or (isinstance(master_id_raw, str) and master_id_raw.isdigit()) else None,
       sort_artist=sort_artist,
       sort_title=sort_title,
+      thumb_url=thumb_url,
     )
 
   excluded_probable: List[Dict] = []  # raw basic_information dicts

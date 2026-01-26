@@ -45,6 +45,7 @@ except ImportError:
   TTKBOOTSTRAP_AVAILABLE = False
 
 from tkinter import Tk, StringVar, BooleanVar, IntVar, filedialog, messagebox
+import tkinter as tk
 
 import discogs_app as core
 
@@ -392,6 +393,287 @@ class ManualOrderManager:
   def save(self) -> None:
     """Explicitly save to disk."""
     self._save()
+
+
+# Thumbnail cache directory
+THUMBNAIL_CACHE_DIR = Path(__file__).parent / ".discogs_thumbnails"
+
+
+class ThumbnailCache:
+  """Cache for album artwork thumbnails."""
+  
+  THUMB_SIZE = (40, 40)  # Size for display in Treeview
+  PREVIEW_SIZE = (200, 200)  # Size for hover preview
+  
+  def __init__(self):
+    """Initialize thumbnail cache."""
+    self.cache_dir = THUMBNAIL_CACHE_DIR
+    self.cache_dir.mkdir(exist_ok=True)
+    self._photo_cache: dict[int, "ImageTk.PhotoImage"] = {}  # In-memory cache of PhotoImage objects
+    self._preview_cache: dict[int, "ImageTk.PhotoImage"] = {}  # Cache for larger preview images
+    self._placeholder: "ImageTk.PhotoImage | None" = None
+    self._pil_available = False
+    self._check_pil()
+  
+  def _check_pil(self) -> None:
+    """Check if PIL/Pillow is available."""
+    try:
+      from PIL import Image, ImageTk
+      self._pil_available = True
+    except ImportError:
+      self._pil_available = False
+  
+  def is_available(self) -> bool:
+    """Check if thumbnail support is available (PIL installed)."""
+    return self._pil_available
+  
+  def _get_cache_path(self, release_id: int, preview: bool = False) -> Path:
+    """Get the cache file path for a release."""
+    suffix = "_preview" if preview else ""
+    return self.cache_dir / f"{release_id}{suffix}.png"
+  
+  def has_cached(self, release_id: int) -> bool:
+    """Check if we have a cached thumbnail for this release."""
+    return self._get_cache_path(release_id).exists()
+  
+  def get_photo(self, release_id: int) -> "ImageTk.PhotoImage | None":
+    """Get a PhotoImage for a release (from memory cache)."""
+    return self._photo_cache.get(release_id)
+  
+  def get_placeholder(self, root) -> "ImageTk.PhotoImage | None":
+    """Get a placeholder image for releases without artwork."""
+    if not self._pil_available:
+      return None
+    
+    if self._placeholder is not None:
+      return self._placeholder
+    
+    try:
+      from PIL import Image, ImageTk, ImageDraw
+      
+      # Create a simple placeholder (gray square with vinyl icon)
+      img = Image.new("RGBA", self.THUMB_SIZE, (60, 60, 80, 255))
+      draw = ImageDraw.Draw(img)
+      
+      # Draw a simple vinyl record icon
+      cx, cy = self.THUMB_SIZE[0] // 2, self.THUMB_SIZE[1] // 2
+      r = min(cx, cy) - 4
+      draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(100, 100, 120), width=2)
+      draw.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill=(100, 100, 120))
+      
+      self._placeholder = ImageTk.PhotoImage(img)
+      return self._placeholder
+    except Exception:
+      return None
+  
+  def download_thumbnail(self, release_id: int, thumb_url: str, headers: dict[str, str]) -> bool:
+    """Download and cache a thumbnail. Returns True on success."""
+    if not self._pil_available or not thumb_url:
+      return False
+    
+    cache_path = self._get_cache_path(release_id)
+    if cache_path.exists():
+      return True  # Already cached
+    
+    try:
+      import requests
+      from PIL import Image
+      from io import BytesIO
+      
+      # Download the image
+      resp = requests.get(thumb_url, headers=headers, timeout=10)
+      if resp.status_code != 200:
+        return False
+      
+      # Open and resize
+      img = Image.open(BytesIO(resp.content))
+      img = img.convert("RGBA")
+      img.thumbnail(self.THUMB_SIZE, Image.Resampling.LANCZOS)
+      
+      # Create a square canvas and center the image
+      square = Image.new("RGBA", self.THUMB_SIZE, (30, 30, 50, 255))
+      offset = ((self.THUMB_SIZE[0] - img.width) // 2, (self.THUMB_SIZE[1] - img.height) // 2)
+      square.paste(img, offset)
+      
+      # Save to cache
+      square.save(cache_path, "PNG")
+      return True
+    except Exception:
+      return False
+  
+  def load_photo(self, release_id: int, root) -> "ImageTk.PhotoImage | None":
+    """Load a cached thumbnail as a PhotoImage."""
+    if not self._pil_available:
+      return None
+    
+    # Check memory cache first
+    if release_id in self._photo_cache:
+      return self._photo_cache[release_id]
+    
+    cache_path = self._get_cache_path(release_id)
+    if not cache_path.exists():
+      return None
+    
+    try:
+      from PIL import Image, ImageTk
+      
+      img = Image.open(cache_path)
+      photo = ImageTk.PhotoImage(img)
+      self._photo_cache[release_id] = photo
+      return photo
+    except Exception:
+      return None
+  
+  def clear_memory_cache(self) -> None:
+    """Clear the in-memory PhotoImage cache."""
+    self._photo_cache.clear()
+    self._preview_cache.clear()
+    self._placeholder = None
+  
+  def load_preview(self, release_id: int, thumb_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
+    """Load a larger preview image for hover display."""
+    if not self._pil_available:
+      return None
+    
+    # Check memory cache first
+    if release_id in self._preview_cache:
+      return self._preview_cache[release_id]
+    
+    # Check if preview file exists on disk
+    preview_path = self._get_cache_path(release_id, preview=True)
+    if preview_path.exists():
+      try:
+        from PIL import Image, ImageTk
+        img = Image.open(preview_path)
+        photo = ImageTk.PhotoImage(img)
+        self._preview_cache[release_id] = photo
+        return photo
+      except Exception:
+        pass
+    
+    # First, try to upscale the small thumbnail (fast, no network)
+    small_path = self._get_cache_path(release_id, preview=False)
+    if small_path.exists():
+      try:
+        from PIL import Image, ImageTk
+        img = Image.open(small_path)
+        img = img.resize(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        self._preview_cache[release_id] = photo
+        return photo
+      except Exception:
+        pass
+    
+    return None
+
+
+class ImagePreviewPopup:
+  """Popup window for showing enlarged album artwork on hover."""
+  
+  def __init__(self, parent, thumbnail_cache: ThumbnailCache):
+    self.parent = parent
+    self.cache = thumbnail_cache
+    self.popup: tk.Toplevel | None = None
+    self.label: tk.Label | None = None
+    self.current_release_id: int | None = None
+    self._hide_job: str | None = None
+  
+  def show(self, release_id: int, thumb_url: str, headers: dict, x: int, y: int) -> None:
+    """Show the preview popup at the specified position."""
+    if not self.cache.is_available():
+      return
+    
+    # Cancel any pending hide
+    if self._hide_job:
+      self.parent.after_cancel(self._hide_job)
+      self._hide_job = None
+    
+    # If already showing this release, just reposition
+    if self.popup and self.current_release_id == release_id:
+      self._position_popup(x, y)
+      return
+    
+    # Get the preview image
+    photo = self.cache.load_preview(release_id, thumb_url, headers)
+    if not photo:
+      return
+    
+    self.current_release_id = release_id
+    
+    # Create or update the popup window
+    if not self.popup:
+      self.popup = tk.Toplevel(self.parent)
+      self.popup.wm_overrideredirect(True)  # No window decorations
+      self.popup.wm_attributes("-topmost", True)
+      
+      # Create frame with border
+      frame = tk.Frame(self.popup, bg="#1a1a2e", bd=2, relief="solid")
+      frame.pack(fill="both", expand=True)
+      
+      self.label = tk.Label(frame, bg="#1a1a2e")
+      self.label.pack(padx=2, pady=2)
+    
+    # Update the image
+    self.label.config(image=photo)
+    self.label.image = photo  # Keep reference
+    
+    # Position the popup
+    self._position_popup(x, y)
+    
+    self.popup.deiconify()
+  
+  def _position_popup(self, x: int, y: int) -> None:
+    """Position the popup near the cursor but ensure it stays on screen."""
+    if not self.popup:
+      return
+    
+    # Offset from cursor
+    offset_x = 20
+    offset_y = -100
+    
+    # Get screen dimensions
+    screen_w = self.parent.winfo_screenwidth()
+    screen_h = self.parent.winfo_screenheight()
+    
+    # Calculate position
+    popup_w = self.cache.PREVIEW_SIZE[0] + 8
+    popup_h = self.cache.PREVIEW_SIZE[1] + 8
+    
+    pos_x = x + offset_x
+    pos_y = y + offset_y
+    
+    # Keep on screen
+    if pos_x + popup_w > screen_w:
+      pos_x = x - popup_w - 10
+    if pos_y + popup_h > screen_h:
+      pos_y = screen_h - popup_h - 10
+    if pos_y < 0:
+      pos_y = 10
+    
+    self.popup.wm_geometry(f"+{pos_x}+{pos_y}")
+  
+  def hide(self, delay: int = 100) -> None:
+    """Hide the popup with optional delay."""
+    if self._hide_job:
+      self.parent.after_cancel(self._hide_job)
+    
+    def do_hide():
+      if self.popup:
+        self.popup.withdraw()
+      self.current_release_id = None
+      self._hide_job = None
+    
+    if delay > 0:
+      self._hide_job = self.parent.after(delay, do_hide)
+    else:
+      do_hide()
+  
+  def destroy(self) -> None:
+    """Destroy the popup window."""
+    if self.popup:
+      self.popup.destroy()
+      self.popup = None
+      self.label = None
 
 
 @dataclass
@@ -915,6 +1197,11 @@ class App:
     # Initialize the manual order manager
     self._manual_order = ManualOrderManager()
     self.v_manual_order_enabled = BooleanVar(value=self._manual_order.is_enabled())
+    
+    # Initialize thumbnail cache and preview popup
+    self._thumbnail_cache = ThumbnailCache()
+    self._thumbnails_enabled = self._thumbnail_cache.is_available()
+    self._image_preview: ImagePreviewPopup | None = None  # Created after UI setup
 
     # Auto-save settings when they change
     self.v_token.trace_add("write", lambda *_: self._save_settings())
@@ -1198,7 +1485,7 @@ class App:
                          fieldbackground=c["order_bg"],
                          borderwidth=0,
                          relief="flat",
-                         rowheight=28)
+                         rowheight=44)
     self.style.configure(f"{style_name}.Heading",
                          background=c["panel2"],
                          foreground=c["text"],
@@ -1217,7 +1504,7 @@ class App:
                          fieldbackground=c["order_bg"],
                          borderwidth=0,
                          relief="flat",
-                         rowheight=28)
+                         rowheight=44)
     self.style.configure("Treeview.Heading",
                          background=c["panel2"],
                          foreground=c["text"],
@@ -1597,6 +1884,7 @@ class App:
     order_scroll.grid(row=0, column=1, sticky="ns")
 
     # Use Treeview for drag-and-drop support
+    # Note: "#0" column (tree column) is used for album artwork
     columns = ("#", "Artist", "Title", "Year", "Label", "Price")
     
     # Determine style based on current theme
@@ -1605,13 +1893,17 @@ class App:
     self.order_tree = ttk.Treeview(
       order_wrap,
       columns=columns,
-      show="headings",
+      show="tree headings",  # Show both tree column (for images) and headings
       yscrollcommand=order_scroll.set,
       selectmode="browse",  # Single selection for drag-drop
       style=tree_style,
     )
     self.order_tree.grid(row=0, column=0, sticky="nsew")
     order_scroll.config(command=self.order_tree.yview)
+    
+    # Configure the #0 (tree) column for album artwork
+    self.order_tree.heading("#0", text="", anchor="center")
+    self.order_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
     
     # Configure column headings and widths
     self.order_tree.heading("#", text="#", anchor="center")
@@ -1622,12 +1914,12 @@ class App:
     self.order_tree.heading("Price", text="Price", anchor="e")
     
     # Column widths - text columns stretch proportionally to fill width
-    self.order_tree.column("#", width=40, minwidth=35, stretch=False, anchor="center")
-    self.order_tree.column("Artist", width=220, minwidth=100, stretch=True, anchor="w")
-    self.order_tree.column("Title", width=280, minwidth=120, stretch=True, anchor="w")
-    self.order_tree.column("Year", width=55, minwidth=50, stretch=False, anchor="center")
-    self.order_tree.column("Label", width=300, minwidth=100, stretch=True, anchor="w")
-    self.order_tree.column("Price", width=85, minwidth=70, stretch=False, anchor="e")
+    self.order_tree.column("#", width=35, minwidth=30, stretch=False, anchor="center")
+    self.order_tree.column("Artist", width=200, minwidth=100, stretch=True, anchor="w")
+    self.order_tree.column("Title", width=260, minwidth=120, stretch=True, anchor="w")
+    self.order_tree.column("Year", width=50, minwidth=45, stretch=False, anchor="center")
+    self.order_tree.column("Label", width=280, minwidth=100, stretch=True, anchor="w")
+    self.order_tree.column("Price", width=80, minwidth=70, stretch=False, anchor="e")
     
     # Initially hide Price column if Show Prices is disabled
     if not self.v_show_prices.get():
@@ -1646,6 +1938,14 @@ class App:
     self.order_tree.bind("<ButtonPress-1>", self._on_drag_start)
     self.order_tree.bind("<B1-Motion>", self._on_drag_motion)
     self.order_tree.bind("<ButtonRelease-1>", self._on_drag_end)
+    
+    # Bind hover events for album artwork preview
+    self.order_tree.bind("<Motion>", self._on_tree_motion)
+    self.order_tree.bind("<Leave>", self._on_tree_leave)
+    
+    # Initialize image preview popup
+    self._image_preview = ImagePreviewPopup(self.root, self._thumbnail_cache)
+    self._hover_release_id: int | None = None
     
     # Keep Text widget reference for backward compatibility (hidden)
     self.order_text = tk.Text(order_wrap, height=1, width=1)
@@ -1850,6 +2150,60 @@ class App:
     if self._last_result:
       self._render_order(self._last_result)
   
+  def _on_tree_motion(self, event) -> None:
+    """Handle mouse motion over the treeview for album artwork preview."""
+    if not self._thumbnails_enabled or not self._image_preview:
+      return
+    
+    # Identify the row and column under the cursor
+    region = self.order_tree.identify_region(event.x, event.y)
+    column = self.order_tree.identify_column(event.x)
+    
+    # Only show preview when hovering the image column (#0 or tree region)
+    if column != "#0" and region != "tree":
+      # Not over the image column, hide preview
+      if self._image_preview and self._hover_release_id is not None:
+        self._image_preview.hide(delay=50)
+        self._hover_release_id = None
+      return
+    
+    # Get the item under cursor
+    item = self.order_tree.identify_row(event.y)
+    if not item:
+      if self._image_preview and self._hover_release_id is not None:
+        self._image_preview.hide(delay=50)
+        self._hover_release_id = None
+      return
+    
+    # Get the row index
+    try:
+      idx = self.order_tree.index(item)
+      if idx < 0 or idx >= len(self._tree_rows):
+        return
+      
+      row = self._tree_rows[idx]
+      if not row.release_id:
+        return
+      
+      # Check if this is a new item
+      if row.release_id == self._hover_release_id:
+        return  # Already showing this one
+      
+      self._hover_release_id = row.release_id
+      
+      # Show the preview popup (no network download, just upscale cached thumb)
+      screen_x = event.x_root
+      screen_y = event.y_root
+      self._image_preview.show(row.release_id, None, None, screen_x, screen_y)
+    except Exception as e:
+      print(f"Hover error: {e}")
+  
+  def _on_tree_leave(self, event) -> None:
+    """Handle mouse leaving the treeview."""
+    if self._image_preview:
+      self._image_preview.hide()
+    self._hover_release_id = None
+
   def _on_drag_start(self, event) -> None:
     """Handle mouse button press to start drag operation."""
     if not self.v_manual_order_enabled.get():
@@ -2297,9 +2651,14 @@ class App:
     # Show/hide Price column based on setting
     show_prices = self.v_show_prices.get()
     if show_prices:
-      self.order_tree.column("Price", width=90, minwidth=70, stretch=False)
+      self.order_tree.column("Price", width=80, minwidth=70, stretch=False)
     else:
       self.order_tree.column("Price", width=0, minwidth=0, stretch=False)
+    
+    # Get placeholder image for items without thumbnails
+    placeholder = None
+    if self._thumbnails_enabled:
+      placeholder = self._thumbnail_cache.get_placeholder(self.root)
     
     # Populate treeview
     for i, row in enumerate(rows):
@@ -2328,10 +2687,72 @@ class App:
         price_str,
       )
       
-      self.order_tree.insert("", "end", values=values, tags=(tag,))
+      # Get thumbnail image
+      img = None
+      if self._thumbnails_enabled and row.release_id:
+        img = self._thumbnail_cache.load_photo(row.release_id, self.root)
+        if img is None:
+          img = placeholder
+      
+      # Insert row with image
+      if img:
+        self.order_tree.insert("", "end", image=img, values=values, tags=(tag,))
+      else:
+        self.order_tree.insert("", "end", values=values, tags=(tag,))
     
     self.v_match.set(f"{len(rows)} items")
     self._highlight_search()
+    
+    # Trigger background thumbnail downloads for uncached images
+    if self._thumbnails_enabled:
+      self._download_missing_thumbnails(rows)
+
+  def _download_missing_thumbnails(self, rows: list) -> None:
+    """Start background download of missing thumbnails."""
+    # Collect rows that need thumbnail downloads
+    to_download = []
+    for row in rows:
+      if row.release_id and row.thumb_url:
+        if not self._thumbnail_cache.has_cached(row.release_id):
+          to_download.append((row.release_id, row.thumb_url))
+    
+    if not to_download:
+      return
+    
+    # Get current headers
+    try:
+      from discogs_app import make_headers
+      headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+    except Exception:
+      headers = {"User-Agent": "Mozilla/5.0"}
+    
+    # Download in background thread
+    def download_worker():
+      for release_id, thumb_url in to_download:
+        try:
+          self._thumbnail_cache.download_thumbnail(release_id, thumb_url, headers)
+        except Exception:
+          pass  # Ignore download failures
+      # After downloads complete, refresh display on main thread
+      self.root.after(0, self._refresh_thumbnails)
+    
+    thread = threading.Thread(target=download_worker, daemon=True)
+    thread.start()
+  
+  def _refresh_thumbnails(self) -> None:
+    """Refresh the treeview to show newly downloaded thumbnails."""
+    if not self._last_result or not self._thumbnails_enabled:
+      return
+    
+    # Update each item with its thumbnail
+    items = self.order_tree.get_children()
+    rows = self._tree_rows
+    
+    for i, (item, row) in enumerate(zip(items, rows)):
+      if row.release_id:
+        img = self._thumbnail_cache.load_photo(row.release_id, self.root)
+        if img:
+          self.order_tree.item(item, image=img)
 
   def _update_status_bar(self, result: BuildResult) -> None:
     """Update the status bar with collection info."""
