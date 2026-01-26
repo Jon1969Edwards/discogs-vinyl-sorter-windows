@@ -1968,15 +1968,22 @@ class App:
     # Bind hover events for album artwork preview
     self.order_tree.bind("<Motion>", self._on_tree_motion)
     self.order_tree.bind("<Leave>", self._on_tree_leave)
-    
+
+    # Bind double-click to show album info popup
+    self.order_tree.bind("<Double-1>", self._on_album_double_click)
+
+    # ...existing code...
+    # Bind double-click to show album info popup
+    self.order_tree.bind("<Double-1>", self._on_album_double_click)
+
     # Initialize image preview popup
     self._image_preview = ImagePreviewPopup(self.root, self._thumbnail_cache)
     self._hover_release_id: int | None = None
-    
+
     # Keep Text widget reference for backward compatibility (hidden)
     self.order_text = tk.Text(order_wrap, height=1, width=1)
     # Don't grid it - it's just for compatibility with existing code
-    
+
     # Store reference to rows for drag-drop operations
     self._tree_rows: list[ReleaseRow] = []
 
@@ -2003,64 +2010,160 @@ class App:
       bd=0,
       padx=12,
       pady=12,
-      selectbackground=self._colors["accent"],
-      selectforeground="#ffffff",
     )
     self.log.grid(row=0, column=0, sticky="nsew")
     log_scroll.config(command=self.log.yview)
 
-    # Status bar with accent background - clean footer with multiple info sections
-    self._status_bar = tk.Frame(frm, bg=self._colors["accent"], bd=0, highlightthickness=0)
-    self._status_bar.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=0, pady=(12, 0))
-    self._status_bar.columnconfigure(0, weight=1)
-    
-    # Left section - main status
-    self._status_label = tk.Label(
-      self._status_bar, 
-      textvariable=self.v_status, 
-      bg=self._colors["accent"], 
-      fg="#ffffff", 
-      anchor="w", 
-      padx=20, 
-      pady=10,
-      font=(FONT_SEGOE_UI_SEMIBOLD, 10)
-    )
-    self._status_label.grid(row=0, column=0, sticky="w")
-    
-    # Right section - info items
-    info_frame = tk.Frame(self._status_bar, bg=self._colors["accent"])
-    info_frame.grid(row=0, column=1, sticky="e", padx=10)
-    
-    # Collection count
-    self._count_icon = tk.Label(info_frame, text="💿", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._count_icon.grid(row=0, column=0, padx=(0, 4))
-    self._count_label = tk.Label(info_frame, textvariable=self.v_collection_count, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._count_label.grid(row=0, column=1, padx=(0, 16))
-    
-    # Separator
-    tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=(FONT_SEGOE_UI, 10)).grid(row=0, column=2, padx=(0, 16))
-    
-    # Last sync time
-    self._sync_icon = tk.Label(info_frame, text="🕓", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._sync_icon.grid(row=0, column=3, padx=(0, 4))
-    self._sync_label = tk.Label(info_frame, textvariable=self.v_last_sync, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._sync_label.grid(row=0, column=4, padx=(0, 16))
-    
-    # Separator
-    self._value_sep = tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=(FONT_SEGOE_UI, 10))
-    self._value_sep.grid(row=0, column=5, padx=(0, 16))
-    self._value_sep.grid_remove()  # Hidden by default
-    
-    # Total value (shown only when prices enabled)
-    self._value_icon = tk.Label(info_frame, text="💰", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._value_icon.grid(row=0, column=6, padx=(0, 4))
-    self._value_icon.grid_remove()  # Hidden by default
-    self._value_label = tk.Label(info_frame, textvariable=self.v_total_value, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI_SEMIBOLD, 10))
-    self._value_label.grid(row=0, column=7, padx=(0, 10))
-    self._value_label.grid_remove()  # Hidden by default
-    
-    # Set up tooltips
-    self._setup_tooltips()
+  def _on_album_double_click(self, event):
+    """Show a popup with album details when a row is double-clicked."""
+    item_id = self.order_tree.identify_row(event.y)
+    if not item_id:
+        return
+    try:
+        idx = self.order_tree.index(item_id)
+        if idx < 0 or idx >= len(self._tree_rows):
+            return
+        row = self._tree_rows[idx]
+    except Exception:
+        return
+
+    # Create popup window
+    popup = tk.Toplevel(self.root)
+    popup.title(f"Album Info: {row.artist_display} - {row.title}")
+    popup.transient(self.root)
+    popup.grab_set()
+    popup.resizable(False, False)
+    width, height = 640, 520
+    popup.geometry(f"{width}x{height}")
+
+    # Center the popup on the screen
+    popup.update_idletasks()
+    x = (popup.winfo_screenwidth() // 2) - (width // 2)
+    y = (popup.winfo_screenheight() // 2) - (height // 2)
+    popup.geometry(f"{width}x{height}+{x}+{y}")
+
+    # Use app's dark theme colors
+    bg = self._colors["panel"] if hasattr(self, "_colors") else "#16213e"
+    fg = self._colors["text"] if hasattr(self, "_colors") else "#eaeaea"
+    accent = self._colors["accent"] if hasattr(self, "_colors") else "#6c63ff"
+    btn_bg = self._colors["button_bg"] if hasattr(self, "_colors") else "#6c63ff"
+    btn_fg = self._colors["button_fg"] if hasattr(self, "_colors") else "#ffffff"
+
+    # Outer frame for padding and border
+    outer = tk.Frame(popup, bg=bg, bd=2, relief="ridge")
+    outer.pack(fill="both", expand=True, padx=8, pady=8)
+
+
+    # Album cover image (use preview size if available)
+    cover_img = None
+    if hasattr(self, '_thumbnail_cache') and row.release_id:
+      # Try preview first
+      cover_img = self._thumbnail_cache.load_preview(row.release_id, getattr(row, 'cover_image_url', None))
+      if not cover_img:
+        cover_img = self._thumbnail_cache.load_photo(row.release_id, self.root)
+    if not cover_img and hasattr(self, '_thumbnail_cache'):
+      cover_img = self._thumbnail_cache.get_placeholder(self.root)
+
+    # Scrollable details area
+    details_canvas = tk.Canvas(outer, bg=bg, highlightthickness=0)
+    scrollbar = tk.Scrollbar(outer, orient="vertical", command=details_canvas.yview)
+    details_canvas.configure(yscrollcommand=scrollbar.set)
+    details_canvas.pack(side="left", fill="both", expand=True, padx=(0,0), pady=0)
+    scrollbar.pack(side="right", fill="y")
+
+    details_frame = tk.Frame(details_canvas, bg=bg)
+    details_canvas.create_window((0,0), window=details_frame, anchor="nw")
+
+    # Show album cover at the top (larger)
+    if cover_img:
+      img_label = tk.Label(details_frame, image=cover_img, bg=bg)
+      img_label.image = cover_img
+      img_label.grid(row=0, column=0, columnspan=2, pady=(12,24))
+      row_offset = 1
+    else:
+      row_offset = 0
+
+    # Gather all available info (add more fields if present)
+    details = [
+      ("Artist", getattr(row, "artist_display", "")),
+      ("Title", getattr(row, "title", "")),
+      ("Year", getattr(row, "year", "")),
+      ("Label", getattr(row, "label", "")),
+      ("Catalog #", getattr(row, "catno", "")),
+      ("Format", getattr(row, "format_str", getattr(row, "format", ""))),
+      ("Country", getattr(row, "country", "")),
+      ("Price", f"{getattr(row, 'lowest_price', '')} {getattr(row, 'price_currency', '')}" if getattr(row, "lowest_price", None) is not None else ""),
+      ("Discogs ID", getattr(row, "release_id", "")),
+      ("Master ID", getattr(row, "master_id", "")),
+      ("Barcode", getattr(row, "barcode", "")),
+      ("Companies", getattr(row, "companies", "")),
+      ("Contributors", getattr(row, "contributors", "")),
+      ("URL", getattr(row, "discogs_url", getattr(row, "url", ""))),
+      ("Genres", getattr(row, "genres", "")),
+      ("Styles", getattr(row, "styles", "")),
+      ("Notes", getattr(row, "notes", "")),
+      ("Tracklist", getattr(row, "tracklist", "")),
+      ("Extra", getattr(row, "extra", "")),
+    ]
+
+    # Show all details
+    for i, (label, value) in enumerate(details):
+      if value:
+        tk.Label(details_frame, text=label+":", anchor="e", font=("Segoe UI", 14, "bold"), bg=bg, fg=fg).grid(row=i+row_offset, column=0, sticky="e", padx=(0,18), pady=10)
+        tk.Label(details_frame, text=str(value), anchor="w", font=("Segoe UI", 14), bg=bg, fg=fg, wraplength=480, justify="left").grid(row=i+row_offset, column=1, sticky="w", padx=(0,12), pady=10)
+
+    # Update scrollregion after widgets are added
+    details_frame.update_idletasks()
+    details_canvas.config(scrollregion=details_canvas.bbox("all"))
+
+    def _on_frame_configure(event):
+      details_canvas.config(scrollregion=details_canvas.bbox("all"))
+    details_frame.bind("<Configure>", _on_frame_configure)
+
+    # Enable mouse wheel scrolling only while popup is open
+
+    # Cross-platform mouse wheel handler
+    def _on_mousewheel(event):
+      if event.delta:
+        # Windows/macOS: event.delta is ±120 (Windows), ±1 (macOS)
+        direction = -1 if event.delta > 0 else 1
+        details_canvas.yview_scroll(direction, "units")
+      elif hasattr(event, 'num'):
+        # Linux: event.num 4=up, 5=down
+        if event.num == 4:
+          details_canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+          details_canvas.yview_scroll(1, "units")
+      return "break"
+
+    # Bind mouse wheel events for all platforms
+    details_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    details_canvas.bind_all("<Button-4>", _on_mousewheel)
+    details_canvas.bind_all("<Button-5>", _on_mousewheel)
+
+    def _unbind_mousewheel():
+      details_canvas.unbind_all("<MouseWheel>")
+      details_canvas.unbind_all("<Button-4>")
+      details_canvas.unbind_all("<Button-5>")
+
+    # Unbind mousewheel when popup closes
+    popup.protocol("WM_DELETE_WINDOW", lambda: (popup.destroy(), _unbind_mousewheel()))
+
+    # Button frame
+    btn_frame = tk.Frame(outer, bg=bg)
+    btn_frame.pack(fill="x", pady=(12,0))
+
+    # Add a button to open the Discogs page if URL is present
+    url = getattr(row, "url", "")
+    if url:
+      def open_url():
+        import webbrowser
+        webbrowser.open(url)
+      btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=("Segoe UI", 13), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
+      btn.pack(side="left", padx=12, ipadx=12, ipady=4)
+
+    # Close button
+    tk.Button(btn_frame, text="Close", command=popup.destroy, font=("Segoe UI", 13), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="right", padx=12, ipadx=12, ipady=4)
 
   def _choose_dir(self) -> None:
     directory = filedialog.askdirectory(initialdir=self.v_output_dir.get() or str(Path.cwd()))
@@ -2180,51 +2283,42 @@ class App:
     """Handle mouse motion over the treeview for album artwork preview."""
     if not self._thumbnails_enabled or not self._image_preview:
       return
-    
-    # Identify the row and column under the cursor
+
+    def hide_preview():
+      if self._image_preview and self._hover_release_id is not None:
+        self._image_preview.hide(delay=50)
+        self._hover_release_id = None
+
     region = self.order_tree.identify_region(event.x, event.y)
     column = self.order_tree.identify_column(event.x)
-    
+
     # Only show preview when hovering the image column (#0 or tree region)
     if column != "#0" and region != "tree":
-      # Not over the image column, hide preview
-      if self._image_preview and self._hover_release_id is not None:
-        self._image_preview.hide(delay=50)
-        self._hover_release_id = None
+      hide_preview()
       return
-    
-    # Get the item under cursor
+
     item = self.order_tree.identify_row(event.y)
     if not item:
-      if self._image_preview and self._hover_release_id is not None:
-        self._image_preview.hide(delay=50)
-        self._hover_release_id = None
+      hide_preview()
       return
-    
-    # Get the row index
+
     try:
       idx = self.order_tree.index(item)
       if idx < 0 or idx >= len(self._tree_rows):
         return
-      
+
       row = self._tree_rows[idx]
-      if not row.release_id:
+      if not row.release_id or row.release_id == self._hover_release_id:
         return
-      
-      # Check if this is a new item
-      if row.release_id == self._hover_release_id:
-        return  # Already showing this one
-      
+
       self._hover_release_id = row.release_id
-      
-      # Get headers for downloading larger image
+
       try:
         from discogs_app import make_headers
         headers = make_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
         headers = {"User-Agent": "Mozilla/5.0"}
-      
-      # Show the preview popup with cover_image_url for high-res preview
+
       screen_x = event.x_root
       screen_y = event.y_root
       cover_url = getattr(row, 'cover_image_url', '') or row.thumb_url
@@ -2444,23 +2538,31 @@ class App:
 
   def _apply_theme(self) -> None:
     """Apply the current theme colors to all widgets."""
+    self._set_theme_colors()
+    self._configure_styles()
+    self._update_theme_button()
+    self._update_header()
+    self._update_status_bar_widgets()
+    self._update_treeview_widget()
+    self._update_search_entry()
+    self._update_settings_entries()
+    self._update_settings_frames()
+    self._update_log_widget()
+    self._update_root_bg()
+
+  def _set_theme_colors(self):
     if self.v_dark_mode.get():
       self._colors = self._dark_colors.copy()
       self.theme_btn.config(text="🌙 Dark")
-      # Switch ttkbootstrap theme if available
       if TTKBOOTSTRAP_AVAILABLE:
         self.style.theme_use("darkly")
     else:
       self._colors = self._light_colors.copy()
       self.theme_btn.config(text="☀️ Light")
-      # Switch ttkbootstrap theme if available
       if TTKBOOTSTRAP_AVAILABLE:
         self.style.theme_use("litera")
 
-    # Reconfigure all ttk styles
-    self._configure_styles()
-
-    # Update theme button
+  def _update_theme_button(self):
     self.theme_btn.config(
       bg=self._colors["accent"],
       fg="#ffffff",
@@ -2468,30 +2570,27 @@ class App:
       activeforeground="#ffffff"
     )
 
-    # Update header
+  def _update_header(self):
     try:
       self._header.config(bg=self._colors["bg"])
       self._header_title.config(bg=self._colors["bg"], fg=self._colors["text"])
       self._header_subtitle.config(bg=self._colors["bg"], fg=self._colors["muted"])
-      # Update accent strip if it exists
       for child in self._header.winfo_children():
         if child.winfo_class() == "Frame" and child.cget("height") == 4:
           child.config(bg=self._colors["accent"])
     except Exception:
       pass
 
-    # Update status bar
+  def _update_status_bar_widgets(self):
     try:
       self._status_bar.config(bg=self._colors["accent"])
       self._status_label.config(bg=self._colors["accent"], fg="#ffffff")
-      # Update all status bar children
       for widget in [self._count_icon, self._count_label, self._sync_icon, self._sync_label, 
                      self._value_sep, self._value_icon, self._value_label]:
         try:
           widget.config(bg=self._colors["accent"])
         except Exception:
           pass
-      # Update info frame background
       for child in self._status_bar.winfo_children():
         try:
           child.config(bg=self._colors["accent"])
@@ -2500,12 +2599,9 @@ class App:
     except Exception:
       pass
 
-    # Update order Treeview widget
+  def _update_treeview_widget(self):
     try:
-      # Update Treeview style for theme
       self._configure_treeview_style()
-      
-      # Update Treeview tag colors for current theme
       if self.v_dark_mode.get():
         self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
@@ -2516,14 +2612,12 @@ class App:
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
         self.order_tree.tag_configure("row_odd", background="#e8eef4", foreground=self._colors["order_fg"])
         self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
-      
-      # Re-render if we have results
       if self._last_result:
         self._render_order(self._last_result)
     except Exception:
       pass
-    
-    # Update search entry colors
+
+  def _update_search_entry(self):
     try:
       self._search_entry.config(
         bg=self._colors["order_bg"],
@@ -2534,8 +2628,8 @@ class App:
       )
     except Exception:
       pass
-    
-    # Update settings entry widgets
+
+  def _update_settings_entries(self):
     try:
       entry_config = {
         "bg": self._colors["order_bg"],
@@ -2549,8 +2643,6 @@ class App:
           widget.config(**entry_config)
         except Exception:
           pass
-      
-      # Update spinbox
       self._poll_spin.config(
         bg=self._colors["order_bg"],
         fg=self._colors["order_fg"],
@@ -2559,8 +2651,6 @@ class App:
         highlightbackground=self._colors["panel2"],
         highlightcolor=self._colors["accent"],
       )
-      
-      # Update option menus
       menu_config = {
         "bg": self._colors["order_bg"],
         "fg": self._colors["order_fg"],
@@ -2576,19 +2666,16 @@ class App:
     except Exception:
       pass
 
-    # Update Settings LabelFrame and inner frames
+  def _update_settings_frames(self):
     try:
-      # Settings LabelFrame
       self._settings_frame.config(
         bg=self._colors["panel"],
         fg=self._colors["accent"],
       )
-      # Inner frames
       frame_config = {"bg": self._colors["panel"]}
       for frame in [self._out_row, self._opt_row, self._sort_row, self._price_info]:
         try:
           frame.config(**frame_config)
-          # Update child labels
           for child in frame.winfo_children():
             if child.winfo_class() == "Label":
               try:
@@ -2600,7 +2687,7 @@ class App:
     except Exception:
       pass
 
-    # Update log widget
+  def _update_log_widget(self):
     try:
       self.log.config(
         background=self._colors["order_bg"],
@@ -2610,7 +2697,7 @@ class App:
     except Exception:
       pass
 
-    # Update root window background
+  def _update_root_bg(self):
     try:
       self.root.config(bg=self._colors["panel2"])
     except Exception:
@@ -2823,19 +2910,28 @@ class App:
         self.v_total_value.set(f"~{value_str} ({priced_count} priced)")
         
         # Show the value section
-        self._value_sep.grid()
-        self._value_icon.grid()
-        self._value_label.grid()
+        if hasattr(self, '_value_sep'):
+          self._value_sep.grid()
+        if hasattr(self, '_value_icon'):
+          self._value_icon.grid()
+        if hasattr(self, '_value_label'):
+          self._value_label.grid()
       else:
         # Hide value section if no prices
-        self._value_sep.grid_remove()
-        self._value_icon.grid_remove()
-        self._value_label.grid_remove()
+        if hasattr(self, '_value_sep'):
+          self._value_sep.grid_remove()
+        if hasattr(self, '_value_icon'):
+          self._value_icon.grid_remove()
+        if hasattr(self, '_value_label'):
+          self._value_label.grid_remove()
     else:
       # Hide value section
-      self._value_sep.grid_remove()
-      self._value_icon.grid_remove()
-      self._value_label.grid_remove()
+        if hasattr(self, '_value_sep'):
+          self._value_sep.grid_remove()
+        if hasattr(self, '_value_icon'):
+          self._value_icon.grid_remove()
+        if hasattr(self, '_value_label'):
+          self._value_label.grid_remove()
 
   def _highlight_search(self) -> None:
     """Highlight matching rows in the Treeview based on search query."""
