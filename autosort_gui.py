@@ -54,6 +54,10 @@ CONFIG_FILE = Path(__file__).parent / ".discogs_config.json"
 # Simple key for obfuscation (not meant to be cryptographically secure, just prevents casual viewing)
 _OBFUSCATE_KEY = b"DiscogsVinylSorter2026"
 
+# UI font constants (avoid duplicated literals for linters and consistency)
+FONT_SEGOE_UI = "Segoe UI"
+FONT_SEGOE_UI_SEMIBOLD = "Segoe UI Semibold"
+
 
 def _obfuscate(text: str) -> str:
   """Obfuscate a string to prevent casual viewing."""
@@ -269,6 +273,127 @@ class CollectionCache:
     self._save()
 
 
+# Manual order persistence file
+MANUAL_ORDER_FILE = Path(__file__).parent / ".discogs_manual_order.json"
+
+
+class ManualOrderManager:
+  """Manages user's custom manual ordering of their collection.
+  
+  Stores release IDs in the user's preferred order, allowing drag-and-drop
+  reordering that persists across sessions.
+  """
+  
+  def __init__(self, order_file: Path = MANUAL_ORDER_FILE):
+    self.order_file = order_file
+    self._data: dict = {
+      "version": 1,
+      "username": None,
+      "order": [],  # List of release_ids in manual order
+      "enabled": False,  # Whether manual ordering is active
+    }
+    self._load()
+  
+  def _load(self) -> None:
+    """Load manual order from disk."""
+    try:
+      if self.order_file.exists():
+        with self.order_file.open("r", encoding="utf-8") as f:
+          loaded = json.load(f)
+          if loaded.get("version") == 1:
+            self._data = loaded
+    except Exception:
+      pass
+  
+  def _save(self) -> None:
+    """Save manual order to disk."""
+    try:
+      with self.order_file.open("w", encoding="utf-8") as f:
+        json.dump(self._data, f, indent=2)
+    except Exception:
+      pass
+  
+  def get_username(self) -> str | None:
+    """Get the username this order belongs to."""
+    return self._data.get("username")
+  
+  def set_username(self, username: str) -> None:
+    """Set username and clear order if changed."""
+    if self._data.get("username") != username:
+      self._data = {
+        "version": 1,
+        "username": username,
+        "order": [],
+        "enabled": False,
+      }
+      self._save()
+  
+  def is_enabled(self) -> bool:
+    """Check if manual ordering is enabled."""
+    return self._data.get("enabled", False)
+  
+  def set_enabled(self, enabled: bool) -> None:
+    """Enable or disable manual ordering."""
+    self._data["enabled"] = enabled
+    self._save()
+  
+  def get_order(self) -> list[int]:
+    """Get the list of release IDs in manual order."""
+    return self._data.get("order", [])
+  
+  def set_order(self, release_ids: list[int]) -> None:
+    """Set the manual order."""
+    self._data["order"] = release_ids
+    self._data["enabled"] = True
+    self._save()
+  
+  def apply_order(self, rows: list[core.ReleaseRow]) -> list[core.ReleaseRow]:
+    """Apply manual ordering to a list of rows.
+    
+    Returns rows reordered according to manual order.
+    New items (not in manual order) are appended at the end.
+    """
+    if not self.is_enabled():
+      return rows
+    
+    order = self.get_order()
+    if not order:
+      return rows
+    
+    # Create lookup by release_id
+    row_by_id = {r.release_id: r for r in rows if r.release_id}
+    
+    # Build ordered list
+    ordered = []
+    seen_ids = set()
+    
+    # Add items in manual order
+    for rid in order:
+      if rid in row_by_id and rid not in seen_ids:
+        ordered.append(row_by_id[rid])
+        seen_ids.add(rid)
+    
+    # Append any new items not in manual order
+    for row in rows:
+      if row.release_id and row.release_id not in seen_ids:
+        ordered.append(row)
+        seen_ids.add(row.release_id)
+      elif not row.release_id:
+        ordered.append(row)
+    
+    return ordered
+  
+  def clear(self) -> None:
+    """Clear manual order and disable."""
+    self._data["order"] = []
+    self._data["enabled"] = False
+    self._save()
+  
+  def save(self) -> None:
+    """Explicitly save to disk."""
+    self._save()
+
+
 @dataclass
 class AutoConfig:
   token: str
@@ -324,7 +449,7 @@ class ProgressDialog:
     self.title_label = tk.Label(
       self.top,
       text="🎵 Fetching Album Prices",
-      font=("Segoe UI Semibold", 15),
+      font=(FONT_SEGOE_UI_SEMIBOLD, 15),
       bg="#16213e",
       fg="#6c63ff"
     )
@@ -351,7 +476,7 @@ class ProgressDialog:
     self.msg_label = tk.Label(
       info_frame,
       text=message,
-      font=("Segoe UI", 10),
+      font=(FONT_SEGOE_UI, 10),
       bg="#16213e",
       fg="#eaeaea",
       wraplength=300,
@@ -363,7 +488,7 @@ class ProgressDialog:
     self.progress_label = tk.Label(
       info_frame,
       text="Starting...",
-      font=("Segoe UI Semibold", 12),
+      font=(FONT_SEGOE_UI_SEMIBOLD, 12),
       bg="#16213e",
       fg="#6c63ff"
     )
@@ -375,7 +500,7 @@ class ProgressDialog:
     log_label = tk.Label(
       log_header,
       text="Activity Log",
-      font=("Segoe UI Semibold", 10),
+      font=(FONT_SEGOE_UI_SEMIBOLD, 10),
       bg="#16213e",
       fg="#8892b0"
     )
@@ -567,7 +692,7 @@ class ToolTip:
       justify="left",
       background="#1a1a2e",
       foreground="#eaeaea",
-      font=("Segoe UI", 9),
+      font=(FONT_SEGOE_UI, 9),
       wraplength=self.wraplength,
       padx=10,
       pady=6,
@@ -786,6 +911,10 @@ class App:
     
     # Initialize the collection cache
     self._collection_cache = CollectionCache()
+    
+    # Initialize the manual order manager
+    self._manual_order = ManualOrderManager()
+    self.v_manual_order_enabled = BooleanVar(value=self._manual_order.is_enabled())
 
     # Auto-save settings when they change
     self.v_token.trace_add("write", lambda *_: self._save_settings())
@@ -822,6 +951,10 @@ class App:
     # Progress dialog control - messages from background thread
     self.progress_q: queue.Queue[tuple[str, str | None]] = queue.Queue()  # (action, message)
     self._progress_dialog: ProgressDialog | None = None
+    
+    # Drag-and-drop state
+    self._drag_start_index: int | None = None
+    self._drag_item_id: str | None = None
 
     self._build_ui(root)
     self._setup_keyboard_shortcuts()
@@ -834,10 +967,12 @@ class App:
     """Configure custom ttk styles for a modern, professional look."""
     c = self._colors
     
-    # If using ttkbootstrap, let it handle styling for consistent backgrounds
+    # Always configure Treeview style (needed for shelf order list)
+    self._configure_treeview_style()
+    
+    # If using ttkbootstrap, only do minimal overrides for critical widgets
     if TTKBOOTSTRAP_AVAILABLE:
-      # Don't override label/frame backgrounds - let ttkbootstrap handle it
-      # This ensures consistent colors across all widgets
+      # Treeview needs explicit styling even with ttkbootstrap
       return
     
     # Fallback: standard ttk styling (no rounded corners)
@@ -855,15 +990,15 @@ class App:
     self.style.configure("TLabel", 
                          background=c["panel"], 
                          foreground=c["text"],
-                         font=("Segoe UI", 10))
+                         font=(FONT_SEGOE_UI, 10))
     self.style.configure("Header.TLabel",
                          background=c["bg"],
                          foreground=c["text"],
-                         font=("Segoe UI Semibold", 18))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, 18))
     self.style.configure("Subtitle.TLabel",
                          background=c["bg"],
                          foreground=c["muted"],
-                         font=("Segoe UI", 11))
+                         font=(FONT_SEGOE_UI, 11))
     
     # Card/LabelFrame styles - softer look
     self.style.configure("Card.TLabelframe", 
@@ -876,7 +1011,7 @@ class App:
     self.style.configure("Card.TLabelframe.Label", 
                          foreground=c["accent"],
                          background=c["panel"],
-                         font=("Segoe UI Semibold", 11))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, 11))
     
     # Primary button style - more rounded feel with padding
     self.style.configure("Primary.TButton",
@@ -887,7 +1022,7 @@ class App:
                          lightcolor=c["accent"],
                          darkcolor=c["accent"],
                          padding=(20, 12),
-                         font=("Segoe UI Semibold", 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map("Primary.TButton",
                    background=[("active", c["button_hover"]), ("pressed", c["button_hover"]), ("disabled", c["muted"])],
                    foreground=[("active", c["button_fg"]), ("disabled", "#888888")])
@@ -900,7 +1035,7 @@ class App:
                          lightcolor=c["success"],
                          darkcolor=c["success"],
                          padding=(20, 12),
-                         font=("Segoe UI Semibold", 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map("Success.TButton",
                    background=[("active", "#00a844"), ("pressed", "#00a844")])
     
@@ -912,7 +1047,7 @@ class App:
                          lightcolor=c["panel2"],
                          darkcolor=c["panel2"],
                          padding=(16, 10),
-                         font=("Segoe UI", 10))
+                         font=(FONT_SEGOE_UI, 10))
     self.style.map("Secondary.TButton",
                    background=[("active", c["order_bg"])])
     
@@ -924,7 +1059,7 @@ class App:
                          lightcolor=c["accent3"],
                          darkcolor=c["accent3"],
                          padding=(20, 12),
-                         font=("Segoe UI Semibold", 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map("Danger.TButton",
                    background=[("active", "#c41840"), ("pressed", "#c41840")])
     
@@ -937,7 +1072,7 @@ class App:
                          darkcolor=c["panel2"],
                          focuscolor=c["panel2"],
                          padding=(16, 10),
-                         font=("Segoe UI", 10))
+                         font=(FONT_SEGOE_UI, 10))
     self.style.map("TButton",
                    background=[("active", c["order_bg"]), ("pressed", c["order_bg"])])
     
@@ -980,7 +1115,7 @@ class App:
       self.root.option_add("*TCombobox*Listbox.foreground", c["text"])
       self.root.option_add("*TCombobox*Listbox.selectBackground", c["accent"])
       self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
-      self.root.option_add("*TCombobox*Listbox.font", ("Segoe UI", 10))
+      self.root.option_add("*TCombobox*Listbox.font", (FONT_SEGOE_UI, 10))
     except Exception:
       pass
     
@@ -989,7 +1124,7 @@ class App:
                          background=c["panel"],
                          foreground=c["text"],
                          focuscolor=c["panel"],
-                         font=("Segoe UI", 10))
+                         font=(FONT_SEGOE_UI, 10))
     self.style.map("TCheckbutton",
                    background=[("active", c["panel"])],
                    indicatorcolor=[("selected", c["accent"]), ("!selected", c["order_bg"])])
@@ -1016,7 +1151,7 @@ class App:
                          foreground=c["muted"],
                          padding=(24, 12),
                          borderwidth=0,
-                         font=("Segoe UI Semibold", 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map("TNotebook.Tab",
                    background=[("selected", c["panel"])],
                    foreground=[("selected", c["accent"])],
@@ -1050,6 +1185,64 @@ class App:
     except Exception:
       pass
 
+  def _configure_treeview_style(self) -> None:
+    """Configure Treeview widget colors for current theme."""
+    c = self._colors
+    
+    # Configure Treeview style - use custom style name to avoid ttkbootstrap conflicts
+    style_name = "Dark.Treeview" if self.v_dark_mode.get() else "Light.Treeview"
+    
+    self.style.configure(style_name,
+                         background=c["order_bg"],
+                         foreground=c["order_fg"],
+                         fieldbackground=c["order_bg"],
+                         borderwidth=0,
+                         relief="flat",
+                         rowheight=28)
+    self.style.configure(f"{style_name}.Heading",
+                         background=c["panel2"],
+                         foreground=c["text"],
+                         relief="flat",
+                         borderwidth=0)
+    self.style.map(style_name,
+                   background=[("selected", c["accent"])],
+                   foreground=[("selected", "#ffffff")])
+    self.style.map(f"{style_name}.Heading",
+                   background=[("active", c["panel"])])
+    
+    # Also configure the default Treeview style
+    self.style.configure("Treeview",
+                         background=c["order_bg"],
+                         foreground=c["order_fg"],
+                         fieldbackground=c["order_bg"],
+                         borderwidth=0,
+                         relief="flat",
+                         rowheight=28)
+    self.style.configure("Treeview.Heading",
+                         background=c["panel2"],
+                         foreground=c["text"],
+                         relief="flat",
+                         borderwidth=0)
+    self.style.map("Treeview",
+                   background=[("selected", c["accent"])],
+                   foreground=[("selected", "#ffffff")])
+    
+    # Use option_add for more aggressive color override
+    try:
+      self.root.option_add("*Treeview*background", c["order_bg"])
+      self.root.option_add("*Treeview*foreground", c["order_fg"])
+      self.root.option_add("*Treeview*fieldBackground", c["order_bg"])
+    except Exception:
+      pass
+    
+    # Try to apply to existing treeview if it exists
+    if hasattr(self, 'order_tree'):
+      try:
+        # Force update the treeview colors using tk options
+        self.order_tree.configure(style=style_name)
+      except Exception:
+        pass
+
   def _build_ui(self, root: Tk) -> None:
     pad = {"padx": 16, "pady": 12}  # Increased padding for more breathing room
 
@@ -1076,7 +1269,7 @@ class App:
       text="💿 Discogs Auto-Sort",
       bg=self._colors["bg"],
       fg=self._colors["text"],
-      font=("Segoe UI Semibold", 22),
+      font=(FONT_SEGOE_UI_SEMIBOLD, 22),
       padx=20,
       pady=14,
     )
@@ -1086,7 +1279,7 @@ class App:
       text="Vinyl Collection Manager  •  Live Updates  •  Export & Print",
       bg=self._colors["bg"],
       fg=self._colors["muted"],
-      font=("Segoe UI", 11),
+      font=(FONT_SEGOE_UI, 11),
       padx=20,
       pady=0,
     )
@@ -1098,7 +1291,7 @@ class App:
       text="🌙 Dark",
       bg=self._colors["accent"],
       fg="#ffffff",
-      font=("Segoe UI Semibold", 10),
+      font=(FONT_SEGOE_UI_SEMIBOLD, 10),
       bd=0,
       relief="flat",
       padx=14,
@@ -1111,88 +1304,154 @@ class App:
     self.theme_btn.grid(row=1, column=1, rowspan=2, sticky="e", padx=16, pady=8)
     row += 1
 
-    # Settings card
-    settings = ttk.LabelFrame(frm, text="⚙️ Settings")
-    settings.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
-    settings.columnconfigure(1, weight=1)
+    # Settings card - use tk.LabelFrame for dark mode color control
+    self._settings_frame = tk.LabelFrame(
+      frm, 
+      text="⚙️ Settings",
+      font=(FONT_SEGOE_UI_SEMIBOLD, 11),
+      bg=self._colors["panel"],
+      fg=self._colors["accent"],
+      bd=1,
+      relief="groove",
+      padx=8,
+      pady=8,
+    )
+    self._settings_frame.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
+    self._settings_frame.columnconfigure(1, weight=1)
+    settings = self._settings_frame  # Alias for backward compatibility
     srow = 0
+    
+    # Helper to create dark-themed entry widgets
+    def make_entry(parent, textvar, width=44, show=""):
+      e = tk.Entry(
+        parent, 
+        textvariable=textvar, 
+        width=width,
+        show=show,
+        font=(FONT_SEGOE_UI, 10),
+        bg=self._colors["order_bg"],
+        fg=self._colors["order_fg"],
+        insertbackground=self._colors["order_fg"],
+        relief="flat",
+        bd=0,
+        highlightthickness=1,
+        highlightbackground=self._colors["panel2"],
+        highlightcolor=self._colors["accent"],
+      )
+      return e
 
-    ttk.Label(settings, text="Token").grid(row=srow, column=0, sticky="w", **pad)
-    self.token_entry = ttk.Entry(settings, textvariable=self.v_token, width=44, show="•")
-    self.token_entry.grid(row=srow, column=1, sticky="ew", **pad)
+    tk.Label(settings, text="Token", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=srow, column=0, sticky="w", **pad)
+    self.token_entry = make_entry(settings, self.v_token, show="•")
+    self.token_entry.grid(row=srow, column=1, sticky="ew", **pad, ipady=6)
     ttk.Checkbutton(settings, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility).grid(row=srow, column=2, sticky="w", **pad)
     srow += 1
 
-    ttk.Label(settings, text="User-Agent").grid(row=srow, column=0, sticky="w", **pad)
-    ttk.Entry(settings, textvariable=self.v_user_agent, width=44).grid(row=srow, column=1, sticky="ew", **pad)
+    tk.Label(settings, text="User-Agent", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=srow, column=0, sticky="w", **pad)
+    self._useragent_entry = make_entry(settings, self.v_user_agent)
+    self._useragent_entry.grid(row=srow, column=1, sticky="ew", **pad, ipady=6)
     srow += 1
 
-    out_row = ttk.Frame(settings)
-    out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    out_row.columnconfigure(1, weight=1)
-    ttk.Label(out_row, text="Output Dir").grid(row=0, column=0, sticky="w")
-    self._output_entry = ttk.Entry(out_row, textvariable=self.v_output_dir)
-    self._output_entry.grid(row=0, column=1, sticky="ew", padx=4)
+    self._out_row = tk.Frame(settings, bg=self._colors["panel"])
+    self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
+    self._out_row.columnconfigure(1, weight=1)
+    tk.Label(self._out_row, text="Output Dir", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+    self._output_entry = make_entry(self._out_row, self.v_output_dir)
+    self._output_entry.grid(row=0, column=1, sticky="ew", padx=4, ipady=6)
     # Use bootstyle for rounded buttons
     if TTKBOOTSTRAP_AVAILABLE:
-      self._browse_btn = ttk.Button(out_row, text="Browse", bootstyle="info-outline", command=self._choose_dir)
+      self._browse_btn = ttk.Button(self._out_row, text="Browse", bootstyle="info-outline", command=self._choose_dir)
       self._browse_btn.grid(row=0, column=2, sticky="e")
-      self._open_btn = ttk.Button(out_row, text="Open", bootstyle="secondary-outline", command=self._open_output_dir)
+      self._open_btn = ttk.Button(self._out_row, text="Open", bootstyle="secondary-outline", command=self._open_output_dir)
       self._open_btn.grid(row=0, column=3, sticky="e", padx=(6, 0))
     else:
-      self._browse_btn = ttk.Button(out_row, text="Browse", command=self._choose_dir)
+      self._browse_btn = ttk.Button(self._out_row, text="Browse", command=self._choose_dir)
       self._browse_btn.grid(row=0, column=2, sticky="e")
-      self._open_btn = ttk.Button(out_row, text="Open", command=self._open_output_dir)
+      self._open_btn = ttk.Button(self._out_row, text="Open", command=self._open_output_dir)
       self._open_btn.grid(row=0, column=3, sticky="e", padx=(6, 0))
     srow += 1
 
-    opt = ttk.Frame(settings)
-    opt.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    ttk.Label(opt, text="Poll seconds").grid(row=0, column=0, sticky="w")
-    self._poll_spin = ttk.Spinbox(opt, from_=15, to=3600, textvariable=self.v_poll, width=8)
-    self._poll_spin.grid(row=0, column=1, padx=6)
-    self._json_check = ttk.Checkbutton(opt, text="Also JSON", variable=self.v_json)
+    self._opt_row = tk.Frame(settings, bg=self._colors["panel"])
+    self._opt_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
+    tk.Label(self._opt_row, text="Poll seconds", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+    # Use tk.Spinbox for dark mode support
+    self._poll_spin = tk.Spinbox(
+      self._opt_row, from_=15, to=3600, textvariable=self.v_poll, width=8,
+      font=(FONT_SEGOE_UI, 10),
+      bg=self._colors["order_bg"],
+      fg=self._colors["order_fg"],
+      buttonbackground=self._colors["panel2"],
+      insertbackground=self._colors["order_fg"],
+      relief="flat",
+      bd=0,
+      highlightthickness=1,
+      highlightbackground=self._colors["panel2"],
+      highlightcolor=self._colors["accent"],
+    )
+    self._poll_spin.grid(row=0, column=1, padx=6, ipady=4)
+    self._json_check = ttk.Checkbutton(self._opt_row, text="Also JSON", variable=self.v_json)
     self._json_check.grid(row=0, column=2, padx=6, sticky="w")
-    self._prices_check = ttk.Checkbutton(opt, text="Show Prices", variable=self.v_show_prices)
+    self._prices_check = ttk.Checkbutton(self._opt_row, text="Show Prices", variable=self.v_show_prices)
     self._prices_check.grid(row=0, column=3, padx=6, sticky="w")
-    ttk.Label(opt, text="Currency").grid(row=0, column=4, sticky="w", padx=(6, 0))
-    self._currency_combo = ttk.Combobox(opt, textvariable=self.v_currency, values=["USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY"], width=5, state="readonly")
+    tk.Label(self._opt_row, text="Currency", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=4, sticky="w", padx=(6, 0))
+    # Use tk.OptionMenu for dark mode support instead of ttk.Combobox
+    self._currency_combo = tk.OptionMenu(self._opt_row, self.v_currency, "USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY")
+    self._currency_combo.config(
+      font=(FONT_SEGOE_UI, 10),
+      bg=self._colors["order_bg"],
+      fg=self._colors["order_fg"],
+      activebackground=self._colors["accent"],
+      activeforeground="#ffffff",
+      highlightthickness=0,
+      bd=0,
+      relief="flat",
+    )
+    self._currency_combo["menu"].config(
+      bg=self._colors["order_bg"],
+      fg=self._colors["order_fg"],
+      activebackground=self._colors["accent"],
+      activeforeground="#ffffff",
+    )
     self._currency_combo.grid(row=0, column=5, padx=6)
     # Refresh prices button
     if TTKBOOTSTRAP_AVAILABLE:
-      self._refresh_prices_btn = ttk.Button(opt, text="🔄 Refresh Prices", bootstyle="warning-outline", command=self._refresh_prices)
+      self._refresh_prices_btn = ttk.Button(self._opt_row, text="🔄 Refresh Prices", bootstyle="warning-outline", command=self._refresh_prices)
     else:
-      self._refresh_prices_btn = ttk.Button(opt, text="🔄 Refresh Prices", command=self._refresh_prices)
+      self._refresh_prices_btn = ttk.Button(self._opt_row, text="🔄 Refresh Prices", command=self._refresh_prices)
     self._refresh_prices_btn.grid(row=0, column=6, padx=6, sticky="w")
     srow += 1
 
     # Sort options row
-    sort_row = ttk.Frame(settings)
-    sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    ttk.Label(sort_row, text="📊 Sort By").grid(row=0, column=0, sticky="w")
-    sort_options = [
-      ("Artist A-Z", "artist"),
-      ("Title A-Z", "title"),
-      ("Year", "year"),
-      ("Price ↑ Low-High", "price_asc"),
-      ("Price ↓ High-Low", "price_desc"),
-    ]
-    self._sort_combo = ttk.Combobox(
-      sort_row, 
-      textvariable=self.v_sort_by, 
-      values=[opt[1] for opt in sort_options],
-      width=15, 
-      state="readonly"
+    self._sort_row = tk.Frame(settings, bg=self._colors["panel"])
+    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
+    tk.Label(self._sort_row, text="📊 Sort By", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+    sort_options = ["artist", "title", "year", "price_asc", "price_desc"]
+    self._sort_combo = tk.OptionMenu(self._sort_row, self.v_sort_by, *sort_options)
+    self._sort_combo.config(
+      font=(FONT_SEGOE_UI, 10),
+      bg=self._colors["order_bg"],
+      fg=self._colors["order_fg"],
+      activebackground=self._colors["accent"],
+      activeforeground="#ffffff",
+      highlightthickness=0,
+      bd=0,
+      relief="flat",
+      width=12,
+    )
+    self._sort_combo["menu"].config(
+      bg=self._colors["order_bg"],
+      fg=self._colors["order_fg"],
+      activebackground=self._colors["accent"],
+      activeforeground="#ffffff",
     )
     self._sort_combo.grid(row=0, column=1, padx=6, sticky="w")
     # Display friendly names but store values
-    ttk.Label(sort_row, text="(Price sorting requires 'Show Prices' enabled)", foreground=self._colors["muted"]).grid(row=0, column=2, sticky="w", padx=6)
+    tk.Label(self._sort_row, text="(Price sorting requires 'Show Prices' enabled)", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["muted"]).grid(row=0, column=2, sticky="w", padx=6)
     srow += 1
 
     # Price info note
-    price_info = ttk.Frame(settings)
-    price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
-    ttk.Label(price_info, text="ℹ️ Prices shown are the lowest currently listed for your specific pressing, not all versions.", foreground=self._colors["muted"]).grid(row=0, column=0, sticky="w")
+    self._price_info = tk.Frame(settings, bg=self._colors["panel"])
+    self._price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", **pad)
+    tk.Label(self._price_info, text="ℹ️ Prices shown are the lowest currently listed for your specific pressing, not all versions.", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["muted"]).grid(row=0, column=0, sticky="w")
     srow += 1
 
     row += 1
@@ -1202,8 +1461,22 @@ class App:
     search_row.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
     search_row.columnconfigure(1, weight=1)
     ttk.Label(search_row, text="🔍 Search").grid(row=0, column=0, sticky="w")
-    self._search_entry = ttk.Entry(search_row, textvariable=self.v_search)
-    self._search_entry.grid(row=0, column=1, sticky="ew", padx=6)
+    
+    # Use tk.Entry for full color control in dark mode
+    self._search_entry = tk.Entry(
+      search_row, 
+      textvariable=self.v_search,
+      font=("Segoe UI", 11),
+      bg=self._colors["order_bg"],
+      fg=self._colors["order_fg"],
+      insertbackground=self._colors["order_fg"],
+      relief="flat",
+      bd=0,
+      highlightthickness=1,
+      highlightbackground=self._colors["panel2"],
+      highlightcolor=self._colors["accent"],
+    )
+    self._search_entry.grid(row=0, column=1, sticky="ew", padx=6, ipady=8)
     # Use bootstyle for ttkbootstrap rounded buttons
     if TTKBOOTSTRAP_AVAILABLE:
       self._clear_btn = ttk.Button(search_row, text="✕ Clear", bootstyle="secondary-outline", command=lambda: self.v_search.set(""))
@@ -1250,48 +1523,121 @@ class App:
 
     order_fr = ttk.Frame(nb)
     nb.add(order_fr, text="📋 Shelf Order")
-    order_fr.rowconfigure(0, weight=1)
+    order_fr.rowconfigure(1, weight=1)
     order_fr.columnconfigure(0, weight=1)
+    
+    # Toolbar for manual ordering controls
+    order_toolbar = ttk.Frame(order_fr)
+    order_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+    
+    self._manual_order_check = ttk.Checkbutton(
+      order_toolbar, 
+      text="✋ Manual Order Mode", 
+      variable=self.v_manual_order_enabled,
+      command=self._toggle_manual_order
+    )
+    self._manual_order_check.grid(row=0, column=0, sticky="w", padx=(0, 16))
+    
+    self._manual_order_hint = ttk.Label(
+      order_toolbar,
+      text="(Drag rows to reorder)",
+      foreground=self._colors["muted"]
+    )
+    self._manual_order_hint.grid(row=0, column=1, sticky="w", padx=(0, 16))
+    
+    if TTKBOOTSTRAP_AVAILABLE:
+      self._reset_order_btn = ttk.Button(
+        order_toolbar, 
+        text="↺ Reset to Auto Sort", 
+        bootstyle="warning-outline",
+        command=self._reset_manual_order
+      )
+    else:
+      self._reset_order_btn = ttk.Button(
+        order_toolbar, 
+        text="↺ Reset to Auto Sort", 
+        command=self._reset_manual_order
+      )
+    self._reset_order_btn.grid(row=0, column=2, sticky="e", padx=(0, 8))
+    
+    # Move up/down buttons for keyboard users
+    if TTKBOOTSTRAP_AVAILABLE:
+      self._move_up_btn = ttk.Button(order_toolbar, text="▲ Up", bootstyle="secondary-outline", command=self._move_item_up)
+      self._move_down_btn = ttk.Button(order_toolbar, text="▼ Down", bootstyle="secondary-outline", command=self._move_item_down)
+    else:
+      self._move_up_btn = ttk.Button(order_toolbar, text="▲ Up", command=self._move_item_up)
+      self._move_down_btn = ttk.Button(order_toolbar, text="▼ Down", command=self._move_item_down)
+    self._move_up_btn.grid(row=0, column=3, sticky="e", padx=(8, 4))
+    self._move_down_btn.grid(row=0, column=4, sticky="e", padx=(0, 8))
+    
+    order_toolbar.columnconfigure(1, weight=1)
 
     order_wrap = ttk.Frame(order_fr)
-    order_wrap.grid(row=0, column=0, sticky="nsew")
+    order_wrap.grid(row=1, column=0, sticky="nsew")
     order_wrap.rowconfigure(0, weight=1)
     order_wrap.columnconfigure(0, weight=1)
 
     order_scroll = ttk.Scrollbar(order_wrap, orient="vertical")
     order_scroll.grid(row=0, column=1, sticky="ns")
-
-    self.order_text = tk.Text(
-      order_wrap,
-      height=18,
-      width=90,
-      wrap="none",
-      yscrollcommand=order_scroll.set,
-      font=("Cascadia Code", 11),
-      background=self._colors["order_bg"],
-      foreground=self._colors["order_fg"],
-      relief="flat",
-      bd=0,
-      padx=12,
-      pady=12,
-      insertbackground=self._colors["accent"],
-      selectbackground=self._colors["accent"],
-      selectforeground="#ffffff",
-    )
-    self.order_text.grid(row=0, column=0, sticky="nsew")
-    order_scroll.config(command=self.order_text.yview)
     
-    # Configure text tags for styled output
-    self.order_text.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
-    self.order_text.tag_configure("row_even", background=self._colors["order_bg"])
-    self.order_text.tag_configure("row_odd", background="#1a2d4d" if self.v_dark_mode.get() else "#f0f4f8")
-    self.order_text.tag_configure("artist", foreground=self._colors["accent"], font=("Cascadia Code", 11, "bold"))
-    self.order_text.tag_configure("title", foreground=self._colors["order_fg"], font=("Cascadia Code", 11))
-    self.order_text.tag_configure("year", foreground=self._colors["muted"], font=("Cascadia Code", 10))
-    self.order_text.tag_configure("label", foreground="#8892b0", font=("Cascadia Code", 10))
-    self.order_text.tag_configure("price", foreground=self._colors["success"], font=("Cascadia Code", 10, "bold"))
-    self.order_text.tag_configure("price_none", foreground=self._colors["muted"], font=("Cascadia Code", 10))
-    self.order_text.tag_configure("row_number", foreground="#4a5568", font=("Cascadia Code", 9))
+    # Horizontal scrollbar
+    order_scroll_h = ttk.Scrollbar(order_wrap, orient="horizontal")
+    order_scroll_h.grid(row=1, column=0, sticky="ew")
+
+    # Use Treeview for drag-and-drop support
+    columns = ("#", "Artist", "Title", "Year", "Label", "Price")
+    
+    # Determine style based on current theme
+    tree_style = "Dark.Treeview" if self.v_dark_mode.get() else "Light.Treeview"
+    
+    self.order_tree = ttk.Treeview(
+      order_wrap,
+      columns=columns,
+      show="headings",
+      yscrollcommand=order_scroll.set,
+      xscrollcommand=order_scroll_h.set,
+      selectmode="browse",  # Single selection for drag-drop
+      style=tree_style,
+    )
+    self.order_tree.grid(row=0, column=0, sticky="nsew")
+    order_scroll.config(command=self.order_tree.yview)
+    order_scroll_h.config(command=self.order_tree.xview)
+    
+    # Configure column headings and widths
+    self.order_tree.heading("#", text="#", anchor="e")
+    self.order_tree.heading("Artist", text="Artist", anchor="w")
+    self.order_tree.heading("Title", text="Title", anchor="w")
+    self.order_tree.heading("Year", text="Year", anchor="center")
+    self.order_tree.heading("Label", text="Label / Cat#", anchor="w")
+    self.order_tree.heading("Price", text="Price", anchor="e")
+    
+    self.order_tree.column("#", width=50, minwidth=40, stretch=False, anchor="e")
+    self.order_tree.column("Artist", width=200, minwidth=100, anchor="w")
+    self.order_tree.column("Title", width=250, minwidth=100, anchor="w")
+    self.order_tree.column("Year", width=60, minwidth=50, stretch=False, anchor="center")
+    self.order_tree.column("Label", width=180, minwidth=80, anchor="w")
+    self.order_tree.column("Price", width=100, minwidth=60, stretch=False, anchor="e")
+    
+    # Configure row tags for alternating colors (with foreground for dark mode)
+    self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
+    self.order_tree.tag_configure("row_odd", background="#1a2d4d" if self.v_dark_mode.get() else "#f0f4f8", foreground=self._colors["order_fg"])
+    self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
+    self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
+    
+    # Configure Treeview style for dark mode
+    self._configure_treeview_style()
+    
+    # Bind drag-and-drop events
+    self.order_tree.bind("<ButtonPress-1>", self._on_drag_start)
+    self.order_tree.bind("<B1-Motion>", self._on_drag_motion)
+    self.order_tree.bind("<ButtonRelease-1>", self._on_drag_end)
+    
+    # Keep Text widget reference for backward compatibility (hidden)
+    self.order_text = tk.Text(order_wrap, height=1, width=1)
+    # Don't grid it - it's just for compatibility with existing code
+    
+    # Store reference to rows for drag-drop operations
+    self._tree_rows: list[core.ReleaseRow] = []
 
     log_fr = ttk.Frame(nb)
     nb.add(log_fr, text="📜 Log")
@@ -1336,7 +1682,7 @@ class App:
       anchor="w", 
       padx=20, 
       pady=10,
-      font=("Segoe UI Semibold", 10)
+      font=(FONT_SEGOE_UI_SEMIBOLD, 10)
     )
     self._status_label.grid(row=0, column=0, sticky="w")
     
@@ -1345,30 +1691,30 @@ class App:
     info_frame.grid(row=0, column=1, sticky="e", padx=10)
     
     # Collection count
-    self._count_icon = tk.Label(info_frame, text="💿", bg=self._colors["accent"], fg="#ffffff", font=("Segoe UI", 10))
+    self._count_icon = tk.Label(info_frame, text="💿", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
     self._count_icon.grid(row=0, column=0, padx=(0, 4))
-    self._count_label = tk.Label(info_frame, textvariable=self.v_collection_count, bg=self._colors["accent"], fg="#ffffff", font=("Segoe UI", 10))
+    self._count_label = tk.Label(info_frame, textvariable=self.v_collection_count, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
     self._count_label.grid(row=0, column=1, padx=(0, 16))
     
     # Separator
-    tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=("Segoe UI", 10)).grid(row=0, column=2, padx=(0, 16))
+    tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=(FONT_SEGOE_UI, 10)).grid(row=0, column=2, padx=(0, 16))
     
     # Last sync time
-    self._sync_icon = tk.Label(info_frame, text="🕓", bg=self._colors["accent"], fg="#ffffff", font=("Segoe UI", 10))
+    self._sync_icon = tk.Label(info_frame, text="🕓", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
     self._sync_icon.grid(row=0, column=3, padx=(0, 4))
-    self._sync_label = tk.Label(info_frame, textvariable=self.v_last_sync, bg=self._colors["accent"], fg="#ffffff", font=("Segoe UI", 10))
+    self._sync_label = tk.Label(info_frame, textvariable=self.v_last_sync, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
     self._sync_label.grid(row=0, column=4, padx=(0, 16))
     
     # Separator
-    self._value_sep = tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=("Segoe UI", 10))
+    self._value_sep = tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=(FONT_SEGOE_UI, 10))
     self._value_sep.grid(row=0, column=5, padx=(0, 16))
     self._value_sep.grid_remove()  # Hidden by default
     
     # Total value (shown only when prices enabled)
-    self._value_icon = tk.Label(info_frame, text="💰", bg=self._colors["accent"], fg="#ffffff", font=("Segoe UI", 10))
+    self._value_icon = tk.Label(info_frame, text="💰", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
     self._value_icon.grid(row=0, column=6, padx=(0, 4))
     self._value_icon.grid_remove()  # Hidden by default
-    self._value_label = tk.Label(info_frame, textvariable=self.v_total_value, bg=self._colors["accent"], fg="#ffffff", font=("Segoe UI Semibold", 10))
+    self._value_label = tk.Label(info_frame, textvariable=self.v_total_value, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self._value_label.grid(row=0, column=7, padx=(0, 10))
     self._value_label.grid_remove()  # Hidden by default
     
@@ -1406,6 +1752,12 @@ class App:
     ToolTip(self._print_btn, "Print the current shelf order (Ctrl+P)")
     ToolTip(self._stop_btn, "Stop the auto-refresh timer and exit (Ctrl+Q)")
     ToolTip(self._refresh_prices_btn, "Clear cached prices and fetch fresh data from Discogs Marketplace")
+    
+    # Manual order controls
+    ToolTip(self._manual_order_check, "Enable manual ordering mode.\nDrag rows to reorder your collection.")
+    ToolTip(self._reset_order_btn, "Clear custom order and revert to automatic sorting")
+    ToolTip(self._move_up_btn, "Move selected item up one position (Alt+Up)")
+    ToolTip(self._move_down_btn, "Move selected item down one position (Alt+Down)")
 
   def _setup_keyboard_shortcuts(self) -> None:
     """Set up keyboard shortcuts for common actions."""
@@ -1438,6 +1790,10 @@ class App:
     # Ctrl+D - Toggle dark/light mode
     self.root.bind("<Control-d>", lambda e: self._toggle_theme())
     self.root.bind("<Control-D>", lambda e: self._toggle_theme())
+    
+    # Alt+Up/Down - Move items in manual order mode
+    self.root.bind("<Alt-Up>", lambda e: self._move_item_up())
+    self.root.bind("<Alt-Down>", lambda e: self._move_item_down())
   
   def _focus_search(self) -> None:
     """Focus the search entry field."""
@@ -1448,6 +1804,189 @@ class App:
     """Clear the search field."""
     self.v_search.set("")
     self._search_entry.focus_set()
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Drag-and-Drop Methods for Manual Reordering
+  # ─────────────────────────────────────────────────────────────────────────────
+  
+  def _toggle_manual_order(self) -> None:
+    """Toggle manual ordering mode on/off."""
+    enabled = self.v_manual_order_enabled.get()
+    self._manual_order.set_enabled(enabled)
+    if enabled:
+      self._log("Manual order mode enabled. Drag rows to reorder.")
+      # Save current order as the starting point
+      if self._tree_rows:
+        release_ids = [r.release_id for r in self._tree_rows if r.release_id]
+        self._manual_order.set_order(release_ids)
+    else:
+      self._log("Manual order mode disabled. Using automatic sort.")
+    # Re-render to show current state
+    if self._last_result:
+      self._render_order(self._last_result)
+  
+  def _reset_manual_order(self) -> None:
+    """Reset to automatic sorting, clearing any manual order."""
+    if not messagebox.askyesno("Reset Order", "Reset to automatic sorting?\n\nThis will clear your custom order."):
+      return
+    self._manual_order.clear()
+    self.v_manual_order_enabled.set(False)
+    self._log("Manual order cleared. Reverted to automatic sort.")
+    # Trigger a re-render with automatic sort
+    if self._last_result:
+      self._render_order(self._last_result)
+  
+  def _on_drag_start(self, event) -> None:
+    """Handle mouse button press to start drag operation."""
+    if not self.v_manual_order_enabled.get():
+      return  # Drag only works in manual order mode
+    
+    # Identify the item under cursor
+    item = self.order_tree.identify_row(event.y)
+    if not item:
+      return
+    
+    # Store the starting position
+    self._drag_item_id = item
+    try:
+      self._drag_start_index = self.order_tree.index(item)
+    except Exception:
+      self._drag_start_index = None
+    
+    # Select the item and add visual feedback
+    self.order_tree.selection_set(item)
+    self.order_tree.item(item, tags=("dragging",))
+  
+  def _on_drag_motion(self, event) -> None:
+    """Handle mouse motion during drag."""
+    if not self.v_manual_order_enabled.get():
+      return
+    if self._drag_item_id is None:
+      return
+    
+    # Find the item at current position
+    target_item = self.order_tree.identify_row(event.y)
+    if not target_item or target_item == self._drag_item_id:
+      return
+    
+    try:
+      # Get current positions
+      drag_index = self.order_tree.index(self._drag_item_id)
+      target_index = self.order_tree.index(target_item)
+      
+      # Move the item
+      self.order_tree.move(self._drag_item_id, "", target_index)
+      
+      # Update internal row list
+      if 0 <= drag_index < len(self._tree_rows) and 0 <= target_index < len(self._tree_rows):
+        row = self._tree_rows.pop(drag_index)
+        self._tree_rows.insert(target_index, row)
+        
+        # Update row numbers in treeview
+        self._update_row_numbers()
+    except Exception:
+      pass
+  
+  def _on_drag_end(self, event) -> None:
+    """Handle mouse button release to end drag operation."""
+    if self._drag_item_id:
+      # Remove dragging visual
+      try:
+        # Restore normal tag based on new position
+        index = self.order_tree.index(self._drag_item_id)
+        tag = "row_odd" if index % 2 == 1 else "row_even"
+        self.order_tree.item(self._drag_item_id, tags=(tag,))
+      except Exception:
+        pass
+    
+    # Save the new order if manual mode is enabled
+    if self.v_manual_order_enabled.get() and self._tree_rows:
+      release_ids = [r.release_id for r in self._tree_rows if r.release_id]
+      self._manual_order.set_order(release_ids)
+      self._log(f"Order saved. {len(release_ids)} items.")
+    
+    # Reset drag state
+    self._drag_item_id = None
+    self._drag_start_index = None
+    
+    # Update all row tags for alternating colors
+    self._update_row_tags()
+  
+  def _update_row_numbers(self) -> None:
+    """Update the row numbers in the treeview after reordering."""
+    for i, item in enumerate(self.order_tree.get_children()):
+      values = list(self.order_tree.item(item, "values"))
+      if values:
+        values[0] = str(i + 1)  # Update row number
+        self.order_tree.item(item, values=values)
+  
+  def _update_row_tags(self) -> None:
+    """Update row tags for alternating colors."""
+    for i, item in enumerate(self.order_tree.get_children()):
+      tag = "row_odd" if i % 2 == 1 else "row_even"
+      self.order_tree.item(item, tags=(tag,))
+  
+  def _move_item_up(self) -> None:
+    """Move selected item up one position."""
+    if not self.v_manual_order_enabled.get():
+      messagebox.showinfo("Manual Order", "Enable 'Manual Order Mode' first to reorder items.")
+      return
+    
+    selection = self.order_tree.selection()
+    if not selection:
+      return
+    
+    item = selection[0]
+    try:
+      index = self.order_tree.index(item)
+      if index > 0:
+        # Move in treeview
+        self.order_tree.move(item, "", index - 1)
+        # Move in internal list
+        row = self._tree_rows.pop(index)
+        self._tree_rows.insert(index - 1, row)
+        # Update display and save
+        self._update_row_numbers()
+        self._update_row_tags()
+        self._save_current_order()
+    except Exception:
+      pass
+  
+  def _move_item_down(self) -> None:
+    """Move selected item down one position."""
+    if not self.v_manual_order_enabled.get():
+      messagebox.showinfo("Manual Order", "Enable 'Manual Order Mode' first to reorder items.")
+      return
+    
+    selection = self.order_tree.selection()
+    if not selection:
+      return
+    
+    item = selection[0]
+    try:
+      index = self.order_tree.index(item)
+      children = self.order_tree.get_children()
+      if index < len(children) - 1:
+        # Move in treeview
+        self.order_tree.move(item, "", index + 1)
+        # Move in internal list
+        row = self._tree_rows.pop(index)
+        self._tree_rows.insert(index + 1, row)
+        # Update display and save
+        self._update_row_numbers()
+        self._update_row_tags()
+        self._save_current_order()
+    except Exception:
+      pass
+  
+  def _save_current_order(self) -> None:
+    """Save the current order to the manual order manager."""
+    if self._tree_rows:
+      release_ids = [r.release_id for r in self._tree_rows if r.release_id]
+      self._manual_order.set_order(release_ids)
+      self._log(f"Order saved. {len(release_ids)} items.")
+
+  # ─────────────────────────────────────────────────────────────────────────────
 
   def _refresh_prices(self) -> None:
     """Clear cached prices and trigger a refresh with price fetching enabled."""
@@ -1480,7 +2019,13 @@ class App:
   def _open_output_dir(self) -> None:
     path = self.v_output_dir.get().strip() or str(Path.cwd())
     try:
-      subprocess.run(["open", path], check=False)
+      import platform
+      if platform.system() == "Windows":
+        os.startfile(path)
+      elif platform.system() == "Darwin":
+        subprocess.run(["open", path], check=False)
+      else:
+        subprocess.run(["xdg-open", path], check=False)
     except Exception:
       pass
 
@@ -1553,32 +2098,103 @@ class App:
     except Exception:
       pass
 
-    # Update order text widget
+    # Update order Treeview widget
     try:
-      self.order_text.config(
-        background=self._colors["order_bg"],
-        foreground=self._colors["order_fg"],
-        insertbackground=self._colors["order_fg"],
-      )
-      # Update all text tags for current theme
+      # Update Treeview style for theme
+      self._configure_treeview_style()
+      
+      # Update Treeview tag colors for current theme
       if self.v_dark_mode.get():
-        self.order_text.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
-        self.order_text.tag_configure("row_even", background=self._colors["order_bg"])
-        self.order_text.tag_configure("row_odd", background="#1a2d4d")
-        self.order_text.tag_configure("artist", foreground=self._colors["accent"])
-        self.order_text.tag_configure("title", foreground=self._colors["order_fg"])
-        self.order_text.tag_configure("price", foreground=self._colors["success"])
+        self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
+        self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
+        self.order_tree.tag_configure("row_odd", background="#1a2d4d", foreground=self._colors["order_fg"])
+        self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
       else:
-        self.order_text.tag_configure("search_match", background="#fef08a", foreground="#1a1a2e")
-        self.order_text.tag_configure("row_even", background=self._colors["order_bg"])
-        self.order_text.tag_configure("row_odd", background="#e8eef4")
-        self.order_text.tag_configure("artist", foreground=self._colors["accent"])
-        self.order_text.tag_configure("title", foreground=self._colors["order_fg"])
-        self.order_text.tag_configure("price", foreground=self._colors["success"])
+        self.order_tree.tag_configure("search_match", background="#fef08a", foreground="#1a1a2e")
+        self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
+        self.order_tree.tag_configure("row_odd", background="#e8eef4", foreground=self._colors["order_fg"])
+        self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
       
       # Re-render if we have results
       if self._last_result:
         self._render_order(self._last_result)
+    except Exception:
+      pass
+    
+    # Update search entry colors
+    try:
+      self._search_entry.config(
+        bg=self._colors["order_bg"],
+        fg=self._colors["order_fg"],
+        insertbackground=self._colors["order_fg"],
+        highlightbackground=self._colors["panel2"],
+        highlightcolor=self._colors["accent"],
+      )
+    except Exception:
+      pass
+    
+    # Update settings entry widgets
+    try:
+      entry_config = {
+        "bg": self._colors["order_bg"],
+        "fg": self._colors["order_fg"],
+        "insertbackground": self._colors["order_fg"],
+        "highlightbackground": self._colors["panel2"],
+        "highlightcolor": self._colors["accent"],
+      }
+      for widget in [self.token_entry, self._useragent_entry, self._output_entry]:
+        try:
+          widget.config(**entry_config)
+        except Exception:
+          pass
+      
+      # Update spinbox
+      self._poll_spin.config(
+        bg=self._colors["order_bg"],
+        fg=self._colors["order_fg"],
+        buttonbackground=self._colors["panel2"],
+        insertbackground=self._colors["order_fg"],
+        highlightbackground=self._colors["panel2"],
+        highlightcolor=self._colors["accent"],
+      )
+      
+      # Update option menus
+      menu_config = {
+        "bg": self._colors["order_bg"],
+        "fg": self._colors["order_fg"],
+        "activebackground": self._colors["accent"],
+        "activeforeground": "#ffffff",
+      }
+      for widget in [self._currency_combo, self._sort_combo]:
+        try:
+          widget.config(**menu_config)
+          widget["menu"].config(**menu_config)
+        except Exception:
+          pass
+    except Exception:
+      pass
+
+    # Update Settings LabelFrame and inner frames
+    try:
+      # Settings LabelFrame
+      self._settings_frame.config(
+        bg=self._colors["panel"],
+        fg=self._colors["accent"],
+      )
+      # Inner frames
+      frame_config = {"bg": self._colors["panel"]}
+      for frame in [self._out_row, self._opt_row, self._sort_row, self._price_info]:
+        try:
+          frame.config(**frame_config)
+          # Update child labels
+          for child in frame.winfo_children():
+            if child.winfo_class() == "Label":
+              try:
+                child.config(bg=self._colors["panel"])
+              except Exception:
+                pass
+        except Exception:
+          pass
     except Exception:
       pass
 
@@ -1643,63 +2259,58 @@ class App:
     self.root.after(100, self._pump_queues)
 
   def _render_order(self, result: BuildResult) -> None:
-    self.order_text.delete("1.0", "end")
-    if not result.lines:
-      self.order_text.insert("end", "(No matching LPs found.)\n")
-      self.v_match.set("")
-      return
-
-    # Render with styled formatting for better readability
-    for i, line in enumerate(result.lines):
-      row_tag = "row_odd" if i % 2 == 1 else "row_even"
-      row_num = f"{i+1:3d}. "
-      
-      # Parse the line to colorize parts
-      # Format: "Artist — Title (Year) [Label Catno] - Price"
-      self.order_text.insert("end", row_num, ("row_number", row_tag))
-      
-      # Try to parse and style different parts
-      if " — " in line:
-        parts = line.split(" — ", 1)
-        artist = parts[0]
-        rest = parts[1] if len(parts) > 1 else ""
-        
-        self.order_text.insert("end", artist, ("artist", row_tag))
-        self.order_text.insert("end", " — ", ("title", row_tag))
-        
-        # Check for price part at end
-        if " - " in rest and ("SEK" in rest or "USD" in rest or "EUR" in rest or "[Not listed]" in rest):
-          # Split off price
-          price_idx = rest.rfind(" - ")
-          title_part = rest[:price_idx]
-          price_part = rest[price_idx:]
-          
-          # Check for year in parentheses
-          if "(" in title_part and ")" in title_part:
-            # Find year portion
-            year_start = title_part.rfind("(")
-            title_only = title_part[:year_start].rstrip()
-            year_and_label = title_part[year_start:]
-            
-            self.order_text.insert("end", title_only, ("title", row_tag))
-            self.order_text.insert("end", " " + year_and_label, ("label", row_tag))
-          else:
-            self.order_text.insert("end", title_part, ("title", row_tag))
-          
-          # Style price
-          if "[Not listed]" in price_part:
-            self.order_text.insert("end", price_part, ("price_none", row_tag))
-          else:
-            self.order_text.insert("end", price_part, ("price", row_tag))
-        else:
-          self.order_text.insert("end", rest, ("title", row_tag))
-      else:
-        # Fallback - just insert the line
-        self.order_text.insert("end", line, ("title", row_tag))
-      
-      self.order_text.insert("end", "\n", row_tag)
+    """Render the shelf order in the Treeview widget."""
+    # Clear existing items
+    for item in self.order_tree.get_children():
+      self.order_tree.delete(item)
     
-    self.order_text.see("1.0")
+    if not result.rows_sorted:
+      self._tree_rows = []
+      self.v_match.set("0 items")
+      return
+    
+    # Apply manual ordering if enabled
+    rows = result.rows_sorted
+    if self.v_manual_order_enabled.get():
+      # Update manual order manager with current username
+      if result.username:
+        self._manual_order.set_username(result.username)
+      rows = self._manual_order.apply_order(rows)
+    
+    # Store rows for drag-drop operations
+    self._tree_rows = list(rows)
+    
+    # Populate treeview
+    show_prices = self.v_show_prices.get()
+    for i, row in enumerate(rows):
+      tag = "row_odd" if i % 2 == 1 else "row_even"
+      
+      # Format price
+      if show_prices and row.lowest_price is not None:
+        price_str = f"{row.lowest_price:.0f} {row.price_currency}"
+      elif show_prices:
+        price_str = "[Not listed]"
+      else:
+        price_str = ""
+      
+      # Format label/catno
+      label_str = f"{row.label} {row.catno}".strip() if row.label or row.catno else ""
+      
+      # Format year
+      year_str = str(row.year) if row.year else ""
+      
+      values = (
+        str(i + 1),  # Row number
+        row.artist_display,
+        row.title,
+        year_str,
+        label_str,
+        price_str,
+      )
+      
+      self.order_tree.insert("", "end", values=values, tags=(tag,))
+    
+    self.v_match.set(f"{len(rows)} items")
     self._highlight_search()
 
   def _update_status_bar(self, result: BuildResult) -> None:
@@ -1752,37 +2363,42 @@ class App:
       self._value_label.grid_remove()
 
   def _highlight_search(self) -> None:
-    # Highlight matches within the displayed text without filtering out lines.
-    self.order_text.tag_remove("search_match", "1.0", "end")
-    q = (self.v_search.get() or "").strip()
+    """Highlight matching rows in the Treeview based on search query."""
+    q = (self.v_search.get() or "").strip().lower()
+    
+    # Reset all tags to default alternating colors
+    for i, item in enumerate(self.order_tree.get_children()):
+      tag = "row_odd" if i % 2 == 1 else "row_even"
+      self.order_tree.item(item, tags=(tag,))
+    
     if not q:
-      if self._last_result is not None:
-        self.v_match.set(f"{len(self._last_result.lines)} items")
+      if self._tree_rows:
+        self.v_match.set(f"{len(self._tree_rows)} items")
       else:
         self.v_match.set("")
       return
-
-    start = "1.0"
+    
+    # Find and highlight matching rows
     matches = 0
-    first_match: str | None = None
-    while True:
-      idx = self.order_text.search(q, start, stopindex="end", nocase=True)
-      if not idx:
-        break
-      if first_match is None:
-        first_match = idx
-      end = f"{idx}+{len(q)}c"
-      self.order_text.tag_add("search_match", idx, end)
-      matches += 1
-      start = end
-
+    first_match_item = None
+    
+    for i, item in enumerate(self.order_tree.get_children()):
+      values = self.order_tree.item(item, "values")
+      # Search across all columns (except row number)
+      row_text = " ".join(str(v) for v in values[1:]).lower()
+      
+      if q in row_text:
+        self.order_tree.item(item, tags=("search_match",))
+        matches += 1
+        if first_match_item is None:
+          first_match_item = item
+    
     self.v_match.set(f"{matches} matches" if matches != 1 else "1 match")
-    if first_match is not None:
-      self.order_text.see(first_match)
-      try:
-        self.order_text.mark_set("insert", first_match)
-      except Exception:
-        pass
+    
+    # Scroll to first match
+    if first_match_item is not None:
+      self.order_tree.see(first_match_item)
+      self.order_tree.selection_set(first_match_item)
 
   def _on_search_change(self) -> None:
     self._highlight_search()
@@ -1821,41 +2437,61 @@ class App:
     cfg = self._get_cfg()
     out_dir = Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Use the current display order (which respects manual ordering)
+    rows_to_export = self._tree_rows if self._tree_rows else result.rows_sorted
 
     txt_path = out_dir / "vinyl_shelf_order.txt"
     csv_path = out_dir / "vinyl_shelf_order.csv"
-    core.write_txt(result.rows_sorted, txt_path, dividers=False, align=False, show_country=False)
-    core.write_csv(result.rows_sorted, csv_path)
+    core.write_txt(rows_to_export, txt_path, dividers=False, align=False, show_country=False)
+    core.write_csv(rows_to_export, csv_path)
     self._log(f"Exported: {txt_path.name}")
     self._log(f"Exported: {csv_path.name}")
 
     if cfg.write_json:
       json_path = out_dir / "vinyl_shelf_order.json"
-      core.write_json(result.rows_sorted, json_path)
+      core.write_json(rows_to_export, json_path)
       self._log(f"Exported: {json_path.name}")
+    
+    # Note if manual order was used
+    if self.v_manual_order_enabled.get():
+      self._log("(Exported with manual ordering)")
 
     messagebox.showinfo("Export", f"Wrote files to:\n{out_dir}")
     self.v_status.set(f"Exported to: {out_dir}")
 
   def _print_current(self) -> None:
-    result = self._last_result
-    if not result or not result.lines:
+    if not self._tree_rows:
       messagebox.showinfo("Print", "Nothing to print yet. Wait for the first build.")
       return
 
     if not messagebox.askyesno("Print", "Send the current shelf order to your default printer?"):
       return
+    
+    # Generate printable text from current order
+    lines = []
+    for i, row in enumerate(self._tree_rows):
+      line = f"{i+1:3d}. {row.artist_display} — {row.title}"
+      if row.year:
+        line += f" ({row.year})"
+      lines.append(line)
 
-    if subprocess.run(["sh", "-lc", "command -v lpr"], capture_output=True).returncode != 0:
-      messagebox.showerror("Print", "Could not find 'lpr' command on this system.")
-      return
-
+    # Try Windows printing first, fall back to lpr
     try:
+      import tempfile
       with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
-        f.write("\n".join(result.lines) + "\n")
+        f.write("\n".join(lines) + "\n")
         tmp_path = f.name
-      subprocess.run(["lpr", tmp_path], check=True)
-      self._log("Sent to printer via lpr.")
+      
+      # Windows: use notepad /p for printing
+      import platform
+      if platform.system() == "Windows":
+        subprocess.run(["notepad", "/p", tmp_path], check=True)
+      else:
+        # Unix: use lpr
+        subprocess.run(["lpr", tmp_path], check=True)
+      
+      self._log("Sent to printer.")
       self.v_status.set("Sent to printer.")
     except Exception as e:
       messagebox.showerror("Print", f"Printing failed: {e}")
