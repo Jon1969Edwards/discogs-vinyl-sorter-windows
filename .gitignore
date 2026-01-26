@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual env + secrets
+.venv/
+.env
+env/
+venv/
+
+# App config and cache (contains user token)
+.discogs_config.json
+.discogs_collection_cache.json
+
+# Generated outputs (Discogs sorter)
+vinyl_shelf_order.txt
+vinyl_shelf_order.csv
+vinyl_shelf_order.json
+
+vinyl45_shelf_order.txt
+vinyl45_shelf_order.csv
+vinyl45_shelf_order.json
+
+cd_shelf_order.txt
+cd_shelf_order.csv
+cd_shelf_order.json
+
+all_media_shelf_order.json
+valuable_over_*kr.txt
+excluded_probable_lp.txt
+
+# Optional: filter reports
+filter_report*.txt

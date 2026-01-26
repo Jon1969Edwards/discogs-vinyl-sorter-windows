@@ -1,0 +1,68 @@
+================================================
+DISCOGS VINYL SORTER - WINDOWS
+Quick Start Guide
+================================================
+
+STEP 1: SETUP (First Time Only)
+--------------------------------
+Double-click: SETUP.bat
+
+This will:
+✓ Create a Python virtual environment
+✓ Install required packages
+✓ Prepare the app for use
+
+STEP 2: GET YOUR DISCOGS TOKEN
+-------------------------------
+1. Go to: https://www.discogs.com
+2. Log in to your account
+3. Go to: Settings → Developers
+4. Click "Generate new token"
+5. Copy the token
+
+STEP 3: RUN THE APP
+-------------------
+
+OPTION A - Main GUI (Recommended):
+  → Double-click: LaunchDiscogsGUI.bat
+  
+  Then:
+  1. Paste your Discogs token
+  2. Adjust settings if needed
+  3. Click "Fetch & Sort"
+  4. Wait for processing
+  5. Files saved to output directory!
+
+OPTION B - Auto-Sort GUI (Advanced):
+  → Double-click: LaunchAutoSortGUI.bat
+  
+  This monitors your collection and automatically
+  regenerates your shelf order when it changes.
+
+OUTPUT FILES
+------------
+By default, you'll get:
+  • vinyl_shelf_order.txt (human-readable)
+  • vinyl_shelf_order.csv (for Excel/Sheets)
+  • vinyl_shelf_order.json (optional)
+
+TROUBLESHOOTING
+---------------
+Problem: "Python not found"
+Solution: Install Python from python.org
+          Make sure to check "Add Python to PATH"
+
+Problem: GUI won't start
+Solution: Use the official python.org installer
+          (includes Tkinter GUI support)
+
+Problem: Setup fails
+Solution: 1. Delete the .venv folder
+          2. Run SETUP.bat again
+
+NEED MORE HELP?
+---------------
+See: README-WINDOWS.md (detailed Windows guide)
+See: README.md (full documentation)
+
+================================================
