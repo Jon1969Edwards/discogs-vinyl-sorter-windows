@@ -541,8 +541,9 @@ def make_sort_keys(
         return t[len(art) + 1 :].strip()
     return t
 
-  # For artists, also drop Discogs numeric suffixes
-  artist_clean = strip_discogs_numeric_suffix(artist_display).strip()
+  # For sorting, use only the first artist (before '/' or ',')
+  artist_first = artist_display.split('/')[0].split(',')[0].strip()
+  artist_clean = strip_discogs_numeric_suffix(artist_first).strip()
   sort_artist_base = strip_articles(artist_clean).lower()
   if last_name_first:
     flipped = _last_name_first_key(artist_clean, allow_3=lnf_allow_3, exclude_set=(lnf_exclude or set()), safe_bands=lnf_safe_bands)
