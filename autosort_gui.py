@@ -1976,6 +1976,7 @@ class App:
 
     # Populate wishlist
     from core.wishlist import load_wishlist, remove_from_wishlist
+    self._wishlist_rows = []  # Always initialize before any use
     def refresh_wishlist_tree():
       wishlist_tree.delete(*wishlist_tree.get_children())
       from types import SimpleNamespace
