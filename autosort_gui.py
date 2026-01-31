@@ -2013,12 +2013,17 @@ class App:
         self._wishlist_rows.append(row)
         # Use the same image logic as shelf order
         img = self._get_row_image(row, self._get_placeholder_image())
+        # Ensure values is a tuple of strings, matching the columns
         values = (
-          str(entry.get("artist", "")),
-          str(entry.get("title", "")),
-          str(entry.get("discogs_url", ""))
+          str(getattr(row, "artist_display", "")),
+          str(getattr(row, "title", "")),
+          str(getattr(row, "discogs_url", getattr(row, "url", "")))
         )
-        wishlist_tree.insert("", "end", image=img, values=values)
+        tag = "row_odd" if i % 2 == 1 else "row_even"
+        if img:
+          wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
+        else:
+          wishlist_tree.insert("", "end", values=values, tags=(tag,))
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
 
