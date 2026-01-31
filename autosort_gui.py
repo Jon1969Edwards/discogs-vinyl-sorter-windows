@@ -422,7 +422,8 @@ class ThumbnailCache:
     """Initialize thumbnail cache."""
     self.cache_dir = THUMBNAIL_CACHE_DIR
     self.cache_dir.mkdir(exist_ok=True)
-    from typing import Dict, Optional
+    from typing import Optional
+    from typing import Dict
     self._photo_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # In-memory cache of PhotoImage objects
     self._preview_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # Cache for larger preview images
     self._placeholder: Optional["ImageTk.PhotoImage"] = None
@@ -3426,51 +3427,12 @@ class App:
         force = self._force_rebuild
         self._force_rebuild = False
 
-<<<<<<< HEAD
-        if self._last_count is None or force:
-          if self._last_count is None:
-            self._last_count = count
-            self._log(f"Initial collection count: {count}")
-          else:
-            self._log(f"Forced refresh. Collection count: {count}")
-          # Build once on startup or forced refresh
-          self._log("Building shelf order…")
-          self.v_status.set("Building…")
-          # Always show progress dialog for any refresh
-          self.progress_q.put(("show", "Fetching and sorting your collection. Please wait..."))
-          try:
-            result = build_once(cfg, self._log, progress_callback, self._collection_cache)
-            self.result_q.put(result)
-            self._last_built_at = time.time()
-            self._log(f"Build complete. Items: {len(result.rows_sorted)}")
-            self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
-          finally:
-            self.progress_q.put(("close", None))
-        else:
-          if count != self._last_count:
-            self._log(f"Collection changed: {self._last_count} → {count}")
-            self._last_count = count
-            self._log("Rebuilding shelf order…")
-            self.v_status.set("Rebuilding…")
-            self.progress_q.put(("show", "Fetching and sorting your collection. Please wait..."))
-            try:
-              result = build_once(cfg, self._log, progress_callback, self._collection_cache)
-              self.result_q.put(result)
-              self._last_built_at = time.time()
-              self._log(f"Build complete. Items: {len(result.rows_sorted)}")
-              self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
-            finally:
-              self.progress_q.put(("close", None))
-          else:
-            self.v_status.set(f"No changes. Polling every {cfg.poll_seconds}s")
-=======
         if self._should_build_initial(force):
           self._handle_initial_build(cfg, count, progress_callback)
         elif count != self._last_count:
           self._handle_collection_changed(cfg, count, progress_callback)
         else:
           self.v_status.set(f"No changes. Polling every {cfg.poll_seconds}s")
->>>>>>> ded8bd9b15332e289e1e82e4e9c2ed01b371bdac
 
       except Exception as e:
         self._handle_watch_exception(e)
