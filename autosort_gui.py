@@ -44,7 +44,6 @@ except ImportError:
 # Use ttkbootstrap for modern rounded widgets
 try:
   import ttkbootstrap as ttk
-  from ttkbootstrap.constants import *
   TTKBOOTSTRAP_AVAILABLE = True
 except ImportError:
   from tkinter import ttk
@@ -65,6 +64,9 @@ _OBFUSCATE_KEY = b"DiscogsVinylSorter2026"
 # UI font constants (avoid duplicated literals for linters and consistency)
 FONT_SEGOE_UI = "Segoe UI"
 FONT_SEGOE_UI_SEMIBOLD = "Segoe UI Semibold"
+
+# Button style constants
+SECONDARY_TBUTTON_STYLE = "Secondary.TButton"
 
 
 def _obfuscate(text: str) -> str:
@@ -406,6 +408,10 @@ class ManualOrderManager:
 THUMBNAIL_CACHE_DIR = Path(__file__).parent / ".discogs_thumbnails"
 
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from PIL import ImageTk
+
 class ThumbnailCache:
   """Cache for album artwork thumbnails."""
   
@@ -448,7 +454,7 @@ class ThumbnailCache:
     """Get a PhotoImage for a release (from memory cache)."""
     return self._photo_cache.get(release_id)
   
-  def get_placeholder(self, root) -> "ImageTk.PhotoImage | None":
+  def get_placeholder(self) -> "ImageTk.PhotoImage | None":
     """Get a placeholder image for releases without artwork."""
     if not self._pil_available:
       return None
@@ -509,7 +515,7 @@ class ThumbnailCache:
     except Exception:
       return False
   
-  def load_photo(self, release_id: int, root) -> "ImageTk.PhotoImage | None":
+  def load_photo(self, release_id: int) -> "ImageTk.PhotoImage | None":
     """Load a cached thumbnail as a PhotoImage."""
     if not self._pil_available:
       return None
@@ -738,7 +744,24 @@ def get_collection_count(headers: dict[str, str], username: str) -> int:
 
 class ProgressDialog:
   """A modal progress dialog with a spinning vinyl record animation."""
-  
+
+  def set_error(self, message: str) -> None:
+    """Show error message with red highlight."""
+    self.msg_label.config(text=message, fg="#ff5555")
+    self.progress_label.config(text="Error", fg="#ff5555")
+    self.top.configure(bg="#2e1620")
+    self.title_label.config(fg="#ff5555")
+    self.top.update()
+
+  def set_done(self, message: str = "Done!") -> None:
+    """Show done message with green highlight, then close after short delay."""
+    self.msg_label.config(text=message, fg="#55ff55")
+    self.progress_label.config(text="Done", fg="#55ff55")
+    self.top.configure(bg="#162e20")
+    self.title_label.config(fg="#55ff55")
+    self.top.update()
+    self.top.after(900, self.close)
+
   def __init__(self, parent, title: str = "Please Wait", message: str = "Loading..."):
     import tkinter as tk
     from tkinter import scrolledtext
@@ -760,10 +783,10 @@ class ProgressDialog:
     accent_bar = tk.Frame(self.top, bg="#6c63ff", height=4)
     accent_bar.pack(fill="x")
     
-    # Title label at top
+    # Title label at top (dynamic)
     self.title_label = tk.Label(
       self.top,
-      text="🎵 Fetching Album Prices",
+      text=title,
       font=(FONT_SEGOE_UI_SEMIBOLD, 15),
       bg="#16213e",
       fg="#6c63ff"
@@ -1024,128 +1047,198 @@ class ToolTip:
     self.text = new_text
 
 
-def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = None, cache: CollectionCache = None) -> BuildResult:
-  """Build the shelf order once.
-  
-  Args:
-    cfg: Configuration
-    log: Logging callback
-    progress_callback: Optional callback for progress updates - called with (action, message)
-                       where action is 'show', 'update', 'message', or 'close'
-    cache: Optional collection cache for storing/retrieving release and price data
-  """
-  token = core.get_token(cfg.token or None)
-  headers = core.discogs_headers(token, cfg.user_agent)
-  ident = core.get_identity(headers)
-  username = ident.get("username")
-  if not username:
-    raise RuntimeError("Could not determine username from token.")
-
-  log(f"User: {username}")
-  
-  # Update cache with username (clears if different user)
+def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = None, cache: CollectionCache = None, main_progress_q=None) -> BuildResult:
+  """Build the shelf order once, with granular progress updates."""
+  if main_progress_q:
+    main_progress_q.put(("update", "Fetching collection from Discogs..."))
+  try:
+    _, headers, username = _get_user_headers(cfg, log)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Failed to get user headers: {e}"))
+    raise
   if cache:
     cache.set_username(username)
-
   out_dir = Path(cfg.output_dir)
   out_dir.mkdir(parents=True, exist_ok=True)
-
-  rows = core.collect_lp_rows(
-    headers=headers,
-    username=username,
-    per_page=max(1, min(int(cfg.per_page), 100)),
-    max_pages=None,
-    extra_articles=[],
-    lp_strict=False,
-    lp_probable=False,
-    debug_stats=None,
-    last_name_first=True,
-    lnf_allow_3=False,
-    lnf_exclude=set(),
-    lnf_safe_bands=True,
-    collect_exclusions=False,
-  )
-
+  if main_progress_q:
+    main_progress_q.put(("update", "Collecting rows from Discogs...") )
+  try:
+    rows = _collect_rows(cfg, headers, username)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Failed to collect rows: {e}"))
+    raise
   if not rows:
     log("No matching LPs found.")
+    if main_progress_q:
+      main_progress_q.put(("error", "No matching LPs found."))
     return BuildResult(username=username, rows_sorted=[], lines=[])
-
-  # Determine if we need prices (for display or sorting)
   need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
-  
-  # Fetch prices if needed
+  if main_progress_q:
+    main_progress_q.put(("update", "Checking if price data is needed...") )
   if need_prices:
-    # First, populate from cache where available
+    if main_progress_q:
+      main_progress_q.put(("update", "Fetching album prices from Discogs Marketplace...") )
+    try:
+      _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q)
+    except Exception as e:
+      if main_progress_q:
+        main_progress_q.put(("error", f"Failed to fetch prices: {e}"))
+      raise
+  try:
+    if main_progress_q:
+      main_progress_q.put(("update", "Sorting collection...") )
+    rows_sorted = core.sort_rows(rows, "normal", sort_by=cfg.sort_by)
+    if main_progress_q:
+      main_progress_q.put(("update", "Generating output files...") )
+    lines = core.generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=need_prices)
+    if main_progress_q:
+      main_progress_q.put(("done", "Done!"))
+    return BuildResult(username=username, rows_sorted=rows_sorted, lines=lines)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Build failed: {e}"))
+    raise
+
+def _get_user_headers(cfg: AutoConfig, log: callable):
+    token = core.get_token(cfg.token or None)
+    headers = core.discogs_headers(token, cfg.user_agent)
+    ident = core.get_identity(headers)
+    username = ident.get("username")
+    if not username:
+        raise RuntimeError("Could not determine username from token.")
+    log(f"User: {username}")
+    return token, headers, username
+
+def _collect_rows(cfg: AutoConfig, headers: dict, username: str):
+    return core.collect_lp_rows(
+        headers=headers,
+        username=username,
+        per_page=max(1, min(int(cfg.per_page), 100)),
+        max_pages=None,
+        extra_articles=[],
+        lp_strict=False,
+        lp_probable=False,
+        debug_stats=None,
+        last_name_first=True,
+        lnf_allow_3=False,
+        lnf_exclude=set(),
+        lnf_safe_bands=True,
+        collect_exclusions=False,
+    )
+
+def _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q=None):
+  releases_needing_fetch, cached_count = _populate_prices_from_cache(cfg, cache, rows)
+  if cached_count > 0:
+    log(f"Loaded {cached_count} prices from cache.")
+  if releases_needing_fetch:
+    _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count, main_progress_q)
+  else:
+    log("All prices loaded from cache.")
+    if main_progress_q:
+      main_progress_q.put(("update", "All prices loaded from cache."))
+
+def _populate_prices_from_cache(cfg, cache, rows):
     releases_needing_fetch = []
     cached_count = 0
-    
     if cache:
-      for row in rows:
-        if row.release_id:
-          lowest, num_for_sale, is_stale = cache.get_price(row.release_id, cfg.currency)
-          if not is_stale and lowest is not None:
-            # Use cached price
-            row.lowest_price = lowest
-            row.median_price = lowest
-            row.num_for_sale = num_for_sale
-            row.price_currency = cfg.currency
-            cached_count += 1
-          else:
-            releases_needing_fetch.append(row)
-        else:
-          releases_needing_fetch.append(row)
+        for row in rows:
+            if row.release_id:
+                lowest, num_for_sale, is_stale = cache.get_price(row.release_id, cfg.currency)
+                if not is_stale and lowest is not None:
+                    row.lowest_price = lowest
+                    row.median_price = lowest
+                    row.num_for_sale = num_for_sale
+                    row.price_currency = cfg.currency
+                    cached_count += 1
+                else:
+                    releases_needing_fetch.append(row)
+            else:
+                releases_needing_fetch.append(row)
     else:
-      releases_needing_fetch = [r for r in rows if r.release_id]
-    
-    if cached_count > 0:
-      log(f"Loaded {cached_count} prices from cache.")
-    
-    # Only fetch prices we don't have cached
-    if releases_needing_fetch:
-      total_to_fetch = len([r for r in releases_needing_fetch if r.release_id])
-      log(f"Fetching {total_to_fetch} prices ({cfg.currency})...")
-      
-      # Show progress dialog
-      if progress_callback:
-        progress_callback("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
-      
-      # Create a progress callback that updates both log and dialog
-      fetched_count = [0]  # Use list to allow mutation in closure
-      def price_progress(msg: str):
-        fetched_count[0] += 1
-        log(msg)
-        if progress_callback:
-          progress_callback("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}")
-      
-      # Fetch prices for releases not in cache
-      core.fetch_prices_for_rows(headers, releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
-      
-      # Update cache with newly fetched prices
-      if cache:
-        for row in releases_needing_fetch:
-          if row.release_id and row.lowest_price is not None:
-            cache.set_price(row.release_id, cfg.currency, row.lowest_price, row.num_for_sale)
-          elif row.release_id:
-            # Cache "not listed" as well (lowest_price=None means not for sale)
-            cache.set_price(row.release_id, cfg.currency, None, 0)
-        cache.save()
-      
-      log("Price fetch complete.")
-      
-      # Close progress dialog
-      if progress_callback:
-        progress_callback("close", None)
-    else:
-      log("All prices loaded from cache.")
-  
-  # Sort the rows
-  rows_sorted = core.sort_rows(rows, "normal", sort_by=cfg.sort_by)
-  
-  lines = core.generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=need_prices)
-  return BuildResult(username=username, rows_sorted=rows_sorted, lines=lines)
+        releases_needing_fetch = [r for r in rows if r.release_id]
+    return releases_needing_fetch, cached_count
+
+def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count, main_progress_q=None):
+  total_to_fetch = len([r for r in releases_needing_fetch if r.release_id])
+  log(f"Fetching {total_to_fetch} prices ({cfg.currency})...")
+  if progress_callback:
+    progress_callback("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
+  if main_progress_q:
+    main_progress_q.put(("update", f"Fetching {total_to_fetch} album prices in {cfg.currency}..."))
+  fetched_count = [0]
+  def price_progress(msg: str):
+    fetched_count[0] += 1
+    log(msg)
+    if progress_callback:
+      progress_callback("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}")
+    if main_progress_q:
+      main_progress_q.put(("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}"))
+  try:
+    core.fetch_prices_for_rows(headers, releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Price fetch failed: {e}"))
+    raise
+  if cache:
+    for row in releases_needing_fetch:
+      if row.release_id and row.lowest_price is not None:
+        cache.set_price(row.release_id, cfg.currency, row.lowest_price, row.num_for_sale)
+      elif row.release_id:
+        cache.set_price(row.release_id, cfg.currency, None, 0)
+    cache.save()
+  log("Price fetch complete.")
+  if main_progress_q:
+    main_progress_q.put(("update", "Price fetch complete."))
+  if progress_callback:
+    progress_callback("close", None)
 
 
 class App:
+  # Hoverable album cover preview for wishlist
+  def _on_wishlist_tree_motion(self, event):
+    item = self.wishlist_tree.identify_row(event.y)
+    if not item:
+      if hasattr(self, '_image_preview'):
+        self._image_preview.hide()
+      return
+    values = self.wishlist_tree.item(item, "values")
+    artist, title = values[0], values[1]
+    # Try to get release_id or thumb_url
+    entry = None
+    from core.wishlist import load_wishlist
+    for w in load_wishlist():
+      if w["artist"] == artist and w["title"] == title:
+        entry = w
+        break
+    if not entry:
+      return
+    release_id = entry.get("release_id")
+    thumb_url = entry.get("thumb") or entry.get("cover_image_url")
+    img = None
+    if hasattr(self, '_thumbnail_cache') and release_id:
+      img = self._thumbnail_cache.get_photo(release_id)
+    if not img and hasattr(self, '_thumbnail_cache') and thumb_url:
+      img = self._thumbnail_cache.load_preview(release_id or 0, thumb_url)
+    if not img and hasattr(self, '_thumbnail_cache'):
+      img = self._thumbnail_cache.get_placeholder()
+    if hasattr(self, '_image_preview'):
+      self._image_preview.show(event.x_root, event.y_root, img)
+
+  def _on_wishlist_tree_leave(self, event):
+    if hasattr(self, '_image_preview'):
+      self._image_preview.hide()
+
+  def _set_action_buttons_state(self, state: str) -> None:
+    """Enable or disable main action buttons (refresh, export, print) during refresh."""
+    for btn in [getattr(self, '_refresh_btn', None), getattr(self, '_export_btn', None), getattr(self, '_print_btn', None)]:
+      if btn is not None:
+        try:
+          btn.config(state=state)
+        except Exception:
+          pass
+
   def __init__(self, root: Tk) -> None:
     self.root = root
     root.title("Discogs Auto-Sort")
@@ -1334,7 +1427,8 @@ class App:
                          font=(FONT_SEGOE_UI_SEMIBOLD, 11))
     
     # Primary button style - more rounded feel with padding
-    self.style.configure("Primary.TButton",
+    PRIMARY_TBUTTON_STYLE = "Primary.TButton"
+    self.style.configure(PRIMARY_TBUTTON_STYLE,
                          background=c["accent"],
                          foreground=c["button_fg"],
                          borderwidth=0,
@@ -1343,12 +1437,13 @@ class App:
                          darkcolor=c["accent"],
                          padding=(20, 12),
                          font=(FONT_SEGOE_UI_SEMIBOLD, 10))
-    self.style.map("Primary.TButton",
+    self.style.map(PRIMARY_TBUTTON_STYLE,
                    background=[("active", c["button_hover"]), ("pressed", c["button_hover"]), ("disabled", c["muted"])],
                    foreground=[("active", c["button_fg"]), ("disabled", "#888888")])
     
     # Success button style (green) - matching rounded feel
-    self.style.configure("Success.TButton",
+    SUCCESS_TBUTTON_STYLE = "Success.TButton"
+    self.style.configure(SUCCESS_TBUTTON_STYLE,
                          background=c["success"],
                          foreground="#ffffff",
                          borderwidth=0,
@@ -1356,11 +1451,12 @@ class App:
                          darkcolor=c["success"],
                          padding=(20, 12),
                          font=(FONT_SEGOE_UI_SEMIBOLD, 10))
-    self.style.map("Success.TButton",
+    self.style.map(SUCCESS_TBUTTON_STYLE,
                    background=[("active", "#00a844"), ("pressed", "#00a844")])
     
     # Secondary button style - subtle
-    self.style.configure("Secondary.TButton",
+    SECONDARY_TBUTTON_STYLE = "Secondary.TButton"
+    self.style.configure(SECONDARY_TBUTTON_STYLE,
                          background=c["panel2"],
                          foreground=c["text"],
                          borderwidth=0,
@@ -1368,11 +1464,12 @@ class App:
                          darkcolor=c["panel2"],
                          padding=(16, 10),
                          font=(FONT_SEGOE_UI, 10))
-    self.style.map("Secondary.TButton",
+    self.style.map(SECONDARY_TBUTTON_STYLE,
                    background=[("active", c["order_bg"])])
     
     # Danger button style (red) - matching rounded feel
-    self.style.configure("Danger.TButton",
+    DANGER_TBUTTON_STYLE = "Danger.TButton"
+    self.style.configure(DANGER_TBUTTON_STYLE,
                          background=c["accent3"],
                          foreground="#ffffff",
                          borderwidth=0,
@@ -1380,7 +1477,7 @@ class App:
                          darkcolor=c["accent3"],
                          padding=(20, 12),
                          font=(FONT_SEGOE_UI_SEMIBOLD, 10))
-    self.style.map("Danger.TButton",
+    self.style.map(DANGER_TBUTTON_STYLE,
                    background=[("active", "#c41840"), ("pressed", "#c41840")])
     
     # Regular button - clean look
@@ -1564,8 +1661,6 @@ class App:
         pass
 
   def _build_ui(self, root: Tk) -> None:
-    pad = {"padx": 12, "pady": 8}  # Tighter padding
-
     # Main container - let ttkbootstrap handle styling
     import tkinter as tk
     frm = ttk.Frame(root)
@@ -1803,7 +1898,7 @@ class App:
     self._search_entry = tk.Entry(
       search_row, 
       textvariable=self.v_search,
-      font=("Segoe UI", 11),
+      font=(FONT_SEGOE_UI, 11),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
       insertbackground=self._colors["order_fg"],
@@ -1819,7 +1914,7 @@ class App:
       self._clear_btn = ttk.Button(search_row, text="✕ Clear", bootstyle="secondary-outline", command=lambda: self.v_search.set(""))
       self._clear_btn.grid(row=0, column=2, sticky="e")
     else:
-      self._clear_btn = ttk.Button(search_row, text="✕ Clear", style="Secondary.TButton", command=lambda: self.v_search.set(""))
+      self._clear_btn = ttk.Button(search_row, text="✕ Clear", style=SECONDARY_TBUTTON_STYLE, command=lambda: self.v_search.set(""))
       self._clear_btn.grid(row=0, column=2, sticky="e")
     ttk.Label(search_row, textvariable=self.v_match).grid(row=0, column=3, sticky="e", padx=6)
     self.v_search.trace_add("write", lambda *_: self._on_search_change())
@@ -1844,13 +1939,16 @@ class App:
       self._stop_btn = ttk.Button(btn, text="⏹️ Stop", bootstyle="danger", command=self._stop_app)
       self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
     else:
-      self._refresh_btn = ttk.Button(btn, text="🔄 Refresh", style="Primary.TButton", command=self._refresh_now)
+      PRIMARY_TBUTTON_STYLE = "Primary.TButton"
+      SUCCESS_TBUTTON_STYLE = "Success.TButton"
+      DANGER_TBUTTON_STYLE = "Danger.TButton"
+      self._refresh_btn = ttk.Button(btn, text="🔄 Refresh", style=PRIMARY_TBUTTON_STYLE, command=self._refresh_now)
       self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
-      self._export_btn = ttk.Button(btn, text="📁 Export", style="Success.TButton", command=self._export_files)
+      self._export_btn = ttk.Button(btn, text="📁 Export", style=SUCCESS_TBUTTON_STYLE, command=self._export_files)
       self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=4)
-      self._print_btn = ttk.Button(btn, text="🖨️ Print", style="Secondary.TButton", command=self._print_current)
+      self._print_btn = ttk.Button(btn, text="🖨️ Print", style=SECONDARY_TBUTTON_STYLE, command=self._print_current)
       self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
-      self._stop_btn = ttk.Button(btn, text="⏹️ Stop", style="Danger.TButton", command=self._stop_app)
+      self._stop_btn = ttk.Button(btn, text="⏹️ Stop", style=DANGER_TBUTTON_STYLE, command=self._stop_app)
       self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
     mc_row += 1
 
@@ -1859,6 +1957,177 @@ class App:
 
     order_fr = ttk.Frame(nb)
     nb.add(order_fr, text="📋 Shelf Order")
+
+    # --- Wishlist Tab ---
+    wishlist_fr = ttk.Frame(nb)
+    nb.add(wishlist_fr, text="⭐ Wishlist")
+    wishlist_fr.rowconfigure(0, weight=1)
+    wishlist_fr.columnconfigure(0, weight=1)
+    wishlist_tree = ttk.Treeview(
+      wishlist_fr,
+      columns=("Artist", "Title", "Discogs URL"),
+      show="tree headings",
+      selectmode="browse"
+    )
+    wishlist_columns = ("Artist", "Title", "Discogs URL")
+    wishlist_tree.config(columns=wishlist_columns, show="tree headings")
+    wishlist_tree.heading("#0", text="", anchor="center")
+    wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
+    wishlist_tree.heading("Artist", text="Artist", anchor="w")
+    wishlist_tree.heading("Title", text="Title", anchor="w")
+    wishlist_tree.heading("Discogs URL", text="Discogs URL", anchor="w")
+    wishlist_tree.column("Artist", width=180, minwidth=80, stretch=True, anchor="w")
+    wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
+    wishlist_tree.column("Discogs URL", width=260, minwidth=120, stretch=True, anchor="w")
+    wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+    # Populate wishlist
+    from core.wishlist import load_wishlist, remove_from_wishlist
+    self._wishlist_rows = []  # Ensure attribute always exists before any use
+    def refresh_wishlist_tree():
+      wishlist_tree.delete(*wishlist_tree.get_children())
+      from types import SimpleNamespace
+      # Always initialize _wishlist_rows, even if no entries
+      self._wishlist_rows = []
+      wishlist_data = list(load_wishlist())
+      for i, entry in enumerate(wishlist_data):
+        # Build a ReleaseRow-like object for each wishlist entry
+        row = SimpleNamespace(
+          artist_display=entry.get("artist", ""),
+          title=entry.get("title", ""),
+          year=entry.get("year", ""),
+          label=entry.get("label", ""),
+          catno=entry.get("catno", ""),
+          country=entry.get("country", ""),
+          format_str=entry.get("format", ""),
+          discogs_url=entry.get("discogs_url", entry.get("url", "")),
+          notes=entry.get("notes", ""),
+          release_id=entry.get("release_id"),
+          master_id=entry.get("master_id"),
+          sort_artist=entry.get("artist", ""),
+          sort_title=entry.get("title", ""),
+          median_price=entry.get("median_price"),
+          lowest_price=entry.get("lowest_price"),
+          num_for_sale=entry.get("num_for_sale"),
+          price_currency=entry.get("price_currency", ""),
+          thumb_url=entry.get("thumb", ""),
+          cover_image_url=entry.get("cover_image_url", ""),
+          genres=entry.get("genres", ""),
+          styles=entry.get("styles", ""),
+          companies=entry.get("companies", ""),
+          contributors=entry.get("contributors", ""),
+          barcode=entry.get("barcode", ""),
+          tracklist=entry.get("tracklist", ""),
+          extra=entry.get("extra", "")
+        )
+        self._wishlist_rows.append(row)
+        # Use the same image logic as shelf order
+        placeholder = self._get_placeholder_image()
+        img = self._get_row_image(row, placeholder)
+        # Ensure values is a tuple of strings, matching the columns
+        values = (
+          str(getattr(row, "artist_display", "")),
+          str(getattr(row, "title", "")),
+          str(getattr(row, "discogs_url", getattr(row, "url", "")))
+        )
+        tag = "row_odd" if i % 2 == 1 else "row_even"
+        if img:
+          wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
+        else:
+          wishlist_tree.insert("", "end", values=values, tags=(tag,))
+    # Download missing thumbnails for wishlist
+    if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
+      # Always call with a list, even if empty
+      self._download_missing_thumbnails(self._wishlist_rows)
+    self.refresh_wishlist_tree = refresh_wishlist_tree
+    self.refresh_wishlist_tree()
+
+    # Double-click to open Discogs URL
+    def on_wishlist_double_click(event):
+      item = wishlist_tree.selection()
+      if not item:
+        return
+      idx = wishlist_tree.index(item[0])
+      if idx < 0 or idx >= len(self._wishlist_rows):
+        return
+      row = self._wishlist_rows[idx]
+      # Use the exact same popup logic as shelf order
+      popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
+      cover_img, row_offset = self._add_album_cover_to_popup(popup, row, bg)
+      # If no image was shown, forcibly show the placeholder (double-check after all logic)
+      if not any(isinstance(child, tk.Label) and getattr(child, 'image', None) for child in popup.outer.winfo_children()):
+        if hasattr(self, '_thumbnail_cache'):
+          placeholder = self._thumbnail_cache.get_placeholder()
+          img_label = tk.Label(popup.outer, image=placeholder, bg=bg)
+          img_label.image = placeholder
+          img_label.pack(pady=(12, 24))
+          row_offset = 1
+      details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
+      self._populate_album_details(details_frame, row, fg, bg, row_offset)
+      self._setup_details_scroll(details_frame, details_canvas)
+      self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
+
+    def _create_album_popup_window(self, row):
+      # Create a popup window with album info (works for both ReleaseRow and SimpleNamespace)
+      popup = tk.Toplevel(self.root)
+      popup.title(f"Album Info: {getattr(row, 'artist_display', '')} - {getattr(row, 'title', '')}")
+      popup.geometry("600x500")
+      popup.configure(bg="#222")
+
+      # Try to get a cover image
+      img = None
+      thumb_url = getattr(row, 'thumb_url', None) or getattr(row, 'cover_image_url', None)
+      if hasattr(self, '_thumbnail_cache') and thumb_url:
+        img = self._thumbnail_cache.load_preview(0, thumb_url)
+      if not img and hasattr(self, '_thumbnail_cache'):
+        img = self._thumbnail_cache.get_placeholder()
+      if img:
+        img_label = tk.Label(popup, image=img, bg="#222")
+        img_label.image = img
+        img_label.pack(pady=10)
+
+      # Info fields
+      info_frame = tk.Frame(popup, bg="#222")
+      info_frame.pack(fill="both", expand=True, padx=20, pady=10)
+      def add_info(label, value):
+        if value:
+          rowf = tk.Frame(info_frame, bg="#222")
+          rowf.pack(anchor="w", fill="x", pady=2)
+          tk.Label(rowf, text=label+":", fg="#fff", bg="#222", font=("Segoe UI", 10, "bold")).pack(side="left")
+          tk.Label(rowf, text=str(value), fg="#fff", bg="#222", font=("Segoe UI", 10)).pack(side="left")
+
+      add_info("Artist", getattr(row, "artist_display", ""))
+      add_info("Title", getattr(row, "title", ""))
+      add_info("Year", getattr(row, "year", ""))
+      add_info("Label", getattr(row, "label", ""))
+      add_info("Cat No", getattr(row, "catno", ""))
+      add_info("Country", getattr(row, "country", ""))
+      add_info("Format", getattr(row, "format_str", ""))
+      add_info("Genres", getattr(row, "genres", ""))
+      add_info("Styles", getattr(row, "styles", ""))
+      add_info("Notes", getattr(row, "notes", ""))
+      add_info("Discogs URL", getattr(row, "discogs_url", ""))
+      add_info("Barcode", getattr(row, "barcode", ""))
+      add_info("Tracklist", getattr(row, "tracklist", ""))
+      add_info("Contributors", getattr(row, "contributors", ""))
+      add_info("Companies", getattr(row, "companies", ""))
+      add_info("Extra", getattr(row, "extra", ""))
+
+      # Add a close button
+      close_btn = tk.Button(popup, text="Close", command=popup.destroy, bg="#444", fg="#fff", font=("Segoe UI", 10, "bold"))
+      close_btn.pack(pady=10)
+    wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
+
+    # Right-click to remove from wishlist
+    def on_wishlist_right_click(event):
+      item = wishlist_tree.identify_row(event.y)
+      if not item:
+        return
+      values = wishlist_tree.item(item, "values")
+      artist, title = values[0], values[1]
+      remove_from_wishlist(artist, title)
+      refresh_wishlist_tree()
+    wishlist_tree.bind("<Button-3>", on_wishlist_right_click)
     order_fr.rowconfigure(1, weight=1)
     order_fr.columnconfigure(0, weight=1)
     
@@ -1975,15 +2244,22 @@ class App:
     # Bind hover events for album artwork preview
     self.order_tree.bind("<Motion>", self._on_tree_motion)
     self.order_tree.bind("<Leave>", self._on_tree_leave)
-    
+
+    # Bind double-click to show album info popup
+    self.order_tree.bind("<Double-1>", self._on_album_double_click)
+
+    # ...existing code...
+    # Bind double-click to show album info popup
+    self.order_tree.bind("<Double-1>", self._on_album_double_click)
+
     # Initialize image preview popup
     self._image_preview = ImagePreviewPopup(self.root, self._thumbnail_cache)
     self._hover_release_id: int | None = None
-    
+
     # Keep Text widget reference for backward compatibility (hidden)
     self.order_text = tk.Text(order_wrap, height=1, width=1)
     # Don't grid it - it's just for compatibility with existing code
-    
+
     # Store reference to rows for drag-drop operations
     self._tree_rows: list[ReleaseRow] = []
 
@@ -2010,64 +2286,200 @@ class App:
       bd=0,
       padx=12,
       pady=12,
-      selectbackground=self._colors["accent"],
-      selectforeground="#ffffff",
     )
     self.log.grid(row=0, column=0, sticky="nsew")
     log_scroll.config(command=self.log.yview)
 
-    # Status bar with accent background - clean footer with multiple info sections
-    self._status_bar = tk.Frame(frm, bg=self._colors["accent"], bd=0, highlightthickness=0)
-    self._status_bar.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=0, pady=(12, 0))
-    self._status_bar.columnconfigure(0, weight=1)
-    
-    # Left section - main status
-    self._status_label = tk.Label(
-      self._status_bar, 
-      textvariable=self.v_status, 
-      bg=self._colors["accent"], 
-      fg="#ffffff", 
-      anchor="w", 
-      padx=20, 
-      pady=10,
-      font=(FONT_SEGOE_UI_SEMIBOLD, 10)
+  def _on_album_double_click(self, event):
+    """Show a popup with album details when a row is double-clicked."""
+    item_id = self.order_tree.identify_row(event.y)
+    row = self._get_row_from_item_id(item_id)
+    if not row:
+      return
+    popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
+    _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
+    details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
+    self._populate_album_details(details_frame, row, fg, bg, row_offset)
+    self._setup_details_scroll(details_frame, details_canvas)
+    self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
+
+  def _get_row_from_item_id(self, item_id):
+    if not item_id:
+      return None
+    try:
+      idx = self.order_tree.index(item_id)
+      if idx < 0 or idx >= len(self._tree_rows):
+        return None
+      return self._tree_rows[idx]
+    except Exception:
+      return None
+
+  def _create_album_popup_window(self, row):
+    popup = tk.Toplevel(self.root)
+    popup.title(f"Album Info: {row.artist_display} - {row.title}")
+    popup.transient(self.root)
+    popup.grab_set()
+    popup.resizable(False, False)
+    width, height = 640, 520
+    popup.geometry(f"{width}x{height}")
+    popup.update_idletasks()
+    x = (popup.winfo_screenwidth() // 2) - (width // 2)
+    y = (popup.winfo_screenheight() // 2) - (height // 2)
+    popup.geometry(f"{width}x{height}+{x}+{y}")
+    bg = self._colors["panel"] if hasattr(self, "_colors") else "#16213e"
+    fg = self._colors["text"] if hasattr(self, "_colors") else "#eaeaea"
+    accent = self._colors["accent"] if hasattr(self, "_colors") else "#6c63ff"
+    btn_bg = self._colors["button_bg"] if hasattr(self, "_colors") else "#6c63ff"
+    btn_fg = self._colors["button_fg"] if hasattr(self, "_colors") else "#ffffff"
+    popup.outer = tk.Frame(popup, bg=bg, bd=2, relief="ridge")
+    popup.outer.pack(fill="both", expand=True, padx=8, pady=8)
+    return popup, bg, fg, accent, btn_bg, btn_fg
+
+  def _add_album_cover_to_popup(self, popup, row, bg):
+    cover_img = None
+    # Try to load the preview image for the release (works for both shelf and wishlist rows)
+    if hasattr(self, '_thumbnail_cache') and getattr(row, 'release_id', None):
+      cover_img = self._thumbnail_cache.load_preview(row.release_id, getattr(row, 'cover_image_url', None))
+      if not cover_img:
+        cover_img = self._thumbnail_cache.load_photo(row.release_id)
+    # Always fall back to placeholder if no image is found
+    if not cover_img and hasattr(self, '_thumbnail_cache'):
+      cover_img = self._thumbnail_cache.get_placeholder()
+    row_offset = 0
+    # Create a horizontal frame to hold image and buttons
+    top_frame = tk.Frame(popup.outer, bg=bg)
+    # Center the top_frame horizontally
+    top_frame.pack(pady=(12, 24))
+    # Center content in top_frame using grid
+    top_frame.grid_columnconfigure(0, weight=1)
+    top_frame.grid_columnconfigure(1, weight=1)
+    # Image in column 0, centered vertically
+    if cover_img:
+        img_label = tk.Label(top_frame, image=cover_img, bg=bg)
+        img_label.image = cover_img
+        img_label.grid(row=0, column=0, padx=(0, 24), sticky="nsew")
+        row_offset = 1
+    # Button frame in column 1, centered vertically
+    btn_stack = tk.Frame(top_frame, bg=bg)
+    btn_stack.grid(row=0, column=1, sticky="nsew")
+    # Attach btn_stack to popup for use in _add_popup_buttons
+    popup._btn_stack = btn_stack
+    return cover_img, row_offset
+
+  def _add_scrollable_details_area(self, popup, bg):
+    details_canvas = tk.Canvas(popup.outer, bg=bg, highlightthickness=0)
+    scrollbar = tk.Scrollbar(popup.outer, orient="vertical", command=details_canvas.yview)
+    details_canvas.configure(yscrollcommand=scrollbar.set)
+    details_canvas.pack(side="left", fill="both", expand=True, padx=(0,0), pady=0)
+    scrollbar.pack(side="right", fill="y")
+    details_frame = tk.Frame(details_canvas, bg=bg)
+    details_canvas.create_window((0,0), window=details_frame, anchor="nw")
+    return details_frame, details_canvas
+
+  def _populate_album_details(self, details_frame, row, fg, bg, row_offset):
+    details = [
+      ("Artist", getattr(row, "artist_display", "")),
+      ("Title", getattr(row, "title", "")),
+      ("Year", getattr(row, "year", "")),
+      ("Label", getattr(row, "label", "")),
+      ("Catalog #", getattr(row, "catno", "")),
+      ("Format", getattr(row, "format_str", getattr(row, "format", ""))),
+      ("Country", getattr(row, "country", "")),
+      ("Price", f"{getattr(row, 'lowest_price', '')} {getattr(row, 'price_currency', '')}" if getattr(row, "lowest_price", None) is not None else ""),
+      ("Discogs ID", getattr(row, "release_id", "")),
+      ("Master ID", getattr(row, "master_id", "")),
+      ("Barcode", getattr(row, "barcode", "")),
+      ("Companies", getattr(row, "companies", "")),
+      ("Contributors", getattr(row, "contributors", "")),
+      ("URL", getattr(row, "discogs_url", getattr(row, "url", ""))),
+      ("Genres", getattr(row, "genres", "")),
+      ("Styles", getattr(row, "styles", "")),
+      ("Notes", getattr(row, "notes", "")),
+      ("Tracklist", getattr(row, "tracklist", "")),
+      ("Extra", getattr(row, "extra", "")),
+    ]
+    for i, (label, value) in enumerate(details):
+      if value:
+        tk.Label(details_frame, text=label+":", anchor="e", font=(FONT_SEGOE_UI, 14, "bold"), bg=bg, fg=fg).grid(row=i+row_offset, column=0, sticky="e", padx=(0,18), pady=10)
+        tk.Label(details_frame, text=str(value), anchor="w", font=(FONT_SEGOE_UI, 14), bg=bg, fg=fg, wraplength=480, justify="left").grid(row=i+row_offset, column=1, sticky="w", padx=(0,12), pady=10)
+
+  def _setup_details_scroll(self, details_frame, details_canvas):
+    details_frame.update_idletasks()
+    details_canvas.config(scrollregion=details_canvas.bbox("all"))
+    def _on_frame_configure(event):
+      details_canvas.config(scrollregion=details_canvas.bbox("all"))
+    details_frame.bind("<Configure>", _on_frame_configure)
+    def _on_mousewheel(event):
+      if event.delta:
+        direction = -1 if event.delta > 0 else 1
+        details_canvas.yview_scroll(direction, "units")
+      elif hasattr(event, 'num'):
+        if event.num == 4:
+          details_canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+          details_canvas.yview_scroll(1, "units")
+      return "break"
+    details_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    details_canvas.bind_all("<Button-4>", _on_mousewheel)
+    details_canvas.bind_all("<Button-5>", _on_mousewheel)
+    def _unbind_mousewheel():
+      details_canvas.unbind_all("<MouseWheel>")
+      details_canvas.unbind_all("<Button-4>")
+      details_canvas.unbind_all("<Button-5>")
+    details_canvas.master.master.protocol("WM_DELETE_WINDOW", lambda: (details_canvas.master.master.destroy(), _unbind_mousewheel()))
+
+  def _add_popup_buttons(self, popup, row, accent, btn_bg, btn_fg, bg):
+    # Use the stacked button frame if present (from _add_album_cover_to_popup)
+    btn_frame = getattr(popup, '_btn_stack', None)
+    if btn_frame is None:
+        btn_frame = tk.Frame(popup.outer, bg=bg)
+        btn_frame.pack(fill="x", pady=(12,0))
+
+    url = getattr(row, "url", "")
+    if url:
+        def open_url():
+            import webbrowser
+            webbrowser.open(url)
+        btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, 13), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
+        btn.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+
+    # Play on Spotify button
+    def play_on_spotify():
+        from core.spotify_utils import open_album_on_spotify
+        artist = getattr(row, "artist_display", "")
+        album = getattr(row, "title", "")
+        open_album_on_spotify(artist, album)
+    btn_spotify = tk.Button(
+        btn_frame, text="Play on Spotify", command=play_on_spotify,
+        font=(FONT_SEGOE_UI, 13), bg="#1db954", fg="#fff", activebackground="#1ed760", activeforeground="#fff", relief="groove"
     )
-    self._status_label.grid(row=0, column=0, sticky="w")
-    
-    # Right section - info items
-    info_frame = tk.Frame(self._status_bar, bg=self._colors["accent"])
-    info_frame.grid(row=0, column=1, sticky="e", padx=10)
-    
-    # Collection count
-    self._count_icon = tk.Label(info_frame, text="💿", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._count_icon.grid(row=0, column=0, padx=(0, 4))
-    self._count_label = tk.Label(info_frame, textvariable=self.v_collection_count, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._count_label.grid(row=0, column=1, padx=(0, 16))
-    
-    # Separator
-    tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=(FONT_SEGOE_UI, 10)).grid(row=0, column=2, padx=(0, 16))
-    
-    # Last sync time
-    self._sync_icon = tk.Label(info_frame, text="🕓", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._sync_icon.grid(row=0, column=3, padx=(0, 4))
-    self._sync_label = tk.Label(info_frame, textvariable=self.v_last_sync, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._sync_label.grid(row=0, column=4, padx=(0, 16))
-    
-    # Separator
-    self._value_sep = tk.Label(info_frame, text="•", bg=self._colors["accent"], fg="#a0a0ff", font=(FONT_SEGOE_UI, 10))
-    self._value_sep.grid(row=0, column=5, padx=(0, 16))
-    self._value_sep.grid_remove()  # Hidden by default
-    
-    # Total value (shown only when prices enabled)
-    self._value_icon = tk.Label(info_frame, text="💰", bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI, 10))
-    self._value_icon.grid(row=0, column=6, padx=(0, 4))
-    self._value_icon.grid_remove()  # Hidden by default
-    self._value_label = tk.Label(info_frame, textvariable=self.v_total_value, bg=self._colors["accent"], fg="#ffffff", font=(FONT_SEGOE_UI_SEMIBOLD, 10))
-    self._value_label.grid(row=0, column=7, padx=(0, 10))
-    self._value_label.grid_remove()  # Hidden by default
-    
-    # Set up tooltips
-    self._setup_tooltips()
+    btn_spotify.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+
+    # Wishlist button
+    from core.wishlist import add_to_wishlist, remove_from_wishlist, is_in_wishlist
+    artist = getattr(row, "artist_display", "")
+    album = getattr(row, "title", "")
+    discogs_url = getattr(row, "discogs_url", getattr(row, "url", None))
+    wishlist_state = tk.StringVar()
+    def update_wishlist_state():
+        if is_in_wishlist(artist, album):
+            wishlist_state.set("Remove from Wishlist")
+        else:
+            wishlist_state.set("Add to Wishlist")
+    def toggle_wishlist():
+        if is_in_wishlist(artist, album):
+            remove_from_wishlist(artist, album)
+        else:
+            add_to_wishlist(artist, album, discogs_url)
+        update_wishlist_state()
+    update_wishlist_state()
+    btn_wishlist = tk.Button(
+        btn_frame, textvariable=wishlist_state, command=toggle_wishlist,
+        font=(FONT_SEGOE_UI, 13), bg="#ffb347", fg="#222", activebackground="#ffd580", activeforeground="#222", relief="groove"
+    )
+    btn_wishlist.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+
+    tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, 13), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="top", fill="x", padx=12, pady=(0, 0), ipadx=12, ipady=4)
 
   def _choose_dir(self) -> None:
     directory = filedialog.askdirectory(initialdir=self.v_output_dir.get() or str(Path.cwd()))
@@ -2187,51 +2599,42 @@ class App:
     """Handle mouse motion over the treeview for album artwork preview."""
     if not self._thumbnails_enabled or not self._image_preview:
       return
-    
-    # Identify the row and column under the cursor
+
+    def hide_preview():
+      if self._image_preview and self._hover_release_id is not None:
+        self._image_preview.hide(delay=50)
+        self._hover_release_id = None
+
     region = self.order_tree.identify_region(event.x, event.y)
     column = self.order_tree.identify_column(event.x)
-    
+
     # Only show preview when hovering the image column (#0 or tree region)
     if column != "#0" and region != "tree":
-      # Not over the image column, hide preview
-      if self._image_preview and self._hover_release_id is not None:
-        self._image_preview.hide(delay=50)
-        self._hover_release_id = None
+      hide_preview()
       return
-    
-    # Get the item under cursor
+
     item = self.order_tree.identify_row(event.y)
     if not item:
-      if self._image_preview and self._hover_release_id is not None:
-        self._image_preview.hide(delay=50)
-        self._hover_release_id = None
+      hide_preview()
       return
-    
-    # Get the row index
+
     try:
       idx = self.order_tree.index(item)
       if idx < 0 or idx >= len(self._tree_rows):
         return
-      
+
       row = self._tree_rows[idx]
-      if not row.release_id:
+      if not row.release_id or row.release_id == self._hover_release_id:
         return
-      
-      # Check if this is a new item
-      if row.release_id == self._hover_release_id:
-        return  # Already showing this one
-      
+
       self._hover_release_id = row.release_id
-      
-      # Get headers for downloading larger image
+
       try:
         from discogs_app import make_headers
         headers = make_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
         headers = {"User-Agent": "Mozilla/5.0"}
-      
-      # Show the preview popup with cover_image_url for high-res preview
+
       screen_x = event.x_root
       screen_y = event.y_root
       cover_url = getattr(row, 'cover_image_url', '') or row.thumb_url
@@ -2451,23 +2854,31 @@ class App:
 
   def _apply_theme(self) -> None:
     """Apply the current theme colors to all widgets."""
+    self._set_theme_colors()
+    self._configure_styles()
+    self._update_theme_button()
+    self._update_header()
+    self._update_status_bar_widgets()
+    self._update_treeview_widget()
+    self._update_search_entry()
+    self._update_settings_entries()
+    self._update_settings_frames()
+    self._update_log_widget()
+    self._update_root_bg()
+
+  def _set_theme_colors(self):
     if self.v_dark_mode.get():
       self._colors = self._dark_colors.copy()
       self.theme_btn.config(text="🌙 Dark")
-      # Switch ttkbootstrap theme if available
       if TTKBOOTSTRAP_AVAILABLE:
         self.style.theme_use("darkly")
     else:
       self._colors = self._light_colors.copy()
       self.theme_btn.config(text="☀️ Light")
-      # Switch ttkbootstrap theme if available
       if TTKBOOTSTRAP_AVAILABLE:
         self.style.theme_use("litera")
 
-    # Reconfigure all ttk styles
-    self._configure_styles()
-
-    # Update theme button
+  def _update_theme_button(self):
     self.theme_btn.config(
       bg=self._colors["accent"],
       fg="#ffffff",
@@ -2475,30 +2886,27 @@ class App:
       activeforeground="#ffffff"
     )
 
-    # Update header
+  def _update_header(self):
     try:
       self._header.config(bg=self._colors["bg"])
       self._header_title.config(bg=self._colors["bg"], fg=self._colors["text"])
       self._header_subtitle.config(bg=self._colors["bg"], fg=self._colors["muted"])
-      # Update accent strip if it exists
       for child in self._header.winfo_children():
         if child.winfo_class() == "Frame" and child.cget("height") == 4:
           child.config(bg=self._colors["accent"])
     except Exception:
       pass
 
-    # Update status bar
+  def _update_status_bar_widgets(self):
     try:
       self._status_bar.config(bg=self._colors["accent"])
       self._status_label.config(bg=self._colors["accent"], fg="#ffffff")
-      # Update all status bar children
       for widget in [self._count_icon, self._count_label, self._sync_icon, self._sync_label, 
                      self._value_sep, self._value_icon, self._value_label]:
         try:
           widget.config(bg=self._colors["accent"])
         except Exception:
           pass
-      # Update info frame background
       for child in self._status_bar.winfo_children():
         try:
           child.config(bg=self._colors["accent"])
@@ -2507,12 +2915,9 @@ class App:
     except Exception:
       pass
 
-    # Update order Treeview widget
+  def _update_treeview_widget(self):
     try:
-      # Update Treeview style for theme
       self._configure_treeview_style()
-      
-      # Update Treeview tag colors for current theme
       if self.v_dark_mode.get():
         self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
@@ -2523,14 +2928,12 @@ class App:
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
         self.order_tree.tag_configure("row_odd", background="#e8eef4", foreground=self._colors["order_fg"])
         self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
-      
-      # Re-render if we have results
       if self._last_result:
         self._render_order(self._last_result)
     except Exception:
       pass
-    
-    # Update search entry colors
+
+  def _update_search_entry(self):
     try:
       self._search_entry.config(
         bg=self._colors["order_bg"],
@@ -2541,8 +2944,8 @@ class App:
       )
     except Exception:
       pass
-    
-    # Update settings entry widgets
+
+  def _update_settings_entries(self):
     try:
       entry_config = {
         "bg": self._colors["order_bg"],
@@ -2556,8 +2959,6 @@ class App:
           widget.config(**entry_config)
         except Exception:
           pass
-      
-      # Update spinbox
       self._poll_spin.config(
         bg=self._colors["order_bg"],
         fg=self._colors["order_fg"],
@@ -2566,8 +2967,6 @@ class App:
         highlightbackground=self._colors["panel2"],
         highlightcolor=self._colors["accent"],
       )
-      
-      # Update option menus
       menu_config = {
         "bg": self._colors["order_bg"],
         "fg": self._colors["order_fg"],
@@ -2583,19 +2982,16 @@ class App:
     except Exception:
       pass
 
-    # Update Settings LabelFrame and inner frames
+  def _update_settings_frames(self):
     try:
-      # Settings LabelFrame
       self._settings_frame.config(
         bg=self._colors["panel"],
         fg=self._colors["accent"],
       )
-      # Inner frames
       frame_config = {"bg": self._colors["panel"]}
       for frame in [self._out_row, self._opt_row, self._sort_row, self._price_info]:
         try:
           frame.config(**frame_config)
-          # Update child labels
           for child in frame.winfo_children():
             if child.winfo_class() == "Label":
               try:
@@ -2607,7 +3003,7 @@ class App:
     except Exception:
       pass
 
-    # Update log widget
+  def _update_log_widget(self):
     try:
       self.log.config(
         background=self._colors["order_bg"],
@@ -2617,7 +3013,7 @@ class App:
     except Exception:
       pass
 
-    # Update root window background
+  def _update_root_bg(self):
     try:
       self.root.config(bg=self._colors["panel2"])
     except Exception:
@@ -2628,6 +3024,12 @@ class App:
     self.log_q.put(f"[{ts}] {msg}\n")
 
   def _pump_queues(self) -> None:
+    self._handle_log_queue()
+    self._handle_result_queue()
+    self._handle_progress_queue()
+    self.root.after(100, self._pump_queues)
+
+  def _handle_log_queue(self) -> None:
     try:
       while True:
         line = self.log_q.get_nowait()
@@ -2636,6 +3038,7 @@ class App:
     except queue.Empty:
       pass
 
+  def _handle_result_queue(self) -> None:
     try:
       while True:
         result = self.result_q.get_nowait()
@@ -2644,109 +3047,123 @@ class App:
         self._update_status_bar(result)
     except queue.Empty:
       pass
-    
-    # Handle progress dialog commands from background thread
+
+  def _handle_progress_queue(self) -> None:
     try:
       while True:
         action, message = self.progress_q.get_nowait()
-        if action == "show":
-          if self._progress_dialog is None:
-            self._progress_dialog = ProgressDialog(self.root, "Fetching Data", message or "Please wait...")
-        elif action == "update":
-          if self._progress_dialog is not None:
-            self._progress_dialog.update_progress(message or "")
-        elif action == "message":
-          if self._progress_dialog is not None:
-            self._progress_dialog.update_message(message or "")
-        elif action == "close":
-          if self._progress_dialog is not None:
-            self._progress_dialog.close()
-            self._progress_dialog = None
+        self._process_progress_action(action, message)
     except queue.Empty:
       pass
 
-    self.root.after(100, self._pump_queues)
+  def _process_progress_action(self, action: str, message: str | None) -> None:
+    if action == "show":
+      self._set_action_buttons_state("disabled")
+      if self._progress_dialog is None:
+        self._progress_dialog = ProgressDialog(self.root, "Working...", message or "Please wait...")
+    elif action == "update" and self._progress_dialog is not None:
+      self._progress_dialog.update_progress(message or "")
+    elif action == "message" and self._progress_dialog is not None:
+      self._progress_dialog.update_message(message or "")
+    elif action == "error" and self._progress_dialog is not None:
+      self._progress_dialog.set_error(message or "An error occurred.")
+      self._progress_dialog.top.after(1600, self._progress_dialog.close)
+      self._progress_dialog = None
+      self._set_action_buttons_state("normal")
+    elif action == "done" and self._progress_dialog is not None:
+      self._progress_dialog.set_done(message or "Done!")
+      self._progress_dialog = None
+      self._set_action_buttons_state("normal")
+    elif action == "close" and self._progress_dialog is not None:
+      self._progress_dialog.close()
+      self._progress_dialog = None
+      self._set_action_buttons_state("normal")
 
   def _render_order(self, result: BuildResult) -> None:
     """Render the shelf order in the Treeview widget."""
-    # Clear existing items
-    for item in self.order_tree.get_children():
-      self.order_tree.delete(item)
-    
+    self._clear_treeview()
     if not result.rows_sorted:
       self._tree_rows = []
       self.v_match.set("0 items")
       return
-    
-    # Apply manual ordering if enabled
+
+    rows = self._apply_manual_order_if_enabled(result)
+    self._tree_rows = list(rows)
+    self._show_or_hide_price_column()
+    placeholder = self._get_placeholder_image()
+    self._populate_treeview_rows(rows, placeholder)
+    self.v_match.set(f"{len(rows)} items")
+    self._highlight_search()
+    if self._thumbnails_enabled:
+      self._download_missing_thumbnails(rows)
+
+  def _clear_treeview(self):
+    """Clear all items from the treeview."""
+    for item in self.order_tree.get_children():
+      self.order_tree.delete(item)
+
+  def _apply_manual_order_if_enabled(self, result: BuildResult):
+    """Apply manual ordering if enabled and update manual order manager."""
     rows = result.rows_sorted
     if self.v_manual_order_enabled.get():
-      # Update manual order manager with current username
       if result.username:
         self._manual_order.set_username(result.username)
       rows = self._manual_order.apply_order(rows)
-    
-    # Store rows for drag-drop operations
-    self._tree_rows = list(rows)
-    
-    # Show/hide Price column based on setting
+    return rows
+
+  def _show_or_hide_price_column(self):
+    """Show or hide the Price column based on the setting."""
     show_prices = self.v_show_prices.get()
     if show_prices:
       self.order_tree.column("Price", width=80, minwidth=70, stretch=False)
     else:
       self.order_tree.column("Price", width=0, minwidth=0, stretch=False)
-    
-    # Get placeholder image for items without thumbnails
-    placeholder = None
+
+  def _get_placeholder_image(self):
+    """Get placeholder image for items without thumbnails."""
     if self._thumbnails_enabled:
-      placeholder = self._thumbnail_cache.get_placeholder(self.root)
-    
-    # Populate treeview
+      return self._thumbnail_cache.get_placeholder()
+    return None
+
+  def _populate_treeview_rows(self, rows, placeholder):
+    """Populate the treeview with rows and images."""
+    show_prices = self.v_show_prices.get()
     for i, row in enumerate(rows):
       tag = "row_odd" if i % 2 == 1 else "row_even"
-      
-      # Format price
-      if show_prices and row.lowest_price is not None:
-        price_str = f"{row.lowest_price:.0f} {row.price_currency}"
-      elif show_prices:
-        price_str = "[Not listed]"
-      else:
-        price_str = ""
-      
-      # Format label/catno
+      price_str = self._format_price(row, show_prices)
       label_str = f"{row.label} {row.catno}".strip() if row.label or row.catno else ""
-      
-      # Format year
       year_str = str(row.year) if row.year else ""
-      
       values = (
-        str(i + 1),  # Row number
+        str(i + 1),
         row.artist_display,
         row.title,
         year_str,
         label_str,
         price_str,
       )
-      
-      # Get thumbnail image
-      img = None
-      if self._thumbnails_enabled and row.release_id:
-        img = self._thumbnail_cache.load_photo(row.release_id, self.root)
-        if img is None:
-          img = placeholder
-      
-      # Insert row with image
+      img = self._get_row_image(row, placeholder)
       if img:
         self.order_tree.insert("", "end", image=img, values=values, tags=(tag,))
       else:
         self.order_tree.insert("", "end", values=values, tags=(tag,))
-    
-    self.v_match.set(f"{len(rows)} items")
-    self._highlight_search()
-    
-    # Trigger background thumbnail downloads for uncached images
-    if self._thumbnails_enabled:
-      self._download_missing_thumbnails(rows)
+
+  def _format_price(self, row, show_prices):
+    """Format the price string for a row."""
+    if show_prices and row.lowest_price is not None:
+      return f"{row.lowest_price:.0f} {row.price_currency}"
+    elif show_prices:
+      return "[Not listed]"
+    else:
+      return ""
+
+  def _get_row_image(self, row, placeholder):
+    """Get the thumbnail image for a row, or placeholder if missing."""
+    img = None
+    if self._thumbnails_enabled and row.release_id:
+      img = self._thumbnail_cache.load_photo(row.release_id)
+      if img is None:
+        img = placeholder
+    return img
 
   def _download_missing_thumbnails(self, rows: list) -> None:
     """Start background download of missing thumbnails."""
@@ -2791,96 +3208,106 @@ class App:
     
     for i, (item, row) in enumerate(zip(items, rows)):
       if row.release_id:
-        img = self._thumbnail_cache.load_photo(row.release_id, self.root)
+        img = self._thumbnail_cache.load_photo(row.release_id)
         if img:
           self.order_tree.item(item, image=img)
 
   def _update_status_bar(self, result: BuildResult) -> None:
     """Update the status bar with collection info."""
     from datetime import datetime
-    
-    # Update collection count
+
+    self._update_collection_count(result)
+    self._update_last_sync()
+    self._update_total_value_section(result)
+
+  def _update_collection_count(self, result: BuildResult) -> None:
     count = len(result.rows_sorted)
     self.v_collection_count.set(f"{count} albums")
-    
-    # Update last sync time
+
+  def _update_last_sync(self) -> None:
+    from datetime import datetime
     now = datetime.now()
     self.v_last_sync.set(f"Synced {now.strftime('%H:%M')}")
-    
-    # Calculate and show total value if prices are available
+
+  def _update_total_value_section(self, result: BuildResult) -> None:
     if self.v_show_prices.get() and result.rows_sorted:
-      total_value = 0.0
-      priced_count = 0
-      currency = ""
-      
-      for row in result.rows_sorted:
-        if row.lowest_price is not None:
-          total_value += row.lowest_price
-          priced_count += 1
-          if not currency and row.price_currency:
-            currency = row.price_currency
-      
+      total_value, priced_count, currency = self._calculate_total_value(result.rows_sorted)
       if priced_count > 0:
-        # Format the value nicely
-        if total_value >= 1000:
-          value_str = f"{total_value:,.0f} {currency}"
-        else:
-          value_str = f"{total_value:.0f} {currency}"
-        
+        value_str = self._format_total_value(total_value, currency)
         self.v_total_value.set(f"~{value_str} ({priced_count} priced)")
-        
-        # Show the value section
-        self._value_sep.grid()
-        self._value_icon.grid()
-        self._value_label.grid()
+        self._show_value_section()
       else:
-        # Hide value section if no prices
-        self._value_sep.grid_remove()
-        self._value_icon.grid_remove()
-        self._value_label.grid_remove()
+        self._hide_value_section()
     else:
-      # Hide value section
-      self._value_sep.grid_remove()
-      self._value_icon.grid_remove()
-      self._value_label.grid_remove()
+      self._hide_value_section()
+
+  def _calculate_total_value(self, rows) -> tuple[float, int, str]:
+    total_value = 0.0
+    priced_count = 0
+    currency = ""
+    for row in rows:
+      if row.lowest_price is not None:
+        total_value += row.lowest_price
+        priced_count += 1
+        if not currency and row.price_currency:
+          currency = row.price_currency
+    return total_value, priced_count, currency
+
+  def _format_total_value(self, total_value: float, currency: str) -> str:
+    if total_value >= 1000:
+      return f"{total_value:,.0f} {currency}"
+    else:
+      return f"{total_value:.0f} {currency}"
+
+  def _show_value_section(self) -> None:
+    for attr in ['_value_sep', '_value_icon', '_value_label']:
+      if hasattr(self, attr):
+        getattr(self, attr).grid()
+
+  def _hide_value_section(self) -> None:
+    for attr in ['_value_sep', '_value_icon', '_value_label']:
+      if hasattr(self, attr):
+        getattr(self, attr).grid_remove()
 
   def _highlight_search(self) -> None:
     """Highlight matching rows in the Treeview based on search query."""
     q = (self.v_search.get() or "").strip().lower()
-    
-    # Reset all tags to default alternating colors
+    self._reset_treeview_tags()
+    if not q:
+      self._set_match_count_label()
+      return
+    matches, first_match_item = self._find_and_highlight_matches(q)
+    self.v_match.set(f"{matches} matches" if matches != 1 else "1 match")
+    if first_match_item is not None:
+      self.order_tree.see(first_match_item)
+      self.order_tree.selection_set(first_match_item)
+
+  def _reset_treeview_tags(self):
+    """Reset all tags to default alternating colors."""
     for i, item in enumerate(self.order_tree.get_children()):
       tag = "row_odd" if i % 2 == 1 else "row_even"
       self.order_tree.item(item, tags=(tag,))
-    
-    if not q:
-      if self._tree_rows:
-        self.v_match.set(f"{len(self._tree_rows)} items")
-      else:
-        self.v_match.set("")
-      return
-    
-    # Find and highlight matching rows
+
+  def _set_match_count_label(self):
+    """Set the match count label based on current rows."""
+    if self._tree_rows:
+      self.v_match.set(f"{len(self._tree_rows)} items")
+    else:
+      self.v_match.set("")
+
+  def _find_and_highlight_matches(self, q: str):
+    """Find and highlight matching rows, returning match count and first match item."""
     matches = 0
     first_match_item = None
-    
     for i, item in enumerate(self.order_tree.get_children()):
       values = self.order_tree.item(item, "values")
-      # Search across all columns (except row number)
       row_text = " ".join(str(v) for v in values[1:]).lower()
-      
       if q in row_text:
         self.order_tree.item(item, tags=("search_match",))
         matches += 1
         if first_match_item is None:
           first_match_item = item
-    
-    self.v_match.set(f"{matches} matches" if matches != 1 else "1 match")
-    
-    # Scroll to first match
-    if first_match_item is not None:
-      self.order_tree.see(first_match_item)
-      self.order_tree.selection_set(first_match_item)
+    return matches, first_match_item
 
   def _on_search_change(self) -> None:
     self._highlight_search()
@@ -2983,34 +3410,23 @@ class App:
     """Background thread: poll collection count; rebuild on change or manual refresh."""
     self._log("Watcher started.")
     self.v_status.set("Watching for changes…")
-    
-    # Progress callback to send messages to the main thread via queue
+
     def progress_callback(action: str, message: str | None):
       self.progress_q.put((action, message))
-    
+
     while not self._stop.is_set():
       cfg = self._get_cfg()
       try:
-        # Check for token
-        token_str = cfg.token or os.environ.get("DISCOGS_TOKEN", "")
-        if not token_str:
-          self._log("Error: No Discogs token provided. Enter your token in the Settings.")
-          self.v_status.set("Error: No token (see Log tab)")
-          self._wake.clear()
-          self._wake.wait(timeout=cfg.poll_seconds)
+        if not self._has_valid_token(cfg):
+          self._handle_missing_token(cfg)
           continue
 
-        token = core.get_token(cfg.token or None)
-        headers = core.discogs_headers(token, cfg.user_agent)
-        ident = core.get_identity(headers)
-        username = ident.get("username")
-        if not username:
-          raise RuntimeError("Could not determine username from token.")
-
+        _, headers, username = self._get_user_info(cfg)
         count = get_collection_count(headers, username)
         force = self._force_rebuild
         self._force_rebuild = False
 
+<<<<<<< HEAD
         if self._last_count is None or force:
           if self._last_count is None:
             self._last_count = count
@@ -3047,26 +3463,103 @@ class App:
               self.progress_q.put(("close", None))
           else:
             self.v_status.set(f"No changes. Polling every {cfg.poll_seconds}s")
+=======
+        if self._should_build_initial(force):
+          self._handle_initial_build(cfg, count, progress_callback)
+        elif count != self._last_count:
+          self._handle_collection_changed(cfg, count, progress_callback)
+        else:
+          self.v_status.set(f"No changes. Polling every {cfg.poll_seconds}s")
+>>>>>>> ded8bd9b15332e289e1e82e4e9c2ed01b371bdac
 
       except Exception as e:
-        self._log(f"Error: {e}")
-        self._log(traceback.format_exc())
-        self.v_status.set("Error (see Log tab).")
-        # Close any open progress dialog on error
-        self.progress_q.put(("close", None))
+        self._handle_watch_exception(e)
 
-      # Wait for next poll or manual refresh
       self._wake.clear()
       self._wake.wait(timeout=cfg.poll_seconds)
 
     self._log("Watcher stopped.")
 
+  def _has_valid_token(self, cfg):
+    return bool(cfg.token or os.environ.get("DISCOGS_TOKEN", ""))
+
+  def _handle_missing_token(self, cfg):
+    self._log("Error: No Discogs token provided. Enter your token in the Settings.")
+    self.v_status.set("Error: No token (see Log tab)")
+    self._wake.clear()
+    self._wake.wait(timeout=cfg.poll_seconds)
+
+  def _get_user_info(self, cfg):
+    token = core.get_token(cfg.token or None)
+    headers = core.discogs_headers(token, cfg.user_agent)
+    ident = core.get_identity(headers)
+    username = ident.get("username")
+    if not username:
+      raise RuntimeError("Could not determine username from token.")
+    return token, headers, username
+
+  def _should_build_initial(self, force):
+    return self._last_count is None or force
+
+  def _handle_initial_build(self, cfg, count, progress_callback):
+    if self._last_count is None:
+      self._last_count = count
+      self._log(f"Initial collection count: {count}")
+    else:
+      self._log(f"Forced refresh. Collection count: {count}")
+    # --- Update wishlist from Discogs ---
+    try:
+      from core.wishlist import save_wishlist
+      from core.discogs_api import fetch_discogs_wantlist
+      token = self.v_token.get().strip()
+      if token:
+        self._log("Updating wishlist from Discogs…")
+        wantlist = fetch_discogs_wantlist(token)
+        save_wishlist(wantlist)
+        self._log(f"Wishlist updated from Discogs. {len(wantlist)} items.")
+        # Refresh wishlist tab if function is available
+        try:
+          if hasattr(self, "refresh_wishlist_tree"):
+            self.refresh_wishlist_tree()
+        except Exception:
+          pass
+    except Exception as e:
+      self._log(f"Failed to update wishlist from Discogs: {e}")
+    # ---
+    self._log("Building shelf order…")
+    self.v_status.set("Building…")
+    result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
+    self.result_q.put(result)
+    self._last_built_at = time.time()
+    self._log(f"Build complete. Items: {len(result.rows_sorted)}")
+    self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+
+  def _handle_collection_changed(self, cfg, count, progress_callback):
+    self._log(f"Collection changed: {self._last_count} → {count}")
+    self._last_count = count
+    self._log("Rebuilding shelf order…")
+    self.v_status.set("Rebuilding…")
+    result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
+    self.result_q.put(result)
+    self._last_built_at = time.time()
+    self._log(f"Build complete. Items: {len(result.rows_sorted)}")
+    self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+
+  def _handle_watch_exception(self, e):
+    self._log(f"Error: {e}")
+    self._log(traceback.format_exc())
+    self.v_status.set("Error (see Log tab).")
+    self.progress_q.put(("close", None))
+
 
 def main() -> None:
   # Use ttkbootstrap Window for better theming if available
   if TTKBOOTSTRAP_AVAILABLE:
-    import ttkbootstrap as ttk_bs
-    root = ttk_bs.Window(themename="darkly")
+    try:
+      import ttkbootstrap as ttk_bs
+      root = ttk_bs.Window(themename="darkly")
+    except ImportError:
+      root = Tk()
   else:
     root = Tk()
   
