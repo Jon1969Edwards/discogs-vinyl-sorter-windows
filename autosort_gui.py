@@ -2334,13 +2334,16 @@ class App:
 
   def _add_album_cover_to_popup(self, popup, row, bg):
     cover_img = None
-    if hasattr(self, '_thumbnail_cache') and row.release_id:
+    # Try to load the preview image for the release (works for both shelf and wishlist rows)
+    if hasattr(self, '_thumbnail_cache') and getattr(row, 'release_id', None):
       cover_img = self._thumbnail_cache.load_preview(row.release_id, getattr(row, 'cover_image_url', None))
       if not cover_img:
         cover_img = self._thumbnail_cache.load_photo(row.release_id)
+    # Always fall back to placeholder if no image is found
     if not cover_img and hasattr(self, '_thumbnail_cache'):
       cover_img = self._thumbnail_cache.get_placeholder()
     row_offset = 0
+    # Always show an image (placeholder or real)
     if cover_img:
       img_label = tk.Label(popup.outer, image=cover_img, bg=bg)
       img_label.image = cover_img
