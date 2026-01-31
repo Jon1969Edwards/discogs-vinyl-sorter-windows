@@ -2032,7 +2032,6 @@ class App:
     if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
       # Always call with a list, even if empty
       self._download_missing_thumbnails(self._wishlist_rows)
-    self._wishlist_rows = []  # Ensure attribute always exists
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
 
