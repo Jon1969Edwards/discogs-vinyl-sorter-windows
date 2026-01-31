@@ -3287,6 +3287,19 @@ class App:
       self._log(f"Initial collection count: {count}")
     else:
       self._log(f"Forced refresh. Collection count: {count}")
+    # --- Update wishlist from Discogs ---
+    try:
+      from core.wishlist import save_wishlist
+      from core.discogs_api import fetch_discogs_wantlist
+      token = self.v_token.get().strip()
+      if token:
+        self._log("Updating wishlist from Discogs…")
+        wantlist = fetch_discogs_wantlist(token)
+        save_wishlist(wantlist)
+        self._log(f"Wishlist updated from Discogs. {len(wantlist)} items.")
+    except Exception as e:
+      self._log(f"Failed to update wishlist from Discogs: {e}")
+    # ---
     self._log("Building shelf order…")
     self.v_status.set("Building…")
     result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
