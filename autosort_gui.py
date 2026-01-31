@@ -737,7 +737,24 @@ def get_collection_count(headers: dict[str, str], username: str) -> int:
 
 class ProgressDialog:
   """A modal progress dialog with a spinning vinyl record animation."""
-  
+
+  def set_error(self, message: str) -> None:
+    """Show error message with red highlight."""
+    self.msg_label.config(text=message, fg="#ff5555")
+    self.progress_label.config(text="Error", fg="#ff5555")
+    self.top.configure(bg="#2e1620")
+    self.title_label.config(fg="#ff5555")
+    self.top.update()
+
+  def set_done(self, message: str = "Done!") -> None:
+    """Show done message with green highlight, then close after short delay."""
+    self.msg_label.config(text=message, fg="#55ff55")
+    self.progress_label.config(text="Done", fg="#55ff55")
+    self.top.configure(bg="#162e20")
+    self.title_label.config(fg="#55ff55")
+    self.top.update()
+    self.top.after(900, self.close)
+
   def __init__(self, parent, title: str = "Please Wait", message: str = "Loading..."):
     import tkinter as tk
     from tkinter import scrolledtext
@@ -759,10 +776,10 @@ class ProgressDialog:
     accent_bar = tk.Frame(self.top, bg="#6c63ff", height=4)
     accent_bar.pack(fill="x")
     
-    # Title label at top
+    # Title label at top (dynamic)
     self.title_label = tk.Label(
       self.top,
-      text="🎵 Fetching Album Prices",
+      text=title,
       font=(FONT_SEGOE_UI_SEMIBOLD, 15),
       bg="#16213e",
       fg="#6c63ff"
@@ -1023,23 +1040,59 @@ class ToolTip:
     self.text = new_text
 
 
-def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = None, cache: CollectionCache = None) -> BuildResult:
-    """Build the shelf order once, refactored for lower cognitive complexity."""
+def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = None, cache: CollectionCache = None, main_progress_q=None) -> BuildResult:
+  """Build the shelf order once, with granular progress updates."""
+  if main_progress_q:
+    main_progress_q.put(("update", "Fetching collection from Discogs..."))
+  try:
     _, headers, username = _get_user_headers(cfg, log)
-    if cache:
-        cache.set_username(username)
-    out_dir = Path(cfg.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Failed to get user headers: {e}"))
+    raise
+  if cache:
+    cache.set_username(username)
+  out_dir = Path(cfg.output_dir)
+  out_dir.mkdir(parents=True, exist_ok=True)
+  if main_progress_q:
+    main_progress_q.put(("update", "Collecting rows from Discogs...") )
+  try:
     rows = _collect_rows(cfg, headers, username)
-    if not rows:
-        log("No matching LPs found.")
-        return BuildResult(username=username, rows_sorted=[], lines=[])
-    need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
-    if need_prices:
-        _handle_prices(cfg, log, progress_callback, cache, headers, rows)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Failed to collect rows: {e}"))
+    raise
+  if not rows:
+    log("No matching LPs found.")
+    if main_progress_q:
+      main_progress_q.put(("error", "No matching LPs found."))
+    return BuildResult(username=username, rows_sorted=[], lines=[])
+  need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
+  if main_progress_q:
+    main_progress_q.put(("update", "Checking if price data is needed...") )
+  if need_prices:
+    if main_progress_q:
+      main_progress_q.put(("update", "Fetching album prices from Discogs Marketplace...") )
+    try:
+      _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q)
+    except Exception as e:
+      if main_progress_q:
+        main_progress_q.put(("error", f"Failed to fetch prices: {e}"))
+      raise
+  try:
+    if main_progress_q:
+      main_progress_q.put(("update", "Sorting collection...") )
     rows_sorted = core.sort_rows(rows, "normal", sort_by=cfg.sort_by)
+    if main_progress_q:
+      main_progress_q.put(("update", "Generating output files...") )
     lines = core.generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=need_prices)
+    if main_progress_q:
+      main_progress_q.put(("done", "Done!"))
     return BuildResult(username=username, rows_sorted=rows_sorted, lines=lines)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Build failed: {e}"))
+    raise
 
 def _get_user_headers(cfg: AutoConfig, log: callable):
     token = core.get_token(cfg.token or None)
@@ -1068,14 +1121,16 @@ def _collect_rows(cfg: AutoConfig, headers: dict, username: str):
         collect_exclusions=False,
     )
 
-def _handle_prices(cfg, log, progress_callback, cache, headers, rows):
-    releases_needing_fetch, cached_count = _populate_prices_from_cache(cfg, cache, rows)
-    if cached_count > 0:
-        log(f"Loaded {cached_count} prices from cache.")
-    if releases_needing_fetch:
-        _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count)
-    else:
-        log("All prices loaded from cache.")
+def _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q=None):
+  releases_needing_fetch, cached_count = _populate_prices_from_cache(cfg, cache, rows)
+  if cached_count > 0:
+    log(f"Loaded {cached_count} prices from cache.")
+  if releases_needing_fetch:
+    _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count, main_progress_q)
+  else:
+    log("All prices loaded from cache.")
+    if main_progress_q:
+      main_progress_q.put(("update", "All prices loaded from cache."))
 
 def _populate_prices_from_cache(cfg, cache, rows):
     releases_needing_fetch = []
@@ -1098,31 +1153,51 @@ def _populate_prices_from_cache(cfg, cache, rows):
         releases_needing_fetch = [r for r in rows if r.release_id]
     return releases_needing_fetch, cached_count
 
-def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count):
-    total_to_fetch = len([r for r in releases_needing_fetch if r.release_id])
-    log(f"Fetching {total_to_fetch} prices ({cfg.currency})...")
+def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count, main_progress_q=None):
+  total_to_fetch = len([r for r in releases_needing_fetch if r.release_id])
+  log(f"Fetching {total_to_fetch} prices ({cfg.currency})...")
+  if progress_callback:
+    progress_callback("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
+  if main_progress_q:
+    main_progress_q.put(("update", f"Fetching {total_to_fetch} album prices in {cfg.currency}..."))
+  fetched_count = [0]
+  def price_progress(msg: str):
+    fetched_count[0] += 1
+    log(msg)
     if progress_callback:
-        progress_callback("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
-    fetched_count = [0]
-    def price_progress(msg: str):
-        fetched_count[0] += 1
-        log(msg)
-        if progress_callback:
-            progress_callback("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}")
+      progress_callback("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}")
+    if main_progress_q:
+      main_progress_q.put(("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}"))
+  try:
     core.fetch_prices_for_rows(headers, releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
-    if cache:
-        for row in releases_needing_fetch:
-            if row.release_id and row.lowest_price is not None:
-                cache.set_price(row.release_id, cfg.currency, row.lowest_price, row.num_for_sale)
-            elif row.release_id:
-                cache.set_price(row.release_id, cfg.currency, None, 0)
-        cache.save()
-    log("Price fetch complete.")
-    if progress_callback:
-        progress_callback("close", None)
+  except Exception as e:
+    if main_progress_q:
+      main_progress_q.put(("error", f"Price fetch failed: {e}"))
+    raise
+  if cache:
+    for row in releases_needing_fetch:
+      if row.release_id and row.lowest_price is not None:
+        cache.set_price(row.release_id, cfg.currency, row.lowest_price, row.num_for_sale)
+      elif row.release_id:
+        cache.set_price(row.release_id, cfg.currency, None, 0)
+    cache.save()
+  log("Price fetch complete.")
+  if main_progress_q:
+    main_progress_q.put(("update", "Price fetch complete."))
+  if progress_callback:
+    progress_callback("close", None)
 
 
 class App:
+  def _set_action_buttons_state(self, state: str) -> None:
+    """Enable or disable main action buttons (refresh, export, print) during refresh."""
+    for btn in [getattr(self, '_refresh_btn', None), getattr(self, '_export_btn', None), getattr(self, '_print_btn', None)]:
+      if btn is not None:
+        try:
+          btn.config(state=state)
+        except Exception:
+          pass
+
   def __init__(self, root: Tk) -> None:
     self.root = root
     root.title("Discogs Auto-Sort")
@@ -2715,15 +2790,26 @@ class App:
 
   def _process_progress_action(self, action: str, message: str | None) -> None:
     if action == "show":
+      self._set_action_buttons_state("disabled")
       if self._progress_dialog is None:
-        self._progress_dialog = ProgressDialog(self.root, "Fetching Data", message or "Please wait...")
+        self._progress_dialog = ProgressDialog(self.root, "Working...", message or "Please wait...")
     elif action == "update" and self._progress_dialog is not None:
       self._progress_dialog.update_progress(message or "")
     elif action == "message" and self._progress_dialog is not None:
       self._progress_dialog.update_message(message or "")
+    elif action == "error" and self._progress_dialog is not None:
+      self._progress_dialog.set_error(message or "An error occurred.")
+      self._progress_dialog.top.after(1600, self._progress_dialog.close)
+      self._progress_dialog = None
+      self._set_action_buttons_state("normal")
+    elif action == "done" and self._progress_dialog is not None:
+      self._progress_dialog.set_done(message or "Done!")
+      self._progress_dialog = None
+      self._set_action_buttons_state("normal")
     elif action == "close" and self._progress_dialog is not None:
       self._progress_dialog.close()
       self._progress_dialog = None
+      self._set_action_buttons_state("normal")
 
   def _render_order(self, result: BuildResult) -> None:
     """Render the shelf order in the Treeview widget."""
@@ -3116,7 +3202,7 @@ class App:
       self._log(f"Forced refresh. Collection count: {count}")
     self._log("Building shelf order…")
     self.v_status.set("Building…")
-    result = build_once(cfg, self._log, progress_callback, self._collection_cache)
+    result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
     self.result_q.put(result)
     self._last_built_at = time.time()
     self._log(f"Build complete. Items: {len(result.rows_sorted)}")
@@ -3127,7 +3213,7 @@ class App:
     self._last_count = count
     self._log("Rebuilding shelf order…")
     self.v_status.set("Rebuilding…")
-    result = build_once(cfg, self._log, progress_callback, self._collection_cache)
+    result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
     self.result_q.put(result)
     self._last_built_at = time.time()
     self._log(f"Build complete. Items: {len(result.rows_sorted)}")
