@@ -1962,6 +1962,8 @@ class App:
       show="tree headings",
       selectmode="browse"
     )
+    wishlist_columns = ("Artist", "Title", "Discogs URL")
+    wishlist_tree.config(columns=wishlist_columns, show="tree headings")
     wishlist_tree.heading("#0", text="", anchor="center")
     wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
     wishlist_tree.heading("Artist", text="Artist", anchor="w")
