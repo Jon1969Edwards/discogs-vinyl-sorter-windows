@@ -185,13 +185,9 @@ def _should_retry(status: int) -> bool:
   return status == 429 or 500 <= status < 600
 
 
-<<<<<<< HEAD
-def _retry_sleep_seconds(resp: requests.Response, attempt: int, backoff: float) -> float: # type: ignore
-=======
 from typing import Any
 
 def _retry_sleep_seconds(resp: Any, attempt: int, backoff: float) -> float:
->>>>>>> ded8bd9b15332e289e1e82e4e9c2ed01b371bdac
   retry_after = resp.headers.get("Retry-After")
   if retry_after:
     try:
@@ -201,11 +197,7 @@ def _retry_sleep_seconds(resp: Any, attempt: int, backoff: float) -> float:
   return min(backoff * (2 ** attempt), 10.0)
 
 
-<<<<<<< HEAD
-def _polite_rate_limit_pause(resp: requests.Response) -> None: # type: ignore
-=======
 def _polite_rate_limit_pause(resp) -> None:
->>>>>>> ded8bd9b15332e289e1e82e4e9c2ed01b371bdac
   try:
     remaining = int(resp.headers.get("X-Discogs-Ratelimit-Remaining", "5"))
     if remaining <= 1:
@@ -217,11 +209,7 @@ def _polite_rate_limit_pause(resp) -> None:
 from requests import Response
 
 def api_get(url: str, headers: Dict[str, str], params: Optional[Dict[str, str]] = None,
-<<<<<<< HEAD
-            retries: int = 3, backoff: float = 1.0) -> requests.Response: # type: ignore
-=======
             retries: int = 3, backoff: float = 1.0) -> Response:
->>>>>>> ded8bd9b15332e289e1e82e4e9c2ed01b371bdac
   if requests is None:
     raise RuntimeError("Missing dependency 'requests'. Install requirements.txt (pip install -r requirements.txt).")
   last_error: Optional[Exception] = None
