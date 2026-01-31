@@ -1189,6 +1189,41 @@ def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, release
 
 
 class App:
+    # Hoverable album cover preview for wishlist
+    def _on_wishlist_tree_motion(event):
+      item = wishlist_tree.identify_row(event.y)
+      if not item:
+        if hasattr(self, '_image_preview'):
+          self._image_preview.hide()
+        return
+      values = wishlist_tree.item(item, "values")
+      artist, title = values[0], values[1]
+      # Try to get release_id or thumb_url
+      entry = None
+      for w in load_wishlist():
+        if w["artist"] == artist and w["title"] == title:
+          entry = w
+          break
+      if not entry:
+        return
+      release_id = entry.get("release_id")
+      thumb_url = entry.get("thumb") or entry.get("cover_image_url")
+      img = None
+      if hasattr(self, '_thumbnail_cache') and release_id:
+        img = self._thumbnail_cache.get_photo(release_id)
+      if not img and hasattr(self, '_thumbnail_cache') and thumb_url:
+        img = self._thumbnail_cache.load_preview(release_id or 0, thumb_url)
+      if not img and hasattr(self, '_thumbnail_cache'):
+        img = self._thumbnail_cache.get_placeholder()
+      if hasattr(self, '_image_preview'):
+        self._image_preview.show(event.x_root, event.y_root, img)
+
+    def _on_wishlist_tree_leave(event):
+      if hasattr(self, '_image_preview'):
+        self._image_preview.hide()
+
+    wishlist_tree.bind("<Motion>", self._on_wishlist_tree_motion)
+    wishlist_tree.bind("<Leave>", self._on_wishlist_tree_leave)
   def _set_action_buttons_state(self, state: str) -> None:
     """Enable or disable main action buttons (refresh, export, print) during refresh."""
     for btn in [getattr(self, '_refresh_btn', None), getattr(self, '_export_btn', None), getattr(self, '_print_btn', None)]:
@@ -1925,9 +1960,11 @@ class App:
     wishlist_tree = ttk.Treeview(
       wishlist_fr,
       columns=("Artist", "Title", "Discogs URL"),
-      show="headings",
+      show="tree headings",
       selectmode="browse"
     )
+    wishlist_tree.heading("#0", text="", anchor="center")
+    wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
     wishlist_tree.heading("Artist", text="Artist", anchor="w")
     wishlist_tree.heading("Title", text="Title", anchor="w")
     wishlist_tree.heading("Discogs URL", text="Discogs URL", anchor="w")
@@ -1941,7 +1978,17 @@ class App:
     def refresh_wishlist_tree():
       wishlist_tree.delete(*wishlist_tree.get_children())
       for entry in load_wishlist():
-        wishlist_tree.insert("", "end", values=(entry["artist"], entry["title"], entry.get("discogs_url", "")))
+        # Try to get a cached thumbnail for this album (by release_id if available, else use thumb_url)
+        img = None
+        release_id = entry.get("release_id")
+        thumb_url = entry.get("thumb") or entry.get("cover_image_url")
+        if hasattr(self, '_thumbnail_cache') and release_id:
+          img = self._thumbnail_cache.get_photo(release_id)
+        if not img and hasattr(self, '_thumbnail_cache') and thumb_url:
+          img = self._thumbnail_cache.load_preview(release_id or 0, thumb_url)
+        if not img and hasattr(self, '_thumbnail_cache'):
+          img = self._thumbnail_cache.get_placeholder()
+        wishlist_tree.insert("", "end", image=img, values=(entry["artist"], entry["title"], entry.get("discogs_url", "")))
     refresh_wishlist_tree()
 
     # Double-click to open Discogs URL
@@ -1950,10 +1997,39 @@ class App:
       if not item:
         return
       values = wishlist_tree.item(item[0], "values")
-      url = values[2]
-      if url:
-        import webbrowser
-        webbrowser.open(url)
+      artist, title = values[0], values[1]
+      # Find the entry in the wishlist
+      entry = None
+      for w in load_wishlist():
+        if w["artist"] == artist and w["title"] == title:
+          entry = w
+          break
+      if not entry:
+        return
+      # Build a ReleaseRow-like object for the popup
+      from types import SimpleNamespace
+      row = SimpleNamespace(
+        artist_display=entry.get("artist", ""),
+        title=entry.get("title", ""),
+        year=entry.get("year", ""),
+        label=entry.get("label", ""),
+        catno=entry.get("catno", ""),
+        country=entry.get("country", ""),
+        format_str=entry.get("format", ""),
+        discogs_url=entry.get("discogs_url", entry.get("url", "")),
+        notes=entry.get("notes", ""),
+        release_id=entry.get("release_id"),
+        master_id=entry.get("master_id"),
+        sort_artist=entry.get("artist", ""),
+        sort_title=entry.get("title", ""),
+        median_price=None,
+        lowest_price=None,
+        num_for_sale=None,
+        price_currency="",
+        thumb_url=entry.get("thumb", ""),
+        cover_image_url=entry.get("cover_image_url", "")
+      )
+      self._create_album_popup_window(row)
     wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
 
     # Right-click to remove from wishlist
