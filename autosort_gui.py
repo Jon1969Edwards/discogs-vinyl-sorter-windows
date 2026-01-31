@@ -35,6 +35,12 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
+# PIL ImageTk import for type hints and runtime use
+try:
+    from PIL import ImageTk
+except ImportError:
+    ImageTk = None
+
 # Use ttkbootstrap for modern rounded widgets
 try:
   import ttkbootstrap as ttk
@@ -410,9 +416,10 @@ class ThumbnailCache:
     """Initialize thumbnail cache."""
     self.cache_dir = THUMBNAIL_CACHE_DIR
     self.cache_dir.mkdir(exist_ok=True)
-    self._photo_cache: dict[int, "ImageTk.PhotoImage"] = {}  # In-memory cache of PhotoImage objects
-    self._preview_cache: dict[int, "ImageTk.PhotoImage"] = {}  # Cache for larger preview images
-    self._placeholder: "ImageTk.PhotoImage | None" = None
+    from typing import Dict, Optional
+    self._photo_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # In-memory cache of PhotoImage objects
+    self._preview_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # Cache for larger preview images
+    self._placeholder: Optional["ImageTk.PhotoImage"] = None
     self._pil_available = False
     self._check_pil()
   

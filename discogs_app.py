@@ -185,7 +185,7 @@ def _should_retry(status: int) -> bool:
   return status == 429 or 500 <= status < 600
 
 
-def _retry_sleep_seconds(resp: requests.Response, attempt: int, backoff: float) -> float:
+def _retry_sleep_seconds(resp: requests.Response, attempt: int, backoff: float) -> float: # type: ignore
   retry_after = resp.headers.get("Retry-After")
   if retry_after:
     try:
@@ -195,7 +195,7 @@ def _retry_sleep_seconds(resp: requests.Response, attempt: int, backoff: float) 
   return min(backoff * (2 ** attempt), 10.0)
 
 
-def _polite_rate_limit_pause(resp: requests.Response) -> None:
+def _polite_rate_limit_pause(resp: requests.Response) -> None: # type: ignore
   try:
     remaining = int(resp.headers.get("X-Discogs-Ratelimit-Remaining", "5"))
     if remaining <= 1:
@@ -205,7 +205,7 @@ def _polite_rate_limit_pause(resp: requests.Response) -> None:
 
 
 def api_get(url: str, headers: Dict[str, str], params: Optional[Dict[str, str]] = None,
-            retries: int = 3, backoff: float = 1.0) -> requests.Response:
+            retries: int = 3, backoff: float = 1.0) -> requests.Response: # type: ignore
   if requests is None:
     raise RuntimeError("Missing dependency 'requests'. Install requirements.txt (pip install -r requirements.txt).")
   last_error: Optional[Exception] = None
