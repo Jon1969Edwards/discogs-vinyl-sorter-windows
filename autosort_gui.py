@@ -2341,16 +2341,20 @@ class App:
     row_offset = 0
     # Create a horizontal frame to hold image and buttons
     top_frame = tk.Frame(popup.outer, bg=bg)
-    top_frame.pack(fill="x", pady=(12, 24))
-    # Image on the left
+    # Center the top_frame horizontally
+    top_frame.pack(pady=(12, 24))
+    # Center content in top_frame using grid
+    top_frame.grid_columnconfigure(0, weight=1)
+    top_frame.grid_columnconfigure(1, weight=1)
+    # Image in column 0, centered vertically
     if cover_img:
-      img_label = tk.Label(top_frame, image=cover_img, bg=bg)
-      img_label.image = cover_img
-      img_label.pack(side="left", padx=(0, 24))
-      row_offset = 1
-    # Button frame on the right (vertical stack)
+        img_label = tk.Label(top_frame, image=cover_img, bg=bg)
+        img_label.image = cover_img
+        img_label.grid(row=0, column=0, padx=(0, 24), sticky="nsew")
+        row_offset = 1
+    # Button frame in column 1, centered vertically
     btn_stack = tk.Frame(top_frame, bg=bg)
-    btn_stack.pack(side="left", anchor="n")
+    btn_stack.grid(row=0, column=1, sticky="nsew")
     # Attach btn_stack to popup for use in _add_popup_buttons
     popup._btn_stack = btn_stack
     return cover_img, row_offset
