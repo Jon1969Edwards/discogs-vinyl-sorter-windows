@@ -2016,7 +2016,7 @@ class App:
           entry.get("title", ""),
           entry.get("discogs_url", "")
         )
-        wishlist_tree.insert("", "end", image=img, values=values)
+        wishlist_tree.insert("", "end", image=img, values=tuple(values))
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
 
