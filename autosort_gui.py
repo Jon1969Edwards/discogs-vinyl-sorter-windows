@@ -2035,6 +2035,56 @@ class App:
       )
       # Use the same details population as shelf order
       self._create_album_popup_window(row)
+
+    def _create_album_popup_window(self, row):
+      # Create a popup window with album info (works for both ReleaseRow and SimpleNamespace)
+      popup = tk.Toplevel(self.root)
+      popup.title(f"Album Info: {getattr(row, 'artist_display', '')} - {getattr(row, 'title', '')}")
+      popup.geometry("600x500")
+      popup.configure(bg="#222")
+
+      # Try to get a cover image
+      img = None
+      thumb_url = getattr(row, 'thumb_url', None) or getattr(row, 'cover_image_url', None)
+      if hasattr(self, '_thumbnail_cache') and thumb_url:
+        img = self._thumbnail_cache.load_preview(0, thumb_url)
+      if not img and hasattr(self, '_thumbnail_cache'):
+        img = self._thumbnail_cache.get_placeholder()
+      if img:
+        img_label = tk.Label(popup, image=img, bg="#222")
+        img_label.image = img
+        img_label.pack(pady=10)
+
+      # Info fields
+      info_frame = tk.Frame(popup, bg="#222")
+      info_frame.pack(fill="both", expand=True, padx=20, pady=10)
+      def add_info(label, value):
+        if value:
+          rowf = tk.Frame(info_frame, bg="#222")
+          rowf.pack(anchor="w", fill="x", pady=2)
+          tk.Label(rowf, text=label+":", fg="#fff", bg="#222", font=("Segoe UI", 10, "bold")).pack(side="left")
+          tk.Label(rowf, text=str(value), fg="#fff", bg="#222", font=("Segoe UI", 10)).pack(side="left")
+
+      add_info("Artist", getattr(row, "artist_display", ""))
+      add_info("Title", getattr(row, "title", ""))
+      add_info("Year", getattr(row, "year", ""))
+      add_info("Label", getattr(row, "label", ""))
+      add_info("Cat No", getattr(row, "catno", ""))
+      add_info("Country", getattr(row, "country", ""))
+      add_info("Format", getattr(row, "format_str", ""))
+      add_info("Genres", getattr(row, "genres", ""))
+      add_info("Styles", getattr(row, "styles", ""))
+      add_info("Notes", getattr(row, "notes", ""))
+      add_info("Discogs URL", getattr(row, "discogs_url", ""))
+      add_info("Barcode", getattr(row, "barcode", ""))
+      add_info("Tracklist", getattr(row, "tracklist", ""))
+      add_info("Contributors", getattr(row, "contributors", ""))
+      add_info("Companies", getattr(row, "companies", ""))
+      add_info("Extra", getattr(row, "extra", ""))
+
+      # Add a close button
+      close_btn = tk.Button(popup, text="Close", command=popup.destroy, bg="#444", fg="#fff", font=("Segoe UI", 10, "bold"))
+      close_btn.pack(pady=10)
     wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
 
     # Right-click to remove from wishlist
