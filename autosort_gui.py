@@ -2012,11 +2012,11 @@ class App:
         # Use the same image logic as shelf order
         img = self._get_row_image(row, self._get_placeholder_image())
         values = (
-          entry.get("artist", ""),
-          entry.get("title", ""),
-          entry.get("discogs_url", "")
+          str(entry.get("artist", "")),
+          str(entry.get("title", "")),
+          str(entry.get("discogs_url", ""))
         )
-        wishlist_tree.insert("", "end", image=img, values=tuple(values))
+        wishlist_tree.insert("", "end", image=img, values=values)
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
 
