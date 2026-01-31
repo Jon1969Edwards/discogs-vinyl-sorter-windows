@@ -39,9 +39,10 @@ from pathlib import Path
 
 # PIL ImageTk import for type hints and runtime use
 try:
-    from PIL import ImageTk
+  from gui.album_popup import AlbumPopup
+  from gui.wishlist_tab import WishlistTab
 except ImportError:
-    ImageTk = None
+  ImageTk = None
 
 # Use ttkbootstrap for modern rounded widgets
 try:
@@ -1202,39 +1203,6 @@ def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, release
 
 
 class App:
-  # Hoverable album cover preview for wishlist
-  def _on_wishlist_tree_motion(self, event):
-    item = self.wishlist_tree.identify_row(event.y)
-    if not item:
-      if hasattr(self, '_image_preview'):
-        self._image_preview.hide()
-      return
-    values = self.wishlist_tree.item(item, "values")
-    artist, title = values[0], values[1]
-    # Try to get release_id or thumb_url
-    entry = None
-    from core.wishlist import load_wishlist
-    for w in load_wishlist():
-      if w["artist"] == artist and w["title"] == title:
-        entry = w
-        break
-    if not entry:
-      return
-    release_id = entry.get("release_id")
-    thumb_url = entry.get("thumb") or entry.get("cover_image_url")
-    img = None
-    if hasattr(self, '_thumbnail_cache') and release_id:
-      img = self._thumbnail_cache.get_photo(release_id)
-    if not img and hasattr(self, '_thumbnail_cache') and thumb_url:
-      img = self._thumbnail_cache.load_preview(release_id or 0, thumb_url)
-    if not img and hasattr(self, '_thumbnail_cache'):
-      img = self._thumbnail_cache.get_placeholder()
-    if hasattr(self, '_image_preview'):
-      self._image_preview.show(event.x_root, event.y_root, img)
-
-  def _on_wishlist_tree_leave(self, event):
-    if hasattr(self, '_image_preview'):
-      self._image_preview.hide()
 
   def _set_action_buttons_state(self, state: str) -> None:
     """Enable or disable main action buttons (refresh, export, print) during refresh."""
@@ -1964,42 +1932,8 @@ class App:
     order_fr = ttk.Frame(nb)
     nb.add(order_fr, text="📋 Shelf Order")
 
-    # --- Wishlist Tab ---
-    wishlist_fr = ttk.Frame(nb)
-    nb.add(wishlist_fr, text="⭐ Wishlist")
-    wishlist_fr.rowconfigure(0, weight=1)
-    wishlist_fr.columnconfigure(0, weight=1)
-    wishlist_tree = ttk.Treeview(
-      wishlist_fr,
-      columns=("Artist", "Title", "Discogs URL"),
-      show="tree headings",
-      selectmode="browse"
-    )
-    wishlist_columns = ("Artist", "Title", "Discogs URL")
-    wishlist_tree.config(columns=wishlist_columns, show="tree headings")
-    wishlist_tree.heading("#0", text="", anchor="center")
-    wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
-    wishlist_tree.heading("Artist", text="Artist", anchor="w")
-    wishlist_tree.heading("Title", text="Title", anchor="w")
-    wishlist_tree.heading("Discogs URL", text="Discogs URL", anchor="w")
-    wishlist_tree.column("Artist", width=180, minwidth=80, stretch=True, anchor="w")
-    wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
-    wishlist_tree.column("Discogs URL", width=260, minwidth=120, stretch=True, anchor="w")
-    wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
-
-    # Populate wishlist
-    from core.wishlist import load_wishlist, remove_from_wishlist
-    self._wishlist_rows = []  # Ensure attribute always exists before any use
-    def refresh_wishlist_tree():
-      wishlist_tree.delete(*wishlist_tree.get_children())
-      from types import SimpleNamespace
-      # Always initialize _wishlist_rows, even if no entries
-      self._wishlist_rows = []
-      wishlist_data = list(load_wishlist())
-      for i, entry in enumerate(wishlist_data):
-        # Build a ReleaseRow-like object for each wishlist entry
-        row = SimpleNamespace(
-          artist_display=entry.get("artist", ""),
+    # --- Wishlist Tab (modular) ---
+    nb.add(self._wishlist_tab.get_frame(), text="⭐ Wishlist")
           title=entry.get("title", ""),
           year=entry.get("year", ""),
           label=entry.get("label", ""),
