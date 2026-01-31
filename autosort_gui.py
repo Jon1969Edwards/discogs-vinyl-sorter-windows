@@ -1977,14 +1977,11 @@ class App:
     def refresh_wishlist_tree():
       wishlist_tree.delete(*wishlist_tree.get_children())
       for entry in load_wishlist():
-        # Try to get a cached thumbnail for this album (by release_id if available, else use thumb_url)
+        # Always use thumb_url or cover_image_url for wishlist images
         img = None
-        release_id = entry.get("release_id")
         thumb_url = entry.get("thumb") or entry.get("cover_image_url")
-        if hasattr(self, '_thumbnail_cache') and release_id:
-          img = self._thumbnail_cache.get_photo(release_id)
-        if not img and hasattr(self, '_thumbnail_cache') and thumb_url:
-          img = self._thumbnail_cache.load_preview(release_id or 0, thumb_url)
+        if hasattr(self, '_thumbnail_cache') and thumb_url:
+          img = self._thumbnail_cache.load_preview(0, thumb_url)
         if not img and hasattr(self, '_thumbnail_cache'):
           img = self._thumbnail_cache.get_placeholder()
         wishlist_tree.insert("", "end", image=img, values=(entry["artist"], entry["title"], entry.get("discogs_url", "")))
@@ -2006,7 +2003,7 @@ class App:
           break
       if not entry:
         return
-      # Build a ReleaseRow-like object for the popup
+      # Build a ReleaseRow-like object for the popup, fill all possible fields
       from types import SimpleNamespace
       row = SimpleNamespace(
         artist_display=entry.get("artist", ""),
@@ -2022,13 +2019,21 @@ class App:
         master_id=entry.get("master_id"),
         sort_artist=entry.get("artist", ""),
         sort_title=entry.get("title", ""),
-        median_price=None,
-        lowest_price=None,
-        num_for_sale=None,
-        price_currency="",
+        median_price=entry.get("median_price"),
+        lowest_price=entry.get("lowest_price"),
+        num_for_sale=entry.get("num_for_sale"),
+        price_currency=entry.get("price_currency", ""),
         thumb_url=entry.get("thumb", ""),
-        cover_image_url=entry.get("cover_image_url", "")
+        cover_image_url=entry.get("cover_image_url", ""),
+        genres=entry.get("genres", ""),
+        styles=entry.get("styles", ""),
+        companies=entry.get("companies", ""),
+        contributors=entry.get("contributors", ""),
+        barcode=entry.get("barcode", ""),
+        tracklist=entry.get("tracklist", ""),
+        extra=entry.get("extra", "")
       )
+      # Use the same details population as shelf order
       self._create_album_popup_window(row)
     wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
 
