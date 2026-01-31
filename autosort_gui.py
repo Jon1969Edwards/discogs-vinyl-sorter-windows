@@ -1916,6 +1916,56 @@ class App:
 
     order_fr = ttk.Frame(nb)
     nb.add(order_fr, text="📋 Shelf Order")
+
+    # --- Wishlist Tab ---
+    wishlist_fr = ttk.Frame(nb)
+    nb.add(wishlist_fr, text="⭐ Wishlist")
+    wishlist_fr.rowconfigure(0, weight=1)
+    wishlist_fr.columnconfigure(0, weight=1)
+    wishlist_tree = ttk.Treeview(
+      wishlist_fr,
+      columns=("Artist", "Title", "Discogs URL"),
+      show="headings",
+      selectmode="browse"
+    )
+    wishlist_tree.heading("Artist", text="Artist", anchor="w")
+    wishlist_tree.heading("Title", text="Title", anchor="w")
+    wishlist_tree.heading("Discogs URL", text="Discogs URL", anchor="w")
+    wishlist_tree.column("Artist", width=180, minwidth=80, stretch=True, anchor="w")
+    wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
+    wishlist_tree.column("Discogs URL", width=260, minwidth=120, stretch=True, anchor="w")
+    wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+    # Populate wishlist
+    from core.wishlist import load_wishlist, remove_from_wishlist
+    def refresh_wishlist_tree():
+      wishlist_tree.delete(*wishlist_tree.get_children())
+      for entry in load_wishlist():
+        wishlist_tree.insert("", "end", values=(entry["artist"], entry["title"], entry.get("discogs_url", "")))
+    refresh_wishlist_tree()
+
+    # Double-click to open Discogs URL
+    def on_wishlist_double_click(event):
+      item = wishlist_tree.selection()
+      if not item:
+        return
+      values = wishlist_tree.item(item[0], "values")
+      url = values[2]
+      if url:
+        import webbrowser
+        webbrowser.open(url)
+    wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
+
+    # Right-click to remove from wishlist
+    def on_wishlist_right_click(event):
+      item = wishlist_tree.identify_row(event.y)
+      if not item:
+        return
+      values = wishlist_tree.item(item, "values")
+      artist, title = values[0], values[1]
+      remove_from_wishlist(artist, title)
+      refresh_wishlist_tree()
+    wishlist_tree.bind("<Button-3>", on_wishlist_right_click)
     order_fr.rowconfigure(1, weight=1)
     order_fr.columnconfigure(0, weight=1)
     
