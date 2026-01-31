@@ -2339,12 +2339,20 @@ class App:
     if not cover_img and hasattr(self, '_thumbnail_cache'):
       cover_img = self._thumbnail_cache.get_placeholder()
     row_offset = 0
-    # Always show an image (placeholder or real)
+    # Create a horizontal frame to hold image and buttons
+    top_frame = tk.Frame(popup.outer, bg=bg)
+    top_frame.pack(fill="x", pady=(12, 24))
+    # Image on the left
     if cover_img:
-      img_label = tk.Label(popup.outer, image=cover_img, bg=bg)
+      img_label = tk.Label(top_frame, image=cover_img, bg=bg)
       img_label.image = cover_img
-      img_label.pack(pady=(12, 24))
+      img_label.pack(side="left", padx=(0, 24))
       row_offset = 1
+    # Button frame on the right (vertical stack)
+    btn_stack = tk.Frame(top_frame, bg=bg)
+    btn_stack.pack(side="left", anchor="n")
+    # Attach btn_stack to popup for use in _add_popup_buttons
+    popup._btn_stack = btn_stack
     return cover_img, row_offset
 
   def _add_scrollable_details_area(self, popup, bg):
@@ -2410,8 +2418,11 @@ class App:
     details_canvas.master.master.protocol("WM_DELETE_WINDOW", lambda: (details_canvas.master.master.destroy(), _unbind_mousewheel()))
 
   def _add_popup_buttons(self, popup, row, accent, btn_bg, btn_fg, bg):
-    btn_frame = tk.Frame(popup.outer, bg=bg)
-    btn_frame.pack(fill="x", pady=(12,0))
+    # Use the stacked button frame if present (from _add_album_cover_to_popup)
+    btn_frame = getattr(popup, '_btn_stack', None)
+    if btn_frame is None:
+      btn_frame = tk.Frame(popup.outer, bg=bg)
+      btn_frame.pack(fill="x", pady=(12,0))
     url = getattr(row, "url", "")
     if url:
       def open_url():
