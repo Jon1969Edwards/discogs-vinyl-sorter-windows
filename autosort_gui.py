@@ -2012,7 +2012,8 @@ class App:
         )
         self._wishlist_rows.append(row)
         # Use the same image logic as shelf order
-        img = self._get_row_image(row, self._get_placeholder_image())
+        placeholder = self._get_placeholder_image()
+        img = self._get_row_image(row, placeholder)
         # Ensure values is a tuple of strings, matching the columns
         values = (
           str(getattr(row, "artist_display", "")),
@@ -2024,6 +2025,9 @@ class App:
           wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
         else:
           wishlist_tree.insert("", "end", values=values, tags=(tag,))
+    # Download missing thumbnails for wishlist
+    if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
+        self._download_missing_thumbnails(self._wishlist_rows)
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
 
@@ -2036,9 +2040,21 @@ class App:
       if idx < 0 or idx >= len(self._wishlist_rows):
         return
       row = self._wishlist_rows[idx]
-      # Use the same popup logic as shelf order
+      # Use the same popup logic as shelf order, but ensure correct image logic for wishlist
       popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
-      _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
+      cover_img = None
+      if hasattr(self, '_thumbnail_cache') and getattr(row, 'release_id', None):
+        cover_img = self._thumbnail_cache.load_preview(row.release_id, getattr(row, 'cover_image_url', None))
+        if not cover_img:
+          cover_img = self._thumbnail_cache.get_placeholder()
+      elif hasattr(self, '_thumbnail_cache'):
+        cover_img = self._thumbnail_cache.get_placeholder()
+      row_offset = 0
+      if cover_img:
+        img_label = tk.Label(popup.outer, image=cover_img, bg=bg)
+        img_label.image = cover_img
+        img_label.pack(pady=(12, 24))
+        row_offset = 1
       details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
       self._populate_album_details(details_frame, row, fg, bg, row_offset)
       self._setup_details_scroll(details_frame, details_canvas)
