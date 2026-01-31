@@ -2211,6 +2211,19 @@ class App:
         webbrowser.open(url)
       btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, 13), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
       btn.pack(side="left", padx=12, ipadx=12, ipady=4)
+
+    # Play on Spotify button
+    def play_on_spotify():
+      from core.spotify_utils import open_album_on_spotify
+      artist = getattr(row, "artist_display", "")
+      album = getattr(row, "title", "")
+      open_album_on_spotify(artist, album)
+    btn_spotify = tk.Button(
+      btn_frame, text="Play on Spotify", command=play_on_spotify,
+      font=(FONT_SEGOE_UI, 13), bg="#1db954", fg="#fff", activebackground="#1ed760", activeforeground="#fff", relief="groove"
+    )
+    btn_spotify.pack(side="left", padx=12, ipadx=12, ipady=4)
+
     tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, 13), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="right", padx=12, ipadx=12, ipady=4)
 
   def _choose_dir(self) -> None:
