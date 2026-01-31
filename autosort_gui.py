@@ -3020,22 +3020,31 @@ class App:
           # Build once on startup or forced refresh
           self._log("Building shelf order…")
           self.v_status.set("Building…")
-          result = build_once(cfg, self._log, progress_callback, self._collection_cache)
-          self.result_q.put(result)
-          self._last_built_at = time.time()
-          self._log(f"Build complete. Items: {len(result.rows_sorted)}")
-          self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+          # Always show progress dialog for any refresh
+          self.progress_q.put(("show", "Fetching and sorting your collection. Please wait..."))
+          try:
+            result = build_once(cfg, self._log, progress_callback, self._collection_cache)
+            self.result_q.put(result)
+            self._last_built_at = time.time()
+            self._log(f"Build complete. Items: {len(result.rows_sorted)}")
+            self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+          finally:
+            self.progress_q.put(("close", None))
         else:
           if count != self._last_count:
             self._log(f"Collection changed: {self._last_count} → {count}")
             self._last_count = count
             self._log("Rebuilding shelf order…")
             self.v_status.set("Rebuilding…")
-            result = build_once(cfg, self._log, progress_callback, self._collection_cache)
-            self.result_q.put(result)
-            self._last_built_at = time.time()
-            self._log(f"Build complete. Items: {len(result.rows_sorted)}")
-            self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+            self.progress_q.put(("show", "Fetching and sorting your collection. Please wait..."))
+            try:
+              result = build_once(cfg, self._log, progress_callback, self._collection_cache)
+              self.result_q.put(result)
+              self._last_built_at = time.time()
+              self._log(f"Build complete. Items: {len(result.rows_sorted)}")
+              self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+            finally:
+              self.progress_q.put(("close", None))
           else:
             self.v_status.set(f"No changes. Polling every {cfg.poll_seconds}s")
 
