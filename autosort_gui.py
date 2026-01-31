@@ -2421,27 +2421,28 @@ class App:
     # Use the stacked button frame if present (from _add_album_cover_to_popup)
     btn_frame = getattr(popup, '_btn_stack', None)
     if btn_frame is None:
-      btn_frame = tk.Frame(popup.outer, bg=bg)
-      btn_frame.pack(fill="x", pady=(12,0))
+        btn_frame = tk.Frame(popup.outer, bg=bg)
+        btn_frame.pack(fill="x", pady=(12,0))
+
     url = getattr(row, "url", "")
     if url:
-      def open_url():
-        import webbrowser
-        webbrowser.open(url)
-      btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, 13), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
-      btn.pack(side="left", padx=12, ipadx=12, ipady=4)
+        def open_url():
+            import webbrowser
+            webbrowser.open(url)
+        btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, 13), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
+        btn.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
     # Play on Spotify button
     def play_on_spotify():
-      from core.spotify_utils import open_album_on_spotify
-      artist = getattr(row, "artist_display", "")
-      album = getattr(row, "title", "")
-      open_album_on_spotify(artist, album)
+        from core.spotify_utils import open_album_on_spotify
+        artist = getattr(row, "artist_display", "")
+        album = getattr(row, "title", "")
+        open_album_on_spotify(artist, album)
     btn_spotify = tk.Button(
-      btn_frame, text="Play on Spotify", command=play_on_spotify,
-      font=(FONT_SEGOE_UI, 13), bg="#1db954", fg="#fff", activebackground="#1ed760", activeforeground="#fff", relief="groove"
+        btn_frame, text="Play on Spotify", command=play_on_spotify,
+        font=(FONT_SEGOE_UI, 13), bg="#1db954", fg="#fff", activebackground="#1ed760", activeforeground="#fff", relief="groove"
     )
-    btn_spotify.pack(side="left", padx=12, ipadx=12, ipady=4)
+    btn_spotify.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
     # Wishlist button
     from core.wishlist import add_to_wishlist, remove_from_wishlist, is_in_wishlist
@@ -2450,24 +2451,24 @@ class App:
     discogs_url = getattr(row, "discogs_url", getattr(row, "url", None))
     wishlist_state = tk.StringVar()
     def update_wishlist_state():
-      if is_in_wishlist(artist, album):
-        wishlist_state.set("Remove from Wishlist")
-      else:
-        wishlist_state.set("Add to Wishlist")
+        if is_in_wishlist(artist, album):
+            wishlist_state.set("Remove from Wishlist")
+        else:
+            wishlist_state.set("Add to Wishlist")
     def toggle_wishlist():
-      if is_in_wishlist(artist, album):
-        remove_from_wishlist(artist, album)
-      else:
-        add_to_wishlist(artist, album, discogs_url)
-      update_wishlist_state()
+        if is_in_wishlist(artist, album):
+            remove_from_wishlist(artist, album)
+        else:
+            add_to_wishlist(artist, album, discogs_url)
+        update_wishlist_state()
     update_wishlist_state()
     btn_wishlist = tk.Button(
-      btn_frame, textvariable=wishlist_state, command=toggle_wishlist,
-      font=(FONT_SEGOE_UI, 13), bg="#ffb347", fg="#222", activebackground="#ffd580", activeforeground="#222", relief="groove"
+        btn_frame, textvariable=wishlist_state, command=toggle_wishlist,
+        font=(FONT_SEGOE_UI, 13), bg="#ffb347", fg="#222", activebackground="#ffd580", activeforeground="#222", relief="groove"
     )
-    btn_wishlist.pack(side="left", padx=12, ipadx=12, ipady=4)
+    btn_wishlist.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
-    tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, 13), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="right", padx=12, ipadx=12, ipady=4)
+    tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, 13), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="top", fill="x", padx=12, pady=(0, 0), ipadx=12, ipady=4)
 
   def _choose_dir(self) -> None:
     directory = filedialog.askdirectory(initialdir=self.v_output_dir.get() or str(Path.cwd()))
