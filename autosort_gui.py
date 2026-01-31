@@ -2044,21 +2044,9 @@ class App:
       if idx < 0 or idx >= len(self._wishlist_rows):
         return
       row = self._wishlist_rows[idx]
-      # Use the same popup logic as shelf order, but ensure correct image logic for wishlist
+      # Use the exact same popup logic as shelf order
       popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
-      cover_img = None
-      if hasattr(self, '_thumbnail_cache') and getattr(row, 'release_id', None):
-        cover_img = self._thumbnail_cache.load_preview(row.release_id, getattr(row, 'cover_image_url', None))
-        if not cover_img:
-          cover_img = self._thumbnail_cache.get_placeholder()
-      elif hasattr(self, '_thumbnail_cache'):
-        cover_img = self._thumbnail_cache.get_placeholder()
-      row_offset = 0
-      if cover_img:
-        img_label = tk.Label(popup.outer, image=cover_img, bg=bg)
-        img_label.image = cover_img
-        img_label.pack(pady=(12, 24))
-        row_offset = 1
+      _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
       details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
       self._populate_album_details(details_frame, row, fg, bg, row_offset)
       self._setup_details_scroll(details_frame, details_canvas)
