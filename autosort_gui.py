@@ -1979,8 +1979,10 @@ class App:
     def refresh_wishlist_tree():
       wishlist_tree.delete(*wishlist_tree.get_children())
       from types import SimpleNamespace
+      # Always initialize _wishlist_rows, even if no entries
       self._wishlist_rows = []
-      for i, entry in enumerate(load_wishlist()):
+      wishlist_data = list(load_wishlist())
+      for i, entry in enumerate(wishlist_data):
         # Build a ReleaseRow-like object for each wishlist entry
         row = SimpleNamespace(
           artist_display=entry.get("artist", ""),
@@ -2027,7 +2029,8 @@ class App:
           wishlist_tree.insert("", "end", values=values, tags=(tag,))
     # Download missing thumbnails for wishlist
     if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
-        self._download_missing_thumbnails(self._wishlist_rows)
+      # Always call with a list, even if empty
+      self._download_missing_thumbnails(self._wishlist_rows)
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
 
