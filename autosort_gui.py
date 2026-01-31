@@ -2224,6 +2224,30 @@ class App:
     )
     btn_spotify.pack(side="left", padx=12, ipadx=12, ipady=4)
 
+    # Wishlist button
+    from core.wishlist import add_to_wishlist, remove_from_wishlist, is_in_wishlist
+    artist = getattr(row, "artist_display", "")
+    album = getattr(row, "title", "")
+    discogs_url = getattr(row, "discogs_url", getattr(row, "url", None))
+    wishlist_state = tk.StringVar()
+    def update_wishlist_state():
+      if is_in_wishlist(artist, album):
+        wishlist_state.set("Remove from Wishlist")
+      else:
+        wishlist_state.set("Add to Wishlist")
+    def toggle_wishlist():
+      if is_in_wishlist(artist, album):
+        remove_from_wishlist(artist, album)
+      else:
+        add_to_wishlist(artist, album, discogs_url)
+      update_wishlist_state()
+    update_wishlist_state()
+    btn_wishlist = tk.Button(
+      btn_frame, textvariable=wishlist_state, command=toggle_wishlist,
+      font=(FONT_SEGOE_UI, 13), bg="#ffb347", fg="#222", activebackground="#ffd580", activeforeground="#222", relief="groove"
+    )
+    btn_wishlist.pack(side="left", padx=12, ipadx=12, ipady=4)
+
     tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, 13), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="right", padx=12, ipadx=12, ipady=4)
 
   def _choose_dir(self) -> None:
