@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Discogs Auto-Sort GUI
 
+A modularized GUI version. Album info popup logic is now in gui/album_popup.py.
+
 A fresh, minimal GUI that:
 - Watches your Discogs collection for changes (polls item count).
 - Regenerates shelf order automatically when it changes.
@@ -54,6 +56,9 @@ import tkinter as tk
 
 import discogs_app as core
 from core.models import ReleaseRow, BuildResult
+
+# Modularized popup
+from gui.album_popup import AlbumPopup
 
 
 POLL_SECONDS_DEFAULT = 300  # 5 minutes
@@ -424,9 +429,9 @@ class ThumbnailCache:
     self.cache_dir.mkdir(exist_ok=True)
     from typing import Optional
     from typing import Dict
-    self._photo_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # In-memory cache of PhotoImage objects
-    self._preview_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # Cache for larger preview images
-    self._placeholder: Optional["ImageTk.PhotoImage"] = None
+    self._photo_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # type: ignore # In-memory cache of PhotoImage objects
+    self._preview_cache: Dict[int, "ImageTk.PhotoImage"] = {}  # type: ignore # Cache for larger preview images
+    self._placeholder: Optional["ImageTk.PhotoImage"] = None # type: ignore
     self._pil_available = False
     self._check_pil()
   
@@ -451,11 +456,11 @@ class ThumbnailCache:
     """Check if we have a cached thumbnail for this release."""
     return self._get_cache_path(release_id).exists()
   
-  def get_photo(self, release_id: int) -> "ImageTk.PhotoImage | None":
+  def get_photo(self, release_id: int) -> "ImageTk.PhotoImage | None": # type: ignore
     """Get a PhotoImage for a release (from memory cache)."""
     return self._photo_cache.get(release_id)
   
-  def get_placeholder(self) -> "ImageTk.PhotoImage | None":
+  def get_placeholder(self) -> "ImageTk.PhotoImage | None": # type: ignore
     """Get a placeholder image for releases without artwork."""
     if not self._pil_available:
       return None
@@ -516,7 +521,7 @@ class ThumbnailCache:
     except Exception:
       return False
   
-  def load_photo(self, release_id: int) -> "ImageTk.PhotoImage | None":
+  def load_photo(self, release_id: int) -> "ImageTk.PhotoImage | None": # type: ignore
     """Load a cached thumbnail as a PhotoImage."""
     if not self._pil_available:
       return None
@@ -545,7 +550,7 @@ class ThumbnailCache:
     self._preview_cache.clear()
     self._placeholder = None
   
-  def load_preview(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
+  def load_preview(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None": # type: ignore
     """Load a larger preview image for hover display."""
     if not self._pil_available:
       return None
@@ -2297,12 +2302,14 @@ class App:
     row = self._get_row_from_item_id(item_id)
     if not row:
       return
-    popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
-    _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
-    details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
-    self._populate_album_details(details_frame, row, fg, bg, row_offset)
-    self._setup_details_scroll(details_frame, details_canvas)
-    self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
+    AlbumPopup(
+      self.root,
+      row,
+      self._thumbnail_cache,
+      self._colors,
+      on_spotify=lambda r: self._play_on_spotify(r),
+      on_wishlist=lambda r: self._toggle_wishlist(r)
+    )
 
   def _get_row_from_item_id(self, item_id):
     if not item_id:
