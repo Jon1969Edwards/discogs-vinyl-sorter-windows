@@ -3297,6 +3297,12 @@ class App:
         wantlist = fetch_discogs_wantlist(token)
         save_wishlist(wantlist)
         self._log(f"Wishlist updated from Discogs. {len(wantlist)} items.")
+        # Refresh wishlist tab if function is available
+        try:
+          if "refresh_wishlist_tree" in globals():
+            refresh_wishlist_tree()
+        except Exception:
+          pass
     except Exception as e:
       self._log(f"Failed to update wishlist from Discogs: {e}")
     # ---
