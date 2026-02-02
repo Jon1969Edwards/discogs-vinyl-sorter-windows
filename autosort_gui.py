@@ -407,27 +407,29 @@ if TYPE_CHECKING:
     from PIL import ImageTk
 
 
-def _upgrade_discogs_image_url(url: str, size: int = 500, quality: int = 90) -> str:
-  """Convert a Discogs thumbnail URL to a higher quality version.
-  
-  Discogs image URLs contain parameters like:
-  - q:40 (quality 40%)
-  - h:150/w:150 (size 150x150)
-  
-  We can modify these to get larger, higher quality images.
-  """
+def _is_low_quality_discogs_url(url: str) -> bool:
+  """Check if a Discogs image URL is low quality (small size or low quality setting)."""
   if not url:
-    return url
-  
-  import re
-  # Replace quality parameter (q:XX)
-  url = re.sub(r'/q:\d+/', f'/q:{quality}/', url)
-  # Replace height parameter (h:XXX)
-  url = re.sub(r'/h:\d+/', f'/h:{size}/', url)
-  # Replace width parameter (w:XXX)
-  url = re.sub(r'/w:\d+/', f'/w:{size}/', url)
-  
-  return url
+    return True
+  # Low quality indicators: q:40 (quality 40%) or h:150/w:150 (small size)
+  return '/q:40/' in url or '/h:150/' in url or '/w:150/' in url
+
+
+def _fetch_hires_image_url(release_id: int, headers: dict) -> str | None:
+  """Fetch the high-resolution primary image URL for a release from the Discogs API."""
+  import requests
+  try:
+    url = f"https://api.discogs.com/releases/{release_id}"
+    resp = requests.get(url, headers=headers, timeout=10)
+    if resp.status_code == 200:
+      data = resp.json()
+      images = data.get("images", [])
+      if images:
+        # Get the primary image (first one is usually the cover)
+        return images[0].get("uri") or images[0].get("resource_url")
+  except Exception:
+    pass
+  return None
 
 
 class ThumbnailCache:
@@ -590,34 +592,40 @@ class ThumbnailCache:
         pass
     
     # If we have a cover_url, download the larger image
-    if cover_url and headers:
+    if headers and release_id:
       try:
         import requests
         from PIL import Image, ImageTk
         from io import BytesIO
         
-        # Upgrade the URL to get a higher quality image
-        high_quality_url = _upgrade_discogs_image_url(cover_url, size=500, quality=90)
+        # If the URL is low quality (thumbnail), fetch the hi-res URL from API
+        image_url = cover_url
+        if _is_low_quality_discogs_url(cover_url):
+          hires_url = _fetch_hires_image_url(release_id, headers)
+          if hires_url:
+            image_url = hires_url
         
-        resp = requests.get(high_quality_url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-          img = Image.open(BytesIO(resp.content))
-          img = img.convert("RGBA")
-          
-          # Resize to popup size while maintaining aspect ratio
-          img.thumbnail(self.POPUP_SIZE, Image.Resampling.LANCZOS)
-          
-          # Create a square canvas and center the image
-          square = Image.new("RGBA", self.POPUP_SIZE, (30, 30, 50, 255))
-          offset = ((self.POPUP_SIZE[0] - img.width) // 2, (self.POPUP_SIZE[1] - img.height) // 2)
-          square.paste(img, offset)
-          
-          # Save to cache
-          square.save(popup_path, "PNG")
-          
-          photo = ImageTk.PhotoImage(square)
-          self._popup_cache[release_id] = photo
-          return photo
+        # Download the image
+        if image_url:
+          resp = requests.get(image_url, headers=headers, timeout=10)
+          if resp.status_code == 200:
+            img = Image.open(BytesIO(resp.content))
+            img = img.convert("RGBA")
+            
+            # Resize to popup size while maintaining aspect ratio
+            img.thumbnail(self.POPUP_SIZE, Image.Resampling.LANCZOS)
+            
+            # Create a square canvas and center the image
+            square = Image.new("RGBA", self.POPUP_SIZE, (30, 30, 50, 255))
+            offset = ((self.POPUP_SIZE[0] - img.width) // 2, (self.POPUP_SIZE[1] - img.height) // 2)
+            square.paste(img, offset)
+            
+            # Save to cache
+            square.save(popup_path, "PNG")
+            
+            photo = ImageTk.PhotoImage(square)
+            self._popup_cache[release_id] = photo
+            return photo
       except Exception:
         pass
     
@@ -649,35 +657,41 @@ class ThumbnailCache:
       except Exception:
         pass
     
-    # If we have a cover_url, download the larger image
-    if cover_url and headers:
+    # If we have headers, download the image (potentially fetching hi-res URL from API)
+    if headers and release_id:
       try:
         import requests
         from PIL import Image, ImageTk
         from io import BytesIO
         
-        # Upgrade the URL to get a higher quality image
-        high_quality_url = _upgrade_discogs_image_url(cover_url, size=400, quality=85)
+        # If the URL is low quality (thumbnail), fetch the hi-res URL from API
+        image_url = cover_url
+        if _is_low_quality_discogs_url(cover_url):
+          hires_url = _fetch_hires_image_url(release_id, headers)
+          if hires_url:
+            image_url = hires_url
         
-        resp = requests.get(high_quality_url, headers=headers, timeout=5)
-        if resp.status_code == 200:
-          img = Image.open(BytesIO(resp.content))
-          img = img.convert("RGBA")
-          
-          # Resize to preview size while maintaining aspect ratio
-          img.thumbnail(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
-          
-          # Create a square canvas and center the image
-          square = Image.new("RGBA", self.PREVIEW_SIZE, (30, 30, 50, 255))
-          offset = ((self.PREVIEW_SIZE[0] - img.width) // 2, (self.PREVIEW_SIZE[1] - img.height) // 2)
-          square.paste(img, offset)
-          
-          # Save to cache
-          square.save(preview_path, "PNG")
-          
-          photo = ImageTk.PhotoImage(square)
-          self._preview_cache[release_id] = photo
-          return photo
+        # Download the image
+        if image_url:
+          resp = requests.get(image_url, headers=headers, timeout=5)
+          if resp.status_code == 200:
+            img = Image.open(BytesIO(resp.content))
+            img = img.convert("RGBA")
+            
+            # Resize to preview size while maintaining aspect ratio
+            img.thumbnail(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
+            
+            # Create a square canvas and center the image
+            square = Image.new("RGBA", self.PREVIEW_SIZE, (30, 30, 50, 255))
+            offset = ((self.PREVIEW_SIZE[0] - img.width) // 2, (self.PREVIEW_SIZE[1] - img.height) // 2)
+            square.paste(img, offset)
+            
+            # Save to cache
+            square.save(preview_path, "PNG")
+            
+            photo = ImageTk.PhotoImage(square)
+            self._preview_cache[release_id] = photo
+            return photo
       except Exception:
         pass
     
