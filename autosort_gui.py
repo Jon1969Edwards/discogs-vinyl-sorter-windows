@@ -2204,12 +2204,32 @@ class App:
   def _build_wishlist_tab(self, nb):
     wishlist_fr = ttk.Frame(nb)
     nb.add(wishlist_fr, text="⭐ Wishlist")
-    wishlist_fr.rowconfigure(0, weight=1)
+    wishlist_fr.rowconfigure(1, weight=1)
     wishlist_fr.columnconfigure(0, weight=1)
-    self._build_wishlist_tree(wishlist_fr)
+    
+    # Top toolbar with action buttons
+    toolbar_fr = ttk.Frame(wishlist_fr)
+    toolbar_fr.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+    
+    # Check Availability button
+    self._wishlist_check_btn = ttk.Button(
+      toolbar_fr,
+      text="🔍 Check Availability",
+      command=self._check_wishlist_availability,
+      style=SECONDARY_TBUTTON_STYLE
+    )
+    self._wishlist_check_btn.pack(side="left", padx=(0, 8))
+    ToolTip(self._wishlist_check_btn, "Check Discogs Marketplace for available copies of wishlist items")
+    
+    # Status label for availability check
+    self._wishlist_status_var = StringVar(value="")
+    wishlist_status_lbl = ttk.Label(toolbar_fr, textvariable=self._wishlist_status_var, style="Subtitle.TLabel")
+    wishlist_status_lbl.pack(side="left", padx=8)
+    
+    self._build_wishlist_tree(wishlist_fr, grid_row=1)
 
-  def _build_wishlist_tree(self, wishlist_fr):
-    wishlist_columns = ("Artist", "Title", "Discogs URL")
+  def _build_wishlist_tree(self, wishlist_fr, grid_row=0):
+    wishlist_columns = ("Artist", "Title", "For Sale", "Lowest Price")
     self.wishlist_tree = ttk.Treeview(
       wishlist_fr,
       columns=wishlist_columns,
@@ -2221,11 +2241,13 @@ class App:
     self.wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
     self.wishlist_tree.heading("Artist", text="Artist", anchor="w")
     self.wishlist_tree.heading("Title", text="Title", anchor="w")
-    self.wishlist_tree.heading("Discogs URL", text="Discogs URL", anchor="w")
+    self.wishlist_tree.heading("For Sale", text="For Sale", anchor="center")
+    self.wishlist_tree.heading("Lowest Price", text="Lowest Price", anchor="e")
     self.wishlist_tree.column("Artist", width=180, minwidth=80, stretch=True, anchor="w")
     self.wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
-    self.wishlist_tree.column("Discogs URL", width=260, minwidth=120, stretch=True, anchor="w")
-    self.wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+    self.wishlist_tree.column("For Sale", width=80, minwidth=60, stretch=False, anchor="center")
+    self.wishlist_tree.column("Lowest Price", width=100, minwidth=80, stretch=False, anchor="e")
+    self.wishlist_tree.grid(row=grid_row, column=0, sticky="nsew", padx=8, pady=8)
     self._wishlist_rows = []
     self._setup_wishlist_tree_events()
 
@@ -2241,16 +2263,44 @@ class App:
         self._wishlist_rows.append(row)
         placeholder = self._get_placeholder_image()
         img = self._get_row_image(row, placeholder)
+        
+        # Format availability info
+        num_for_sale = getattr(row, "num_for_sale", None)
+        lowest_price = getattr(row, "lowest_price", None)
+        price_currency = getattr(row, "price_currency", "") or self.v_currency.get()
+        
+        if num_for_sale is not None and num_for_sale > 0:
+          for_sale_text = f"✓ {num_for_sale}"
+          if lowest_price is not None:
+            price_text = f"{price_currency} {lowest_price:.2f}"
+          else:
+            price_text = "—"
+        else:
+          for_sale_text = "—"
+          price_text = "—"
+        
         values = (
           str(getattr(row, "artist_display", "")),
           str(getattr(row, "title", "")),
-          str(getattr(row, "discogs_url", getattr(row, "url", "")))
+          for_sale_text,
+          price_text
         )
-        tag = "row_odd" if i % 2 == 1 else "row_even"
+        
+        # Color rows with available copies differently
+        if num_for_sale is not None and num_for_sale > 0:
+          tag = "row_available" if i % 2 == 0 else "row_available_odd"
+        else:
+          tag = "row_odd" if i % 2 == 1 else "row_even"
+        
         if img:
           self.wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
         else:
           self.wishlist_tree.insert("", "end", values=values, tags=(tag,))
+      
+      # Configure tag colors for available items
+      self.wishlist_tree.tag_configure("row_available", background="#1e3a2f")
+      self.wishlist_tree.tag_configure("row_available_odd", background="#163028")
+      
       if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
         self._download_missing_thumbnails(self._wishlist_rows)
 
@@ -2260,6 +2310,8 @@ class App:
     self.wishlist_tree.bind("<Button-3>", self._on_wishlist_right_click)
     self.wishlist_tree.bind("<Motion>", self._on_wishlist_tree_motion)
     self.wishlist_tree.bind("<Leave>", self._on_wishlist_tree_leave)
+    # Bind click on "For Sale" column to open marketplace
+    self.wishlist_tree.bind("<Button-1>", self._on_wishlist_click)
 
   def _make_wishlist_row(self, entry):
     from types import SimpleNamespace
@@ -2323,6 +2375,119 @@ class App:
     artist, title = values[0], values[1]
     remove_from_wishlist(artist, title)
     self.refresh_wishlist_tree()
+
+  def _on_wishlist_click(self, event):
+    """Handle single click on wishlist tree - open marketplace if clicking For Sale/Price column."""
+    import webbrowser
+    
+    region = self.wishlist_tree.identify_region(event.x, event.y)
+    if region != "cell":
+      return
+    
+    column = self.wishlist_tree.identify_column(event.x)
+    item = self.wishlist_tree.identify_row(event.y)
+    if not item:
+      return
+    
+    # Check if clicking on "For Sale" or "Lowest Price" columns (#3 or #4)
+    if column not in ("#3", "#4"):
+      return
+    
+    try:
+      idx = self.wishlist_tree.index(item)
+      if idx < 0 or idx >= len(self._wishlist_rows):
+        return
+      
+      row = self._wishlist_rows[idx]
+      num_for_sale = getattr(row, "num_for_sale", None)
+      
+      # Only open if there are copies for sale
+      if num_for_sale is not None and num_for_sale > 0:
+        release_id = getattr(row, "release_id", None)
+        if release_id:
+          # Open Discogs marketplace page for this release
+          marketplace_url = f"https://www.discogs.com/sell/release/{release_id}"
+          webbrowser.open(marketplace_url)
+    except Exception as e:
+      print(f"Error opening marketplace: {e}")
+
+  def _check_wishlist_availability(self):
+    """Check Discogs Marketplace for availability of all wishlist items."""
+    import threading
+    from core.wishlist import load_wishlist, save_wishlist
+    
+    if not self._wishlist_rows:
+      self._wishlist_status_var.set("No items in wishlist")
+      return
+    
+    # Get token for API calls
+    token = self.v_token.get()
+    if not token:
+      messagebox.showwarning("Token Required", "Please enter your Discogs token in Settings to check marketplace availability.")
+      return
+    
+    # Disable button during check
+    self._wishlist_check_btn.config(state="disabled")
+    self._wishlist_status_var.set("Checking availability...")
+    
+    def check_availability():
+      try:
+        import core.api as api
+        
+        headers = api.discogs_headers(token, self.v_user_agent.get())
+        currency = self.v_currency.get()
+        wishlist_data = list(load_wishlist())
+        
+        total = len(wishlist_data)
+        updated_count = 0
+        available_count = 0
+        
+        for i, entry in enumerate(wishlist_data):
+          release_id = entry.get("release_id")
+          if not release_id:
+            # Try to extract from URL
+            import re
+            url = entry.get("discogs_url", entry.get("url", ""))
+            match = re.search(r'/releases?/(\d+)', url)
+            if match:
+              release_id = int(match.group(1))
+              entry["release_id"] = release_id
+          
+          if release_id:
+            # Update status
+            self.root.after(0, lambda i=i, t=total: self._wishlist_status_var.set(f"Checking {i+1}/{t}..."))
+            
+            # Fetch price from API
+            lowest, num_for_sale, actual_currency = api.fetch_release_price(headers, release_id, currency)
+            
+            # Update entry with availability info
+            entry["lowest_price"] = lowest
+            entry["num_for_sale"] = num_for_sale
+            entry["price_currency"] = actual_currency
+            updated_count += 1
+            
+            if num_for_sale and num_for_sale > 0:
+              available_count += 1
+        
+        # Save updated wishlist
+        save_wishlist(wishlist_data)
+        
+        # Update UI on main thread
+        def finish():
+          self._wishlist_check_btn.config(state="normal")
+          self._wishlist_status_var.set(f"✓ {available_count} of {total} available for purchase")
+          self.refresh_wishlist_tree()
+        
+        self.root.after(0, finish)
+        
+      except Exception as e:
+        def show_error():
+          self._wishlist_check_btn.config(state="normal")
+          self._wishlist_status_var.set(f"Error: {str(e)[:50]}")
+        self.root.after(0, show_error)
+    
+    # Run in background thread
+    threading.Thread(target=check_availability, daemon=True).start()
 
   def _build_log_tab(self, nb):
     log_fr = ttk.Frame(nb)
