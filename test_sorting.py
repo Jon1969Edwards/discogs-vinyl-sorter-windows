@@ -4,8 +4,7 @@
 import sys
 from typing import Set
 
-sys.path.insert(0, "/Applications/Discogs App")
-import discogs_app as app  # noqa: E402
+import discogs_app as app
 from core.models import ReleaseRow
 
 
@@ -76,9 +75,9 @@ def main():
     assert_eq(big_star_safe, "big star", "Band-safe: 'Big Star' should remain literal under safe-bands")
 
     # 10) Various Artists policy: when policy is 'title', a Various item should sort by title
-        r1 = ReleaseRow(artist_display="Various Artists", title="Zebra Songs", year=2000, label="", catno="", country="", format_str="", discogs_url="", notes="", release_id=None)
+    r1 = ReleaseRow(artist_display="Various Artists", title="Zebra Songs", year=2000, label="", catno="", country="", format_str="", discogs_url="", notes="", release_id=None)
     r1.sort_artist, r1.sort_title = app.make_sort_keys(r1.artist_display, r1.title, extra_articles=[], last_name_first=True, lnf_allow_3=False, lnf_exclude=set(), lnf_safe_bands=True)
-        r2 = ReleaseRow(artist_display="Various Artists", title="Alpha Tunes", year=1999, label="", catno="", country="", format_str="", discogs_url="", notes="", release_id=None)
+    r2 = ReleaseRow(artist_display="Various Artists", title="Alpha Tunes", year=1999, label="", catno="", country="", format_str="", discogs_url="", notes="", release_id=None)
     r2.sort_artist, r2.sort_title = app.make_sort_keys(r2.artist_display, r2.title, extra_articles=[], last_name_first=True, lnf_allow_3=False, lnf_exclude=set(), lnf_safe_bands=True)
     sorted_title = app.sort_rows([r1, r2], "title")
     assert_eq(sorted_title[0].title, "Alpha Tunes", "Various Artists should be filed/sorted by title when various-policy is 'title'")

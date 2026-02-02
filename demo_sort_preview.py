@@ -4,7 +4,7 @@ Does not hit Discogs API; uses synthetic sample releases.
 """
 from pathlib import Path
 import sys
-sys.path.insert(0, "/Applications/Discogs App")
+
 import discogs_app as app
 
 SAMPLES = [
