@@ -2231,47 +2231,13 @@ class App:
 
   def _setup_wishlist_tree_events(self):
     from core.wishlist import load_wishlist, remove_from_wishlist
+
     def refresh_wishlist_tree():
       self.wishlist_tree.delete(*self.wishlist_tree.get_children())
-      from types import SimpleNamespace
-      import re
       self._wishlist_rows = []
       wishlist_data = list(load_wishlist())
       for i, entry in enumerate(wishlist_data):
-        release_id = entry.get("release_id")
-        if not release_id:
-          url = entry.get("discogs_url", entry.get("url", ""))
-          match = re.search(r'/releases?/(\d+)', url)
-          if match:
-            release_id = int(match.group(1))
-        row = SimpleNamespace(
-          artist_display=entry.get("artist", ""),
-          title=entry.get("title", ""),
-          year=entry.get("year", ""),
-          label=entry.get("label", ""),
-          catno=entry.get("catno", ""),
-          country=entry.get("country", ""),
-          format_str=entry.get("format", ""),
-          discogs_url=entry.get("discogs_url", entry.get("url", "")),
-          notes=entry.get("notes", ""),
-          release_id=release_id,
-          master_id=entry.get("master_id"),
-          sort_artist=entry.get("artist", ""),
-          sort_title=entry.get("title", ""),
-          median_price=entry.get("median_price"),
-          lowest_price=entry.get("lowest_price"),
-          num_for_sale=entry.get("num_for_sale"),
-          price_currency=entry.get("price_currency", ""),
-          thumb_url=entry.get("thumb", ""),
-          cover_image_url=entry.get("cover_image_url", ""),
-          genres=entry.get("genres", ""),
-          styles=entry.get("styles", ""),
-          companies=entry.get("companies", ""),
-          contributors=entry.get("contributors", ""),
-          barcode=entry.get("barcode", ""),
-          tracklist=entry.get("tracklist", ""),
-          extra=entry.get("extra", "")
-        )
+        row = self._make_wishlist_row(entry)
         self._wishlist_rows.append(row)
         placeholder = self._get_placeholder_image()
         img = self._get_row_image(row, placeholder)
@@ -2287,34 +2253,76 @@ class App:
           self.wishlist_tree.insert("", "end", values=values, tags=(tag,))
       if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
         self._download_missing_thumbnails(self._wishlist_rows)
+
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
-    def on_wishlist_double_click(event):
-      item = self.wishlist_tree.selection()
-      if not item:
-        return
-      idx = self.wishlist_tree.index(item[0])
-      if idx < 0 or idx >= len(self._wishlist_rows):
-        return
-      row = self._wishlist_rows[idx]
-      popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
-      _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
-      details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
-      self._populate_album_details(details_frame, row, fg, bg, row_offset)
-      self._setup_details_scroll(details_frame, details_canvas)
-      self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
-    self.wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
-    def on_wishlist_right_click(event):
-      item = self.wishlist_tree.identify_row(event.y)
-      if not item:
-        return
-      values = self.wishlist_tree.item(item, "values")
-      artist, title = values[0], values[1]
-      remove_from_wishlist(artist, title)
-      self.refresh_wishlist_tree()
-    self.wishlist_tree.bind("<Button-3>", on_wishlist_right_click)
+    self.wishlist_tree.bind("<Double-1>", self._on_wishlist_double_click)
+    self.wishlist_tree.bind("<Button-3>", self._on_wishlist_right_click)
     self.wishlist_tree.bind("<Motion>", self._on_wishlist_tree_motion)
     self.wishlist_tree.bind("<Leave>", self._on_wishlist_tree_leave)
+
+  def _make_wishlist_row(self, entry):
+    from types import SimpleNamespace
+    import re
+    release_id = entry.get("release_id")
+    if not release_id:
+      url = entry.get("discogs_url", entry.get("url", ""))
+      match = re.search(r'/releases?/(\d+)', url)
+      if match:
+        release_id = int(match.group(1))
+    return SimpleNamespace(
+      artist_display=entry.get("artist", ""),
+      title=entry.get("title", ""),
+      year=entry.get("year", ""),
+      label=entry.get("label", ""),
+      catno=entry.get("catno", ""),
+      country=entry.get("country", ""),
+      format_str=entry.get("format", ""),
+      discogs_url=entry.get("discogs_url", entry.get("url", "")),
+      notes=entry.get("notes", ""),
+      release_id=release_id,
+      master_id=entry.get("master_id"),
+      sort_artist=entry.get("artist", ""),
+      sort_title=entry.get("title", ""),
+      median_price=entry.get("median_price"),
+      lowest_price=entry.get("lowest_price"),
+      num_for_sale=entry.get("num_for_sale"),
+      price_currency=entry.get("price_currency", ""),
+      thumb_url=entry.get("thumb", ""),
+      cover_image_url=entry.get("cover_image_url", ""),
+      genres=entry.get("genres", ""),
+      styles=entry.get("styles", ""),
+      companies=entry.get("companies", ""),
+      contributors=entry.get("contributors", ""),
+      barcode=entry.get("barcode", ""),
+      tracklist=entry.get("tracklist", ""),
+      extra=entry.get("extra", "")
+    )
+
+  def _on_wishlist_double_click(self, event):
+    item = self.wishlist_tree.selection()
+    if not item:
+      return
+    idx = self.wishlist_tree.index(item[0])
+    if idx < 0 or idx >= len(self._wishlist_rows):
+      return
+    row = self._wishlist_rows[idx]
+    popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
+    _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
+    details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
+    self._populate_album_details(details_frame, row, fg, bg, row_offset)
+    self._setup_details_scroll(details_frame, details_canvas)
+    self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
+
+  def _on_wishlist_right_click(self, event):
+    from core.wishlist import remove_from_wishlist
+    item = self.wishlist_tree.identify_row(event.y)
+    if not item:
+      return
+    values = self.wishlist_tree.item(item, "values")
+    artist, title = values[0], values[1]
+    remove_from_wishlist(artist, title)
+    self.refresh_wishlist_tree()
 
   def _build_log_tab(self, nb):
     log_fr = ttk.Frame(nb)
