@@ -1254,14 +1254,12 @@ def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, release
     progress_callback("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
   if main_progress_q:
     main_progress_q.put(("update", f"Fetching {total_to_fetch} album prices in {cfg.currency}..."))
-  fetched_count = [0]
   def price_progress(msg: str):
-    fetched_count[0] += 1
     log(msg)
     if progress_callback:
-      progress_callback("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}")
+      progress_callback("update", msg)
     if main_progress_q:
-      main_progress_q.put(("update", f"[{fetched_count[0]}/{total_to_fetch}] {msg}"))
+      main_progress_q.put(("update", msg))
   try:
     core.fetch_prices_for_rows(headers, releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
   except Exception as e:
