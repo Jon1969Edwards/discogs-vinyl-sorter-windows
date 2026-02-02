@@ -2169,15 +2169,7 @@ class App:
       row = self._wishlist_rows[idx]
       # Use the exact same popup logic as shelf order
       popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
-      cover_img, row_offset = self._add_album_cover_to_popup(popup, row, bg)
-      # If no image was shown, forcibly show the placeholder (double-check after all logic)
-      if not any(isinstance(child, tk.Label) and getattr(child, 'image', None) for child in popup.outer.winfo_children()):
-        if hasattr(self, '_thumbnail_cache'):
-          placeholder = self._thumbnail_cache.get_placeholder()
-          img_label = tk.Label(popup.outer, image=placeholder, bg=bg)
-          img_label.image = placeholder
-          img_label.pack(pady=(12, 24))
-          row_offset = 1
+      _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
       details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
       self._populate_album_details(details_frame, row, fg, bg, row_offset)
       self._setup_details_scroll(details_frame, details_canvas)
