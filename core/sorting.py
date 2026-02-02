@@ -352,6 +352,121 @@ def build_release_row(
 # Collection row collectors
 # ============================================================================
 
+def _lp_basic_info(item: Dict) -> Dict:
+    return item.get("basic_information") or {}
+
+def _lp_update_stats(basic: Dict, stats: Dict[str, int]) -> None:
+    stats["scanned"] += 1
+    fmts = basic.get("formats", []) or []
+    is_vinyl = any((f.get("name") or "").strip().lower() == "vinyl" for f in fmts)
+    if is_vinyl:
+        stats["vinyl"] += 1
+        lp_flag = any(
+            any((d.strip().lower() in {"lp", "album"}) for d in (f.get("descriptions") or []))
+            for f in fmts if (f.get("name") or "").strip().lower() == "vinyl"
+        )
+        if lp_flag:
+            stats["vinyl_lp"] += 1
+            lp_33_flag = any(
+                any(("33" in d.strip().lower() and "rpm" in d.strip().lower()) for d in (f.get("descriptions") or []))
+                for f in fmts if (f.get("name") or "").strip().lower() == "vinyl"
+            )
+            if lp_33_flag:
+                stats["vinyl_lp_33"] += 1
+
+def _lp_build_row(
+    basic: Dict,
+    item: Dict,
+    extra_articles: List[str],
+    last_name_first: bool,
+    lnf_allow_3: bool,
+    lnf_exclude: Optional[Set[str]],
+    lnf_safe_bands: bool,
+) -> ReleaseRow:
+    title = basic.get("title") or ""
+    artist_disp = build_artist_display(basic)
+    year_raw = basic.get("year")
+    year = int(year_raw) if (year_raw and str(year_raw).isdigit()) else None
+    label, catno = label_and_catno(basic)
+    fmt_desc = format_string(basic)
+    rel_id = basic.get("id")
+    master_id_raw = basic.get("master_id")
+    url = f"https://www.discogs.com/release/{rel_id}" if rel_id else ""
+    thumb_url = basic.get("thumb") or ""
+    cover_image_url = basic.get("cover_image") or ""
+    sort_artist, sort_title = make_sort_keys(
+        artist_disp,
+        title,
+        extra_articles,
+        last_name_first=last_name_first,
+        lnf_allow_3=lnf_allow_3,
+        lnf_exclude=lnf_exclude,
+        lnf_safe_bands=lnf_safe_bands,
+    )
+    return ReleaseRow(
+        artist_display=artist_disp,
+        title=title,
+        year=year,
+        label=label,
+        catno=catno,
+        country=basic.get("country") or "",
+        format_str=fmt_desc,
+        discogs_url=url,
+        notes=(item.get("notes") or ""),
+        release_id=int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None,
+        master_id=int(master_id_raw) if isinstance(master_id_raw, int) or (isinstance(master_id_raw, str) and master_id_raw.isdigit()) else None,
+        sort_artist=sort_artist,
+        sort_title=sort_title,
+        thumb_url=thumb_url,
+        cover_image_url=cover_image_url,
+    )
+
+def _lp_should_exclude(basic: Dict, lp_strict: bool, lp_probable: bool) -> bool:
+    return not is_lp_33(basic, strict=lp_strict, probable=lp_probable)
+
+def _lp_track_exclusion(
+    basic: Dict,
+    collect_exclusions: bool,
+    lp_probable: bool,
+    lp_strict: bool,
+    excluded_probable: List[Dict],
+) -> None:
+    if collect_exclusions and lp_probable and not lp_strict:
+        excluded_probable.append(basic)
+
+def _lp_process_item(
+    item: Dict,
+    stats: Dict[str, int],
+    rows: List[ReleaseRow],
+    excluded_probable: List[Dict],
+    extra_articles: List[str],
+    lp_strict: bool,
+    lp_probable: bool,
+    last_name_first: bool,
+    lnf_allow_3: bool,
+    lnf_exclude: Optional[Set[str]],
+    lnf_safe_bands: bool,
+    collect_exclusions: bool,
+) -> None:
+    basic = _lp_basic_info(item)
+    if not basic:
+        return
+    _lp_update_stats(basic, stats)
+    if _lp_should_exclude(basic, lp_strict, lp_probable):
+        _lp_track_exclusion(basic, collect_exclusions, lp_probable, lp_strict, excluded_probable)
+        return
+    rows.append(
+        _lp_build_row(
+            basic,
+            item,
+            extra_articles,
+            last_name_first,
+            lnf_allow_3,
+            lnf_exclude,
+            lnf_safe_bands,
+        )
+    )
+
 def collect_lp_rows(
     headers: Dict[str, str],
     username: str,
@@ -375,86 +490,21 @@ def collect_lp_rows(
     stats = {"scanned": 0, "vinyl": 0, "vinyl_lp": 0, "vinyl_lp_33": 0}
     excluded_probable: List[Dict] = []
 
-    def basic_info(item: Dict) -> Dict:
-        return item.get("basic_information") or {}
-
-    def update_stats(basic: Dict) -> None:
-        stats["scanned"] += 1
-        fmts = basic.get("formats", []) or []
-        is_vinyl = any((f.get("name") or "").strip().lower() == "vinyl" for f in fmts)
-        if is_vinyl:
-            stats["vinyl"] += 1
-            lp_flag = any(
-                any((d.strip().lower() in {"lp", "album"}) for d in (f.get("descriptions") or []))
-                for f in fmts if (f.get("name") or "").strip().lower() == "vinyl"
-            )
-            if lp_flag:
-                stats["vinyl_lp"] += 1
-                lp_33_flag = any(
-                    any(("33" in d.strip().lower() and "rpm" in d.strip().lower()) for d in (f.get("descriptions") or []))
-                    for f in fmts if (f.get("name") or "").strip().lower() == "vinyl"
-                )
-                if lp_33_flag:
-                    stats["vinyl_lp_33"] += 1
-
-    def build_row(basic: Dict, item: Dict) -> ReleaseRow:
-        title = basic.get("title") or ""
-        artist_disp = build_artist_display(basic)
-        year_raw = basic.get("year")
-        year = int(year_raw) if (year_raw and str(year_raw).isdigit()) else None
-        label, catno = label_and_catno(basic)
-        fmt_desc = format_string(basic)
-        rel_id = basic.get("id")
-        master_id_raw = basic.get("master_id")
-        url = f"https://www.discogs.com/release/{rel_id}" if rel_id else ""
-        thumb_url = basic.get("thumb") or ""
-        cover_image_url = basic.get("cover_image") or ""
-        sort_artist, sort_title = make_sort_keys(
-            artist_disp,
-            title,
-            extra_articles,
-            last_name_first=last_name_first,
-            lnf_allow_3=lnf_allow_3,
-            lnf_exclude=lnf_exclude,
-            lnf_safe_bands=lnf_safe_bands,
-        )
-        return ReleaseRow(
-            artist_display=artist_disp,
-            title=title,
-            year=year,
-            label=label,
-            catno=catno,
-            country=basic.get("country") or "",
-            format_str=fmt_desc,
-            discogs_url=url,
-            notes=(item.get("notes") or ""),
-            release_id=int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None,
-            master_id=int(master_id_raw) if isinstance(master_id_raw, int) or (isinstance(master_id_raw, str) and master_id_raw.isdigit()) else None,
-            sort_artist=sort_artist,
-            sort_title=sort_title,
-            thumb_url=thumb_url,
-            cover_image_url=cover_image_url,
-        )
-
-    def should_exclude(basic: Dict) -> bool:
-        return not is_lp_33(basic, strict=lp_strict, probable=lp_probable)
-
-    def track_exclusion(basic: Dict) -> None:
-        if collect_exclusions and lp_probable and not lp_strict:
-            excluded_probable.append(basic)
-
-    def process_item(item: Dict) -> None:
-        basic = basic_info(item)
-        if not basic:
-            return
-        update_stats(basic)
-        if should_exclude(basic):
-            track_exclusion(basic)
-            return
-        rows.append(build_row(basic, item))
-
     for item in iterate_collection(headers, username, per_page=per_page, max_pages=max_pages):
-        process_item(item)
+        _lp_process_item(
+            item,
+            stats,
+            rows,
+            excluded_probable,
+            extra_articles,
+            lp_strict,
+            lp_probable,
+            last_name_first,
+            lnf_allow_3,
+            lnf_exclude,
+            lnf_safe_bands,
+            collect_exclusions,
+        )
 
     if debug_stats is not None:
         debug_stats.clear()
