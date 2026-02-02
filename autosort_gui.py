@@ -2543,6 +2543,10 @@ class App:
     artist = getattr(row, "artist_display", "")
     album = getattr(row, "title", "")
     discogs_url = getattr(row, "discogs_url", getattr(row, "url", None))
+    year = getattr(row, "year", None)
+    thumb_url = getattr(row, "thumb_url", None)
+    cover_image_url = getattr(row, "cover_image_url", None)
+    release_id = getattr(row, "release_id", None)
     wishlist_state = tk.StringVar()
     def update_wishlist_state():
         if is_in_wishlist(artist, album):
@@ -2553,8 +2557,17 @@ class App:
         if is_in_wishlist(artist, album):
             remove_from_wishlist(artist, album)
         else:
-            add_to_wishlist(artist, album, discogs_url)
+            add_to_wishlist(
+                artist, album, discogs_url,
+                year=year,
+                thumb=thumb_url,
+                cover_image_url=cover_image_url,
+                release_id=release_id
+            )
         update_wishlist_state()
+        # Refresh wishlist tree if it exists
+        if hasattr(self, 'refresh_wishlist_tree'):
+            self.refresh_wishlist_tree()
     update_wishlist_state()
     btn_wishlist = tk.Button(
         btn_frame, textvariable=wishlist_state, command=toggle_wishlist,

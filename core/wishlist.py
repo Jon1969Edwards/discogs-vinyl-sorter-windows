@@ -15,14 +15,27 @@ def save_wishlist(wishlist):
     with open(WISHLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(wishlist, f, indent=2, ensure_ascii=False)
 
-def add_to_wishlist(artist, title, discogs_url=None):
+def add_to_wishlist(artist, title, discogs_url=None, year=None, thumb=None, cover_image_url=None, release_id=None, **kwargs):
     wishlist = load_wishlist()
-    entry = {"artist": artist, "title": title, "discogs_url": discogs_url}
-    if entry not in wishlist:
-        wishlist.append(entry)
-        save_wishlist(wishlist)
-        return True
-    return False
+    # Check if already exists by artist and title
+    if any(w["artist"] == artist and w["title"] == title for w in wishlist):
+        return False
+    entry = {
+        "artist": artist,
+        "title": title,
+        "discogs_url": discogs_url,
+        "year": year,
+        "thumb": thumb,
+        "cover_image_url": cover_image_url,
+        "release_id": release_id,
+    }
+    # Add any extra kwargs
+    entry.update(kwargs)
+    # Remove None values to keep JSON clean
+    entry = {k: v for k, v in entry.items() if v is not None}
+    wishlist.append(entry)
+    save_wishlist(wishlist)
+    return True
 
 def remove_from_wishlist(artist, title):
     wishlist = load_wishlist()
