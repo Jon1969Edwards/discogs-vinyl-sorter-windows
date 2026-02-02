@@ -1956,34 +1956,42 @@ class App:
     nb.add(wishlist_fr, text="⭐ Wishlist")
     wishlist_fr.rowconfigure(0, weight=1)
     wishlist_fr.columnconfigure(0, weight=1)
-    wishlist_tree = ttk.Treeview(
+    self.wishlist_tree = ttk.Treeview(
       wishlist_fr,
       columns=("Artist", "Title", "Discogs URL"),
       show="tree headings",
       selectmode="browse"
     )
     wishlist_columns = ("Artist", "Title", "Discogs URL")
-    wishlist_tree.config(columns=wishlist_columns, show="tree headings")
-    wishlist_tree.heading("#0", text="", anchor="center")
-    wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
-    wishlist_tree.heading("Artist", text="Artist", anchor="w")
-    wishlist_tree.heading("Title", text="Title", anchor="w")
-    wishlist_tree.heading("Discogs URL", text="Discogs URL", anchor="w")
-    wishlist_tree.column("Artist", width=180, minwidth=80, stretch=True, anchor="w")
-    wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
-    wishlist_tree.column("Discogs URL", width=260, minwidth=120, stretch=True, anchor="w")
-    wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+    self.wishlist_tree.config(columns=wishlist_columns, show="tree headings")
+    self.wishlist_tree.heading("#0", text="", anchor="center")
+    self.wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
+    self.wishlist_tree.heading("Artist", text="Artist", anchor="w")
+    self.wishlist_tree.heading("Title", text="Title", anchor="w")
+    self.wishlist_tree.heading("Discogs URL", text="Discogs URL", anchor="w")
+    self.wishlist_tree.column("Artist", width=180, minwidth=80, stretch=True, anchor="w")
+    self.wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
+    self.wishlist_tree.column("Discogs URL", width=260, minwidth=120, stretch=True, anchor="w")
+    self.wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
 
     # Populate wishlist
     from core.wishlist import load_wishlist, remove_from_wishlist
     self._wishlist_rows = []  # Ensure attribute always exists before any use
     def refresh_wishlist_tree():
-      wishlist_tree.delete(*wishlist_tree.get_children())
+      self.wishlist_tree.delete(*self.wishlist_tree.get_children())
       from types import SimpleNamespace
+      import re
       # Always initialize _wishlist_rows, even if no entries
       self._wishlist_rows = []
       wishlist_data = list(load_wishlist())
       for i, entry in enumerate(wishlist_data):
+        # Extract release_id from discogs_url if not present
+        release_id = entry.get("release_id")
+        if not release_id:
+          url = entry.get("discogs_url", entry.get("url", ""))
+          match = re.search(r'/releases?/(\d+)', url)
+          if match:
+            release_id = int(match.group(1))
         # Build a ReleaseRow-like object for each wishlist entry
         row = SimpleNamespace(
           artist_display=entry.get("artist", ""),
@@ -1995,7 +2003,7 @@ class App:
           format_str=entry.get("format", ""),
           discogs_url=entry.get("discogs_url", entry.get("url", "")),
           notes=entry.get("notes", ""),
-          release_id=entry.get("release_id"),
+          release_id=release_id,
           master_id=entry.get("master_id"),
           sort_artist=entry.get("artist", ""),
           sort_title=entry.get("title", ""),
@@ -2025,9 +2033,9 @@ class App:
         )
         tag = "row_odd" if i % 2 == 1 else "row_even"
         if img:
-          wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
+          self.wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
         else:
-          wishlist_tree.insert("", "end", values=values, tags=(tag,))
+          self.wishlist_tree.insert("", "end", values=values, tags=(tag,))
       # Download missing thumbnails for wishlist (after populating _wishlist_rows)
       if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
         self._download_missing_thumbnails(self._wishlist_rows)
@@ -2036,10 +2044,10 @@ class App:
 
     # Double-click to open Discogs URL
     def on_wishlist_double_click(event):
-      item = wishlist_tree.selection()
+      item = self.wishlist_tree.selection()
       if not item:
         return
-      idx = wishlist_tree.index(item[0])
+      idx = self.wishlist_tree.index(item[0])
       if idx < 0 or idx >= len(self._wishlist_rows):
         return
       row = self._wishlist_rows[idx]
@@ -2059,18 +2067,18 @@ class App:
       self._setup_details_scroll(details_frame, details_canvas)
       self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
 
-    wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
+    self.wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
 
     # Right-click to remove from wishlist
     def on_wishlist_right_click(event):
-      item = wishlist_tree.identify_row(event.y)
+      item = self.wishlist_tree.identify_row(event.y)
       if not item:
         return
-      values = wishlist_tree.item(item, "values")
+      values = self.wishlist_tree.item(item, "values")
       artist, title = values[0], values[1]
       remove_from_wishlist(artist, title)
       refresh_wishlist_tree()
-    wishlist_tree.bind("<Button-3>", on_wishlist_right_click)
+    self.wishlist_tree.bind("<Button-3>", on_wishlist_right_click)
     order_fr.rowconfigure(1, weight=1)
     order_fr.columnconfigure(0, weight=1)
     
@@ -3102,8 +3110,9 @@ class App:
   def _get_row_image(self, row, placeholder):
     """Get the thumbnail image for a row, or placeholder if missing."""
     img = None
-    if self._thumbnails_enabled and row.release_id:
-      img = self._thumbnail_cache.load_photo(row.release_id)
+    if self._thumbnails_enabled:
+      if row.release_id:
+        img = self._thumbnail_cache.load_photo(row.release_id)
       if img is None:
         img = placeholder
     return img
@@ -3142,18 +3151,30 @@ class App:
   
   def _refresh_thumbnails(self) -> None:
     """Refresh the treeview to show newly downloaded thumbnails."""
-    if not self._last_result or not self._thumbnails_enabled:
+    if not self._thumbnails_enabled:
       return
     
-    # Update each item with its thumbnail
-    items = self.order_tree.get_children()
-    rows = self._tree_rows
+    # Update shelf order tree items with thumbnails
+    if self._last_result:
+      items = self.order_tree.get_children()
+      rows = self._tree_rows
+      
+      for i, (item, row) in enumerate(zip(items, rows)):
+        if row.release_id:
+          img = self._thumbnail_cache.load_photo(row.release_id)
+          if img:
+            self.order_tree.item(item, image=img)
     
-    for i, (item, row) in enumerate(zip(items, rows)):
-      if row.release_id:
-        img = self._thumbnail_cache.load_photo(row.release_id)
-        if img:
-          self.order_tree.item(item, image=img)
+    # Update wishlist tree items with thumbnails
+    if hasattr(self, 'wishlist_tree') and hasattr(self, '_wishlist_rows'):
+      items = self.wishlist_tree.get_children()
+      rows = self._wishlist_rows
+      
+      for i, (item, row) in enumerate(zip(items, rows)):
+        if row.release_id:
+          img = self._thumbnail_cache.load_photo(row.release_id)
+          if img:
+            self.wishlist_tree.item(item, image=img)
 
   def _update_status_bar(self, result: BuildResult) -> None:
     """Update the status bar with collection info."""
