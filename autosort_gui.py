@@ -1115,7 +1115,7 @@ class ToolTip:
     self.id_after = None
 
     widget.bind("<Enter>", self._on_enter)
-    widget.bind(EVENT_LEAVE, self._on_leave)
+    widget.bind(self.EVENT_LEAVE, self._on_leave)
     widget.bind("<ButtonPress>", self._on_leave)
   
   def _on_enter(self, event=None):
