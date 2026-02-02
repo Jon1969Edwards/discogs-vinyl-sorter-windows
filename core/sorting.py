@@ -55,7 +55,7 @@ def is_lp_33(basic: Dict, strict: bool = False, probable: bool = False) -> bool:
   vinyl_formats = [f for f in (basic.get("formats") or []) if (f.get("name") or "").strip().lower() == "vinyl"]
   if not vinyl_formats:
     return False
-  size_tokens = {"12\"", "12"", "12in", "12-inch"}
+  size_tokens = {"12\"", '12"', "12in", "12-inch"}
   desc_sets = [
     {d.strip().lower() for d in (f.get("descriptions") or []) if d}
     for f in vinyl_formats
@@ -85,7 +85,7 @@ def is_vinyl_45(basic: Dict) -> bool:
   vinyl_formats = [f for f in (basic.get("formats") or []) if (f.get("name") or "").strip().lower() == "vinyl"]
   if not vinyl_formats:
     return False
-  size_tokens = {"7\"", "7"", "7in", "7-inch"}
+  size_tokens = {"7\"", "7in", "7-inch"}
   for f in vinyl_formats:
     descs = {d.strip().lower() for d in (f.get("descriptions") or []) if d}
     if descs & size_tokens and any("45" in d and "rpm" in d for d in descs):
