@@ -406,6 +406,30 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from PIL import ImageTk
 
+
+def _upgrade_discogs_image_url(url: str, size: int = 500, quality: int = 90) -> str:
+  """Convert a Discogs thumbnail URL to a higher quality version.
+  
+  Discogs image URLs contain parameters like:
+  - q:40 (quality 40%)
+  - h:150/w:150 (size 150x150)
+  
+  We can modify these to get larger, higher quality images.
+  """
+  if not url:
+    return url
+  
+  import re
+  # Replace quality parameter (q:XX)
+  url = re.sub(r'/q:\d+/', f'/q:{quality}/', url)
+  # Replace height parameter (h:XXX)
+  url = re.sub(r'/h:\d+/', f'/h:{size}/', url)
+  # Replace width parameter (w:XXX)
+  url = re.sub(r'/w:\d+/', f'/w:{size}/', url)
+  
+  return url
+
+
 class ThumbnailCache:
   """Cache for album artwork thumbnails."""
   
@@ -572,7 +596,10 @@ class ThumbnailCache:
         from PIL import Image, ImageTk
         from io import BytesIO
         
-        resp = requests.get(cover_url, headers=headers, timeout=10)
+        # Upgrade the URL to get a higher quality image
+        high_quality_url = _upgrade_discogs_image_url(cover_url, size=500, quality=90)
+        
+        resp = requests.get(high_quality_url, headers=headers, timeout=10)
         if resp.status_code == 200:
           img = Image.open(BytesIO(resp.content))
           img = img.convert("RGBA")
@@ -629,7 +656,10 @@ class ThumbnailCache:
         from PIL import Image, ImageTk
         from io import BytesIO
         
-        resp = requests.get(cover_url, headers=headers, timeout=5)
+        # Upgrade the URL to get a higher quality image
+        high_quality_url = _upgrade_discogs_image_url(cover_url, size=400, quality=85)
+        
+        resp = requests.get(high_quality_url, headers=headers, timeout=5)
         if resp.status_code == 200:
           img = Image.open(BytesIO(resp.content))
           img = img.convert("RGBA")
