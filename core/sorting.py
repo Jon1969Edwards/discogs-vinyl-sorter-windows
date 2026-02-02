@@ -207,7 +207,7 @@ def _last_name_first_key(artist_clean: str, allow_3: bool, exclude_set: Set[str]
   if norm in exclude_set:
     return None
   # Split on '/' or ',' to handle multi-artist strings, use first artist for sorting
-  first_artist = re.split(r"/|,", artist_clean)[0].strip()
+  first_artist = re.split(r"[/,]", artist_clean)[0].strip()
   tokens = [t for t in re.split(r"\s+", first_artist) if t]
   if len(tokens) == 2:
     if safe_bands and is_band_like(tokens[0], tokens[1]):
