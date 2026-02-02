@@ -49,6 +49,8 @@ import tkinter as tk
 import discogs_app as core
 from core.models import ReleaseRow, BuildResult
 
+DEFAULT_USER_AGENT = "Mozilla/5.0"
+
 
 POLL_SECONDS_DEFAULT = 300  # 5 minutes
 CONFIG_FILE = Path(__file__).parent / ".discogs_config.json"
@@ -574,79 +576,105 @@ class ThumbnailCache:
     """Load a high-quality image for popup display (larger than preview)."""
     if not self._pil_available:
       return None
-    
-    # Check memory cache first
-    if release_id in self._popup_cache:
-      return self._popup_cache[release_id]
-    
-    # Check if popup file exists on disk
+
+    # 1. Try memory cache
+    cached = self._popup_cache.get(release_id)
+    if cached:
+      return cached
+
+    # 2. Try disk cache
     popup_path = self._get_popup_cache_path(release_id)
-    if popup_path.exists():
-      try:
-        from PIL import Image, ImageTk
-        img = Image.open(popup_path)
-        photo = ImageTk.PhotoImage(img)
-        self._popup_cache[release_id] = photo
-        return photo
-      except Exception:
-        pass
-    
-    # If we have a cover_url, download the larger image
-    if headers and release_id:
-      try:
-        import requests
-        from PIL import Image, ImageTk
-        from io import BytesIO
-        
-        # If the URL is low quality (thumbnail), fetch the hi-res URL from API
-        image_url = cover_url
-        if _is_low_quality_discogs_url(cover_url):
-          hires_url = _fetch_hires_image_url(release_id, headers)
-          if hires_url:
-            image_url = hires_url
-        
-        # Download the image
-        if image_url:
-          resp = requests.get(image_url, headers=headers, timeout=10)
-          if resp.status_code == 200:
-            img = Image.open(BytesIO(resp.content))
-            img = img.convert("RGBA")
-            
-            # Resize to popup size while maintaining aspect ratio
-            img.thumbnail(self.POPUP_SIZE, Image.Resampling.LANCZOS)
-            
-            # Create a square canvas and center the image
-            square = Image.new("RGBA", self.POPUP_SIZE, (30, 30, 50, 255))
-            offset = ((self.POPUP_SIZE[0] - img.width) // 2, (self.POPUP_SIZE[1] - img.height) // 2)
-            square.paste(img, offset)
-            
-            # Save to cache
-            square.save(popup_path, "PNG")
-            
-            photo = ImageTk.PhotoImage(square)
-            self._popup_cache[release_id] = photo
-            return photo
-      except Exception:
-        pass
-    
-    # Fall back to preview size if available
+    photo = self._load_image_from_path(popup_path, release_id, cache_type="_popup_cache")
+    if photo:
+      return photo
+
+    # 3. Try to download and cache
+    photo = self._download_and_cache_popup_image(release_id, cover_url, headers, popup_path)
+    if photo:
+      return photo
+
+    # 4. Fallback to preview size
     preview_img = self.load_preview(release_id, cover_url, headers)
     if preview_img:
       return preview_img
-    
+
+    return None
+
+  def _load_image_from_path(self, path: Path, release_id: int, cache_type: str) -> "ImageTk.PhotoImage | None":
+    """Helper to load image from disk and cache in memory."""
+    if path.exists():
+      try:
+        from PIL import Image, ImageTk
+        img = Image.open(path)
+        photo = ImageTk.PhotoImage(img)
+        getattr(self, cache_type)[release_id] = photo
+        return photo
+      except Exception:
+        return None
+    return None
+
+  def _download_and_cache_popup_image(self, release_id: int, cover_url: str, headers: dict, popup_path: Path) -> "ImageTk.PhotoImage | None":
+    """Helper to download, process, cache, and return popup image."""
+    if not headers or not release_id:
+      return None
+    try:
+      import requests
+      from PIL import Image, ImageTk
+      from io import BytesIO
+
+      image_url = cover_url
+      if _is_low_quality_discogs_url(cover_url):
+        hires_url = _fetch_hires_image_url(release_id, headers)
+        if hires_url:
+          image_url = hires_url
+
+      if image_url:
+        resp = requests.get(image_url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+          img = Image.open(BytesIO(resp.content))
+          img = img.convert("RGBA")
+          img.thumbnail(self.POPUP_SIZE, Image.Resampling.LANCZOS)
+          square = Image.new("RGBA", self.POPUP_SIZE, (30, 30, 50, 255))
+          offset = ((self.POPUP_SIZE[0] - img.width) // 2, (self.POPUP_SIZE[1] - img.height) // 2)
+          square.paste(img, offset)
+          square.save(popup_path, "PNG")
+          photo = ImageTk.PhotoImage(square)
+          self._popup_cache[release_id] = photo
+          return photo
+    except Exception:
+      return None
     return None
 
   def load_preview(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
     """Load a larger preview image for hover display."""
     if not self._pil_available:
       return None
-    
-    # Check memory cache first
-    if release_id in self._preview_cache:
-      return self._preview_cache[release_id]
-    
-    # Check if preview file exists on disk
+
+    # 1. Try memory cache
+    cached = self._preview_cache.get(release_id)
+    if cached:
+      return cached
+
+    # 2. Try disk cache
     preview_path = self._get_cache_path(release_id, preview=True)
+    photo = self._load_preview_from_disk(preview_path, release_id)
+    if photo:
+      return photo
+
+    # 3. Try to download and cache
+    photo = self._download_and_cache_preview(release_id, cover_url, headers, preview_path)
+    if photo:
+      return photo
+
+    # 4. Fallback to upscaling the small thumbnail
+    small_path = self._get_cache_path(release_id, preview=False)
+    photo = self._upscale_small_thumbnail(small_path, release_id)
+    if photo:
+      return photo
+
+    return None
+
+  def _load_preview_from_disk(self, preview_path: Path, release_id: int) -> "ImageTk.PhotoImage | None":
     if preview_path.exists():
       try:
         from PIL import Image, ImageTk
@@ -655,48 +683,41 @@ class ThumbnailCache:
         self._preview_cache[release_id] = photo
         return photo
       except Exception:
-        pass
-    
-    # If we have headers, download the image (potentially fetching hi-res URL from API)
-    if headers and release_id:
-      try:
-        import requests
-        from PIL import Image, ImageTk
-        from io import BytesIO
-        
-        # If the URL is low quality (thumbnail), fetch the hi-res URL from API
-        image_url = cover_url
-        if _is_low_quality_discogs_url(cover_url):
-          hires_url = _fetch_hires_image_url(release_id, headers)
-          if hires_url:
-            image_url = hires_url
-        
-        # Download the image
-        if image_url:
-          resp = requests.get(image_url, headers=headers, timeout=5)
-          if resp.status_code == 200:
-            img = Image.open(BytesIO(resp.content))
-            img = img.convert("RGBA")
-            
-            # Resize to preview size while maintaining aspect ratio
-            img.thumbnail(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
-            
-            # Create a square canvas and center the image
-            square = Image.new("RGBA", self.PREVIEW_SIZE, (30, 30, 50, 255))
-            offset = ((self.PREVIEW_SIZE[0] - img.width) // 2, (self.PREVIEW_SIZE[1] - img.height) // 2)
-            square.paste(img, offset)
-            
-            # Save to cache
-            square.save(preview_path, "PNG")
-            
-            photo = ImageTk.PhotoImage(square)
-            self._preview_cache[release_id] = photo
-            return photo
-      except Exception:
-        pass
-    
-    # Fall back to upscaling the small thumbnail
-    small_path = self._get_cache_path(release_id, preview=False)
+        return None
+    return None
+
+  def _download_and_cache_preview(self, release_id: int, cover_url: str, headers: dict, preview_path: Path) -> "ImageTk.PhotoImage | None":
+    if not headers or not release_id:
+      return None
+    try:
+      import requests
+      from PIL import Image, ImageTk
+      from io import BytesIO
+
+      image_url = cover_url
+      if _is_low_quality_discogs_url(cover_url):
+        hires_url = _fetch_hires_image_url(release_id, headers)
+        if hires_url:
+          image_url = hires_url
+
+      if image_url:
+        resp = requests.get(image_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+          img = Image.open(BytesIO(resp.content))
+          img = img.convert("RGBA")
+          img.thumbnail(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
+          square = Image.new("RGBA", self.PREVIEW_SIZE, (30, 30, 50, 255))
+          offset = ((self.PREVIEW_SIZE[0] - img.width) // 2, (self.PREVIEW_SIZE[1] - img.height) // 2)
+          square.paste(img, offset)
+          square.save(preview_path, "PNG")
+          photo = ImageTk.PhotoImage(square)
+          self._preview_cache[release_id] = photo
+          return photo
+    except Exception:
+      return None
+    return None
+
+  def _upscale_small_thumbnail(self, small_path: Path, release_id: int) -> "ImageTk.PhotoImage | None":
     if small_path.exists():
       try:
         from PIL import Image, ImageTk
@@ -706,8 +727,7 @@ class ThumbnailCache:
         self._preview_cache[release_id] = photo
         return photo
       except Exception:
-        pass
-    
+        return None
     return None
 
 
@@ -846,6 +866,8 @@ def get_collection_count(headers: dict[str, str], username: str) -> int:
 class ProgressDialog:
   """A modal progress dialog with a spinning vinyl record animation."""
 
+  DONE_MESSAGE = "Done!"
+
   def set_error(self, message: str) -> None:
     """Show error message with red highlight."""
     self.msg_label.config(text=message, fg="#ff5555")
@@ -854,10 +876,11 @@ class ProgressDialog:
     self.title_label.config(fg="#ff5555")
     self.top.update()
 
-  def set_done(self, message: str = "Done!") -> None:
+  def set_done(self, message: str = None) -> None:
     """Show done message with green highlight, then close after short delay."""
-    self.msg_label.config(text=message, fg="#55ff55")
-    self.progress_label.config(text="Done", fg="#55ff55")
+    done_msg = message if message is not None else self.DONE_MESSAGE
+    self.msg_label.config(text=done_msg, fg="#55ff55")
+    self.progress_label.config(text=self.DONE_MESSAGE, fg="#55ff55")
     self.top.configure(bg="#162e20")
     self.title_label.config(fg="#55ff55")
     self.top.update()
@@ -1080,7 +1103,9 @@ class ProgressDialog:
 
 class ToolTip:
   """Modern tooltip that appears on hover with a slight delay."""
-  
+
+  EVENT_LEAVE = "<Leave>"
+
   def __init__(self, widget, text: str, delay: int = 400, wraplength: int = 280):
     self.widget = widget
     self.text = text
@@ -1088,15 +1113,15 @@ class ToolTip:
     self.wraplength = wraplength
     self.tip_window = None
     self.id_after = None
-    
+
     widget.bind("<Enter>", self._on_enter)
-    widget.bind("<Leave>", self._on_leave)
+    widget.bind(EVENT_LEAVE, self._on_leave)
     widget.bind("<ButtonPress>", self._on_leave)
   
   def _on_enter(self, event=None):
     self._cancel()
     self.id_after = self.widget.after(self.delay, self._show_tip)
-  
+
   def _on_leave(self, event=None):
     self._cancel()
     self._hide_tip()
@@ -1105,26 +1130,26 @@ class ToolTip:
     if self.id_after:
       self.widget.after_cancel(self.id_after)
       self.id_after = None
-  
+
   def _show_tip(self):
     if self.tip_window:
       return
-    
+
     import tkinter as tk
-    
+
     x = self.widget.winfo_rootx() + 20
     y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
-    
+
     self.tip_window = tw = tk.Toplevel(self.widget)
     tw.wm_overrideredirect(True)
     tw.wm_geometry(f"+{x}+{y}")
-    
+
     # Modern dark tooltip style
     tw.configure(bg="#1a1a2e")
-    
+
     frame = tk.Frame(tw, bg="#1a1a2e", bd=1, relief="solid", highlightbackground="#6c63ff", highlightthickness=1)
     frame.pack()
-    
+
     label = tk.Label(
       frame,
       text=self.text,
@@ -1137,12 +1162,12 @@ class ToolTip:
       pady=6,
     )
     label.pack()
-  
+
   def _hide_tip(self):
     if self.tip_window:
       self.tip_window.destroy()
       self.tip_window = None
-  
+
   def update_text(self, new_text: str):
     """Update tooltip text dynamically."""
     self.text = new_text
@@ -1150,57 +1175,70 @@ class ToolTip:
 
 def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = None, cache: CollectionCache = None, main_progress_q=None) -> BuildResult:
   """Build the shelf order once, with granular progress updates."""
-  if main_progress_q:
-    main_progress_q.put(("update", "Fetching collection from Discogs..."))
-  try:
-    _, headers, username = _get_user_headers(cfg, log)
-  except Exception as e:
+
+  def report(action, message):
     if main_progress_q:
-      main_progress_q.put(("error", f"Failed to get user headers: {e}"))
-    raise
-  if cache:
-    cache.set_username(username)
-  out_dir = Path(cfg.output_dir)
-  out_dir.mkdir(parents=True, exist_ok=True)
-  if main_progress_q:
-    main_progress_q.put(("update", "Collecting rows from Discogs...") )
-  try:
-    rows = _collect_rows(cfg, headers, username)
-  except Exception as e:
-    if main_progress_q:
-      main_progress_q.put(("error", f"Failed to collect rows: {e}"))
-    raise
-  if not rows:
-    log("No matching LPs found.")
-    if main_progress_q:
-      main_progress_q.put(("error", "No matching LPs found."))
-    return BuildResult(username=username, rows_sorted=[], lines=[])
-  need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
-  if main_progress_q:
-    main_progress_q.put(("update", "Checking if price data is needed...") )
-  if need_prices:
-    if main_progress_q:
-      main_progress_q.put(("update", "Fetching album prices from Discogs Marketplace...") )
+      main_progress_q.put((action, message))
+
+  def get_headers_and_username():
+    report("update", "Fetching collection from Discogs...")
     try:
-      _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q)
+      _, headers, username = _get_user_headers(cfg, log)
+      if cache:
+        cache.set_username(username)
+      return headers, username
     except Exception as e:
-      if main_progress_q:
-        main_progress_q.put(("error", f"Failed to fetch prices: {e}"))
+      report("error", f"Failed to get user headers: {e}")
       raise
-  try:
-    if main_progress_q:
-      main_progress_q.put(("update", "Sorting collection...") )
-    rows_sorted = core.sort_rows(rows, "normal", sort_by=cfg.sort_by)
-    if main_progress_q:
-      main_progress_q.put(("update", "Generating output files...") )
-    lines = core.generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=need_prices)
-    if main_progress_q:
-      main_progress_q.put(("done", "Done!"))
-    return BuildResult(username=username, rows_sorted=rows_sorted, lines=lines)
-  except Exception as e:
-    if main_progress_q:
-      main_progress_q.put(("error", f"Build failed: {e}"))
-    raise
+
+  def collect_rows(headers, username):
+    report("update", "Collecting rows from Discogs...")
+    try:
+      rows = _collect_rows(cfg, headers, username)
+      if not rows:
+        log("No matching LPs found.")
+        report("error", "No matching LPs found.")
+        return []
+      return rows
+    except Exception as e:
+      report("error", f"Failed to collect rows: {e}")
+      raise
+
+  def handle_prices_if_needed(headers, rows):
+    need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
+    report("update", "Checking if price data is needed...")
+    if need_prices:
+      report("update", "Fetching album prices from Discogs Marketplace...")
+      try:
+        _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q)
+      except Exception as e:
+        report("error", f"Failed to fetch prices: {e}")
+        raise
+    return need_prices
+
+  def sort_and_generate_output(rows, need_prices, username):
+    try:
+      report("update", "Sorting collection...")
+      rows_sorted = core.sort_rows(rows, "normal", sort_by=cfg.sort_by)
+      report("update", "Generating output files...")
+      lines = core.generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=need_prices)
+      report("done", "Done!")
+      return BuildResult(username=username, rows_sorted=rows_sorted, lines=lines)
+    except Exception as e:
+      report("error", f"Build failed: {e}")
+      raise
+
+  def ensure_output_dir_exists(path):
+    out_dir = Path(path)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+  ensure_output_dir_exists(cfg.output_dir)
+  headers, username = get_headers_and_username()
+  rows = collect_rows(headers, username)
+  if not rows:
+    return BuildResult(username=username, rows_sorted=[], lines=[])
+  need_prices = handle_prices_if_needed(headers, rows)
+  return sort_and_generate_output(rows, need_prices, username)
 
 def _get_user_headers(cfg: AutoConfig, log: callable):
     token = core.get_token(cfg.token or None)
@@ -1262,36 +1300,40 @@ def _populate_prices_from_cache(cfg, cache, rows):
     return releases_needing_fetch, cached_count
 
 def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count, main_progress_q=None):
-  total_to_fetch = len([r for r in releases_needing_fetch if r.release_id])
-  log(f"Fetching {total_to_fetch} prices ({cfg.currency})...")
-  if progress_callback:
-    progress_callback("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
-  if main_progress_q:
-    main_progress_q.put(("update", f"Fetching {total_to_fetch} album prices in {cfg.currency}..."))
-  def price_progress(msg: str):
-    log(msg)
-    if progress_callback:
-      progress_callback("update", msg)
-    if main_progress_q:
-      main_progress_q.put(("update", msg))
-  try:
-    core.fetch_prices_for_rows(headers, releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
-  except Exception as e:
-    if main_progress_q:
-      main_progress_q.put(("error", f"Price fetch failed: {e}"))
-    raise
-  if cache:
-    for row in releases_needing_fetch:
-      if row.release_id and row.lowest_price is not None:
-        cache.set_price(row.release_id, cfg.currency, row.lowest_price, row.num_for_sale)
-      elif row.release_id:
-        cache.set_price(row.release_id, cfg.currency, None, 0)
-    cache.save()
-  log("Price fetch complete.")
-  if main_progress_q:
-    main_progress_q.put(("update", "Price fetch complete."))
-  if progress_callback:
-    progress_callback("close", None)
+    def _report_progress(action, message):
+        if progress_callback:
+            progress_callback(action, message)
+        if main_progress_q:
+            main_progress_q.put((action, message))
+
+    def _update_cache(cache, releases, currency):
+        for row in releases:
+            if row.release_id and row.lowest_price is not None:
+                cache.set_price(row.release_id, currency, row.lowest_price, row.num_for_sale)
+            elif row.release_id:
+                cache.set_price(row.release_id, currency, None, 0)
+        cache.save()
+
+    def _fetch_prices():
+        total_to_fetch = len([r for r in releases_needing_fetch if r.release_id])
+        log(f"Fetching {total_to_fetch} prices ({cfg.currency})...")
+        _report_progress("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
+        _report_progress("update", f"Fetching {total_to_fetch} album prices in {cfg.currency}...")
+        def price_progress(msg: str):
+            log(msg)
+            _report_progress("update", msg)
+        try:
+            core.fetch_prices_for_rows(headers, releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
+        except Exception as e:
+            _report_progress("error", f"Price fetch failed: {e}")
+            raise
+
+    _fetch_prices()
+    if cache:
+        _update_cache(cache, releases_needing_fetch, cfg.currency)
+    log("Price fetch complete.")
+    _report_progress("update", "Price fetch complete.")
+    _report_progress("close", None)
 
 
 class App:
@@ -1336,7 +1378,7 @@ class App:
         from discogs_app import make_headers
         headers = make_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {"User-Agent": DEFAULT_USER_AGENT}
 
       screen_x = event.x_root
       screen_y = event.y_root
@@ -1782,25 +1824,29 @@ class App:
         pass
 
   def _build_ui(self, root: Tk) -> None:
-    # Main container - let ttkbootstrap handle styling
     import tkinter as tk
     frm = ttk.Frame(root)
     frm.grid(row=0, column=0, sticky="nsew")
     root.columnconfigure(0, weight=1)
     root.rowconfigure(0, weight=1)
-    frm.columnconfigure(0, weight=0)  # Settings column (fixed width)
-    frm.columnconfigure(1, weight=1)  # Main content column (expands)
+    frm.columnconfigure(0, weight=0)
+    frm.columnconfigure(1, weight=1)
 
     row = 0
-    # Colored header bar with accent strip
+    self._build_header(frm, row)
+    row += 1
+    frm.rowconfigure(row, weight=1)
+    self._build_settings_panel(frm, row)
+    main_content = self._build_main_content(frm, row)
+    self._build_notebook(main_content)
+
+  def _build_header(self, frm, row):
+    import tkinter as tk
     self._header = tk.Frame(frm, bg=self._colors["bg"], bd=0, highlightthickness=0)
     self._header.grid(row=row, column=0, columnspan=2, sticky="ew", padx=0, pady=(0, 8))
     self._header.columnconfigure(0, weight=1)
-    
-    # Accent strip at top - gradient-like effect
     accent_strip = tk.Frame(self._header, bg=self._colors["accent"], height=5)
     accent_strip.grid(row=0, column=0, columnspan=3, sticky="ew")
-    
     self._header_title = tk.Label(
       self._header,
       text="💿 Discogs Auto-Sort",
@@ -1821,8 +1867,6 @@ class App:
       pady=0,
     )
     self._header_subtitle.grid(row=2, column=0, sticky="w", pady=(0, 8))
-
-    # Dark/Light mode toggle button - styled with rounded feel
     self.theme_btn = tk.Button(
       self._header,
       text="🌙 Dark",
@@ -1839,15 +1883,9 @@ class App:
       command=self._toggle_theme,
     )
     self.theme_btn.grid(row=1, column=1, rowspan=2, sticky="e", padx=16, pady=8)
-    row += 1
 
-    # ===== SIDE-BY-SIDE LAYOUT =====
-    # Left: Settings panel (fixed width)
-    # Right: Main content (search, buttons, shelf list)
-    
-    frm.rowconfigure(row, weight=1)  # This row expands
-    
-    # Settings card - LEFT COLUMN (narrow, fixed width)
+  def _build_settings_panel(self, frm, row):
+    import tkinter as tk
     self._settings_frame = tk.LabelFrame(
       frm, 
       text="⚙️ Settings",
@@ -1860,10 +1898,11 @@ class App:
       pady=8,
     )
     self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(12, 6), pady=8)
-    settings = self._settings_frame  # Alias for backward compatibility
+    self._build_settings_content(self._settings_frame)
+
+  def _build_settings_content(self, settings):
+    import tkinter as tk
     srow = 0
-    
-    # Helper to create dark-themed entry widgets
     def make_entry(parent, textvar, width=28, show=""):
       e = tk.Entry(
         parent, 
@@ -1881,39 +1920,41 @@ class App:
         highlightcolor=self._colors["accent"],
       )
       return e
-
     tk.Label(settings, text="Token", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=srow, column=0, sticky="w", padx=4, pady=4)
     self.token_entry = make_entry(settings, self.v_token, width=24, show="•")
     self.token_entry.grid(row=srow, column=1, sticky="ew", padx=4, pady=4, ipady=4)
     ttk.Checkbutton(settings, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility).grid(row=srow, column=2, sticky="w", padx=4, pady=4)
     srow += 1
-
-    # User-Agent - hidden but still in code for API requests
     self._useragent_entry = make_entry(settings, self.v_user_agent)
-    # Don't grid it - hidden from UI
-
     self._out_row = tk.Frame(settings, bg=self._colors["panel"])
     self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
     self._out_row.columnconfigure(0, weight=1)
     tk.Label(self._out_row, text="Output Dir", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w", columnspan=2)
     self._output_entry = make_entry(self._out_row, self.v_output_dir, width=20)
     self._output_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0), ipady=4)
-    # Use bootstyle for rounded buttons
     if TTKBOOTSTRAP_AVAILABLE:
       self._browse_btn = ttk.Button(self._out_row, text="📂", bootstyle="info-outline", command=self._choose_dir, width=3)
       self._browse_btn.grid(row=1, column=1, sticky="e", padx=(4, 0))
     else:
       self._browse_btn = ttk.Button(self._out_row, text="📂", command=self._choose_dir, width=3)
       self._browse_btn.grid(row=1, column=1, sticky="e", padx=(4, 0))
-    self._open_btn = None  # Removed to save space
+    self._open_btn = None
     srow += 1
-
-    # Options in a more compact vertical layout
     self._opt_row = tk.Frame(settings, bg=self._colors["panel"])
     self._opt_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
-    
-    # Poll row
-    poll_frame = tk.Frame(self._opt_row, bg=self._colors["panel"])
+    self._build_options_content(self._opt_row)
+    srow += 1
+    self._sort_row = tk.Frame(settings, bg=self._colors["panel"])
+    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    self._build_sort_content(self._sort_row)
+    srow += 1
+    self._price_info = tk.Frame(settings, bg=self._colors["panel"])
+    self._price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=(8, 4))
+    tk.Label(self._price_info, text="ℹ️ Prices = lowest listed\nfor your specific pressing", font=(FONT_SEGOE_UI, 8), bg=self._colors["panel"], fg=self._colors["muted"], justify="left").grid(row=0, column=0, sticky="w")
+
+  def _build_options_content(self, opt_row):
+    import tkinter as tk
+    poll_frame = tk.Frame(opt_row, bg=self._colors["panel"])
     poll_frame.grid(row=0, column=0, sticky="w", pady=2)
     tk.Label(poll_frame, text="Poll (sec)", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
     self._poll_spin = tk.Spinbox(
@@ -1930,15 +1971,11 @@ class App:
       highlightcolor=self._colors["accent"],
     )
     self._poll_spin.grid(row=0, column=1, padx=(4, 0), ipady=2)
-    
-    # Checkboxes - stacked vertically
-    self._json_check = ttk.Checkbutton(self._opt_row, text="Also export JSON", variable=self.v_json)
+    self._json_check = ttk.Checkbutton(opt_row, text="Also export JSON", variable=self.v_json)
     self._json_check.grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
-    self._prices_check = ttk.Checkbutton(self._opt_row, text="Show Prices", variable=self.v_show_prices)
+    self._prices_check = ttk.Checkbutton(opt_row, text="Show Prices", variable=self.v_show_prices)
     self._prices_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
-    
-    # Currency row
-    currency_frame = tk.Frame(self._opt_row, bg=self._colors["panel"])
+    currency_frame = tk.Frame(opt_row, bg=self._colors["panel"])
     currency_frame.grid(row=3, column=0, columnspan=2, sticky="w", pady=2)
     tk.Label(currency_frame, text="Currency", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
     self._currency_combo = tk.OptionMenu(currency_frame, self.v_currency, "USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY")
@@ -1960,21 +1997,17 @@ class App:
       activeforeground="#ffffff",
     )
     self._currency_combo.grid(row=0, column=1, padx=(4, 0))
-    
-    # Refresh prices button
     if TTKBOOTSTRAP_AVAILABLE:
-      self._refresh_prices_btn = ttk.Button(self._opt_row, text="🔄 Refresh Prices", bootstyle="warning-outline", command=self._refresh_prices)
+      self._refresh_prices_btn = ttk.Button(opt_row, text="🔄 Refresh Prices", bootstyle="warning-outline", command=self._refresh_prices)
     else:
-      self._refresh_prices_btn = ttk.Button(self._opt_row, text="🔄 Refresh Prices", command=self._refresh_prices)
+      self._refresh_prices_btn = ttk.Button(opt_row, text="🔄 Refresh Prices", command=self._refresh_prices)
     self._refresh_prices_btn.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
-    srow += 1
 
-    # Sort options row
-    self._sort_row = tk.Frame(settings, bg=self._colors["panel"])
-    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
-    tk.Label(self._sort_row, text="Sort By", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+  def _build_sort_content(self, sort_row):
+    import tkinter as tk
+    tk.Label(sort_row, text="Sort By", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
     sort_options = ["artist", "title", "year", "price_asc", "price_desc"]
-    self._sort_combo = tk.OptionMenu(self._sort_row, self.v_sort_by, *sort_options)
+    self._sort_combo = tk.OptionMenu(sort_row, self.v_sort_by, *sort_options)
     self._sort_combo.config(
       font=(FONT_SEGOE_UI, 9),
       bg=self._colors["order_bg"],
@@ -1993,29 +2026,23 @@ class App:
       activeforeground="#ffffff",
     )
     self._sort_combo.grid(row=0, column=1, padx=(4, 0), sticky="w")
-    srow += 1
-    
-    # Price info note (compact)
-    self._price_info = tk.Frame(settings, bg=self._colors["panel"])
-    self._price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=(8, 4))
-    tk.Label(self._price_info, text="ℹ️ Prices = lowest listed\nfor your specific pressing", font=(FONT_SEGOE_UI, 8), bg=self._colors["panel"], fg=self._colors["muted"], justify="left").grid(row=0, column=0, sticky="w")
-    srow += 1
 
-    # ===== RIGHT COLUMN: Main content (Search, buttons, shelf list) =====
+  def _build_main_content(self, frm, row):
+    import tkinter as tk
     main_content = ttk.Frame(frm)
     main_content.grid(row=row, column=1, sticky="nsew", padx=(6, 12), pady=8)
     main_content.columnconfigure(0, weight=1)
-    main_content.rowconfigure(2, weight=1)  # Notebook row expands
-    
-    mc_row = 0
+    main_content.rowconfigure(2, weight=1)
+    self._build_search_row(main_content)
+    self._build_action_buttons(main_content)
+    return main_content
 
-    # Search row with styled entry
+  def _build_search_row(self, main_content):
+    import tkinter as tk
     search_row = ttk.Frame(main_content)
-    search_row.grid(row=mc_row, column=0, sticky="ew", pady=(0, 8))
+    search_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
     search_row.columnconfigure(1, weight=1)
     ttk.Label(search_row, text="🔍 Search").grid(row=0, column=0, sticky="w")
-    
-    # Use tk.Entry for full color control in dark mode
     self._search_entry = tk.Entry(
       search_row, 
       textvariable=self.v_search,
@@ -2030,7 +2057,6 @@ class App:
       highlightcolor=self._colors["accent"],
     )
     self._search_entry.grid(row=0, column=1, sticky="ew", padx=6, ipady=6)
-    # Use bootstyle for ttkbootstrap rounded buttons
     if TTKBOOTSTRAP_AVAILABLE:
       self._clear_btn = ttk.Button(search_row, text="✕ Clear", bootstyle="secondary-outline", command=lambda: self.v_search.set(""))
       self._clear_btn.grid(row=0, column=2, sticky="e")
@@ -2039,17 +2065,14 @@ class App:
       self._clear_btn.grid(row=0, column=2, sticky="e")
     ttk.Label(search_row, textvariable=self.v_match).grid(row=0, column=3, sticky="e", padx=6)
     self.v_search.trace_add("write", lambda *_: self._on_search_change())
-    mc_row += 1
 
-    # Action buttons row with styled buttons
+  def _build_action_buttons(self, main_content):
     btn = ttk.Frame(main_content)
-    btn.grid(row=mc_row, column=0, sticky="ew", pady=(0, 8))
+    btn.grid(row=1, column=0, sticky="ew", pady=(0, 8))
     btn.columnconfigure(0, weight=1)
     btn.columnconfigure(1, weight=1)
     btn.columnconfigure(2, weight=1)
     btn.columnconfigure(3, weight=1)
-    
-    # Use ttkbootstrap bootstyle for rounded corners, or fall back to custom styles
     if TTKBOOTSTRAP_AVAILABLE:
       self._refresh_btn = ttk.Button(btn, text="🔄 Refresh", bootstyle="primary", command=self._refresh_now)
       self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
@@ -2071,26 +2094,128 @@ class App:
       self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
       self._stop_btn = ttk.Button(btn, text="⏹️ Stop", style=DANGER_TBUTTON_STYLE, command=self._stop_app)
       self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
-    mc_row += 1
 
+  def _build_notebook(self, main_content):
     nb = ttk.Notebook(main_content)
-    nb.grid(row=mc_row, column=0, sticky="nsew")
+    nb.grid(row=2, column=0, sticky="nsew")
+    self._build_order_tab(nb)
+    self._build_wishlist_tab(nb)
+    self._build_log_tab(nb)
 
+  def _build_order_tab(self, nb):
     order_fr = ttk.Frame(nb)
     nb.add(order_fr, text="📋 Shelf Order")
+    order_fr.rowconfigure(1, weight=1)
+    order_fr.columnconfigure(0, weight=1)
+    self._build_order_toolbar(order_fr)
+    self._build_order_tree(order_fr)
 
-    # --- Wishlist Tab ---
+  def _build_order_toolbar(self, order_fr):
+    order_toolbar = ttk.Frame(order_fr)
+    order_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+    self._manual_order_check = ttk.Checkbutton(
+      order_toolbar, 
+      text="✋ Manual Order Mode", 
+      variable=self.v_manual_order_enabled,
+      command=self._toggle_manual_order
+    )
+    self._manual_order_check.grid(row=0, column=0, sticky="w", padx=(0, 16))
+    self._manual_order_hint = ttk.Label(
+      order_toolbar,
+      text="(Drag rows to reorder)",
+      foreground=self._colors["muted"]
+    )
+    self._manual_order_hint.grid(row=0, column=1, sticky="w", padx=(0, 16))
+    if TTKBOOTSTRAP_AVAILABLE:
+      self._reset_order_btn = ttk.Button(
+        order_toolbar, 
+        text="↺ Reset to Auto Sort", 
+        bootstyle="warning-outline",
+        command=self._reset_manual_order
+      )
+    else:
+      self._reset_order_btn = ttk.Button(
+        order_toolbar, 
+        text="↺ Reset to Auto Sort", 
+        command=self._reset_manual_order
+      )
+    self._reset_order_btn.grid(row=0, column=2, sticky="e", padx=(0, 8))
+    if TTKBOOTSTRAP_AVAILABLE:
+      self._move_up_btn = ttk.Button(order_toolbar, text="▲ Up", bootstyle="secondary-outline", command=self._move_item_up)
+      self._move_down_btn = ttk.Button(order_toolbar, text="▼ Down", bootstyle="secondary-outline", command=self._move_item_down)
+    else:
+      self._move_up_btn = ttk.Button(order_toolbar, text="▲ Up", command=self._move_item_up)
+      self._move_down_btn = ttk.Button(order_toolbar, text="▼ Down", command=self._move_item_down)
+    self._move_up_btn.grid(row=0, column=3, sticky="e", padx=(8, 4))
+    self._move_down_btn.grid(row=0, column=4, sticky="e", padx=(0, 8))
+    order_toolbar.columnconfigure(1, weight=1)
+
+  def _build_order_tree(self, order_fr):
+    order_wrap = ttk.Frame(order_fr)
+    order_wrap.grid(row=1, column=0, sticky="nsew", padx=(12, 0), pady=(0, 8))
+    order_wrap.rowconfigure(0, weight=1)
+    order_wrap.columnconfigure(0, weight=1)
+    order_scroll = ttk.Scrollbar(order_wrap, orient="vertical")
+    order_scroll.grid(row=0, column=1, sticky="ns")
+    columns = ("#", "Artist", "Title", "Year", "Label", "Price")
+    tree_style = "Dark.Treeview" if self.v_dark_mode.get() else "Light.Treeview"
+    self.order_tree = ttk.Treeview(
+      order_wrap,
+      columns=columns,
+      show="tree headings",
+      yscrollcommand=order_scroll.set,
+      selectmode="browse",
+      style=tree_style,
+    )
+    self.order_tree.grid(row=0, column=0, sticky="nsew")
+    order_scroll.config(command=self.order_tree.yview)
+    self.order_tree.heading("#0", text="", anchor="center")
+    self.order_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
+    self.order_tree.heading("#", text="#", anchor="center")
+    self.order_tree.heading("Artist", text="Artist", anchor="w")
+    self.order_tree.heading("Title", text="Title", anchor="w")
+    self.order_tree.heading("Year", text="Year", anchor="center")
+    self.order_tree.heading("Label", text="Label / Cat#", anchor="w")
+    self.order_tree.heading("Price", text="Price", anchor="e")
+    self.order_tree.column("#", width=35, minwidth=30, stretch=False, anchor="center")
+    self.order_tree.column("Artist", width=200, minwidth=100, stretch=True, anchor="w")
+    self.order_tree.column("Title", width=260, minwidth=120, stretch=True, anchor="w")
+    self.order_tree.column("Year", width=50, minwidth=45, stretch=False, anchor="center")
+    self.order_tree.column("Label", width=280, minwidth=100, stretch=True, anchor="w")
+    self.order_tree.column("Price", width=80, minwidth=70, stretch=False, anchor="e")
+    if not self.v_show_prices.get():
+      self.order_tree.column("Price", width=0, minwidth=0, stretch=False)
+    self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
+    self.order_tree.tag_configure("row_odd", background="#1a2d4d" if self.v_dark_mode.get() else "#f0f4f8", foreground=self._colors["order_fg"])
+    self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
+    self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
+    self._configure_treeview_style()
+    self.order_tree.bind("<ButtonPress-1>", self._on_drag_start)
+    self.order_tree.bind("<B1-Motion>", self._on_drag_motion)
+    self.order_tree.bind("<ButtonRelease-1>", self._on_drag_end)
+    self.order_tree.bind("<Motion>", self._on_tree_motion)
+    self.order_tree.bind("<Leave>", self._on_tree_leave)
+    self.order_tree.bind("<Double-1>", self._on_album_double_click)
+    self._image_preview = ImagePreviewPopup(self.root, self._thumbnail_cache)
+    self._hover_release_id: int | None = None
+    self.order_text = tk.Text(order_wrap, height=1, width=1)
+    self._tree_rows: list[ReleaseRow] = []
+
+  def _build_wishlist_tab(self, nb):
     wishlist_fr = ttk.Frame(nb)
     nb.add(wishlist_fr, text="⭐ Wishlist")
     wishlist_fr.rowconfigure(0, weight=1)
     wishlist_fr.columnconfigure(0, weight=1)
+    self._build_wishlist_tree(wishlist_fr)
+
+  def _build_wishlist_tree(self, wishlist_fr):
+    wishlist_columns = ("Artist", "Title", "Discogs URL")
     self.wishlist_tree = ttk.Treeview(
       wishlist_fr,
-      columns=("Artist", "Title", "Discogs URL"),
+      columns=wishlist_columns,
       show="tree headings",
       selectmode="browse"
     )
-    wishlist_columns = ("Artist", "Title", "Discogs URL")
     self.wishlist_tree.config(columns=wishlist_columns, show="tree headings")
     self.wishlist_tree.heading("#0", text="", anchor="center")
     self.wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
@@ -2101,26 +2226,24 @@ class App:
     self.wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
     self.wishlist_tree.column("Discogs URL", width=260, minwidth=120, stretch=True, anchor="w")
     self.wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+    self._wishlist_rows = []
+    self._setup_wishlist_tree_events()
 
-    # Populate wishlist
+  def _setup_wishlist_tree_events(self):
     from core.wishlist import load_wishlist, remove_from_wishlist
-    self._wishlist_rows = []  # Ensure attribute always exists before any use
     def refresh_wishlist_tree():
       self.wishlist_tree.delete(*self.wishlist_tree.get_children())
       from types import SimpleNamespace
       import re
-      # Always initialize _wishlist_rows, even if no entries
       self._wishlist_rows = []
       wishlist_data = list(load_wishlist())
       for i, entry in enumerate(wishlist_data):
-        # Extract release_id from discogs_url if not present
         release_id = entry.get("release_id")
         if not release_id:
           url = entry.get("discogs_url", entry.get("url", ""))
           match = re.search(r'/releases?/(\d+)', url)
           if match:
             release_id = int(match.group(1))
-        # Build a ReleaseRow-like object for each wishlist entry
         row = SimpleNamespace(
           artist_display=entry.get("artist", ""),
           title=entry.get("title", ""),
@@ -2150,10 +2273,8 @@ class App:
           extra=entry.get("extra", "")
         )
         self._wishlist_rows.append(row)
-        # Use the same image logic as shelf order
         placeholder = self._get_placeholder_image()
         img = self._get_row_image(row, placeholder)
-        # Ensure values is a tuple of strings, matching the columns
         values = (
           str(getattr(row, "artist_display", "")),
           str(getattr(row, "title", "")),
@@ -2164,13 +2285,10 @@ class App:
           self.wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
         else:
           self.wishlist_tree.insert("", "end", values=values, tags=(tag,))
-      # Download missing thumbnails for wishlist (after populating _wishlist_rows)
       if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
         self._download_missing_thumbnails(self._wishlist_rows)
     self.refresh_wishlist_tree = refresh_wishlist_tree
     self.refresh_wishlist_tree()
-
-    # Double-click to open Discogs URL
     def on_wishlist_double_click(event):
       item = self.wishlist_tree.selection()
       if not item:
@@ -2179,17 +2297,13 @@ class App:
       if idx < 0 or idx >= len(self._wishlist_rows):
         return
       row = self._wishlist_rows[idx]
-      # Use the exact same popup logic as shelf order
       popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
       _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
       details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
       self._populate_album_details(details_frame, row, fg, bg, row_offset)
       self._setup_details_scroll(details_frame, details_canvas)
       self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
-
     self.wishlist_tree.bind("<Double-1>", on_wishlist_double_click)
-
-    # Right-click to remove from wishlist
     def on_wishlist_right_click(event):
       item = self.wishlist_tree.identify_row(event.y)
       if not item:
@@ -2197,148 +2311,12 @@ class App:
       values = self.wishlist_tree.item(item, "values")
       artist, title = values[0], values[1]
       remove_from_wishlist(artist, title)
-      refresh_wishlist_tree()
+      self.refresh_wishlist_tree()
     self.wishlist_tree.bind("<Button-3>", on_wishlist_right_click)
-    
-    # Hover preview for wishlist (same as shelf order)
     self.wishlist_tree.bind("<Motion>", self._on_wishlist_tree_motion)
     self.wishlist_tree.bind("<Leave>", self._on_wishlist_tree_leave)
-    
-    order_fr.rowconfigure(1, weight=1)
-    order_fr.columnconfigure(0, weight=1)
-    
-    # Toolbar for manual ordering controls
-    order_toolbar = ttk.Frame(order_fr)
-    order_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
-    
-    self._manual_order_check = ttk.Checkbutton(
-      order_toolbar, 
-      text="✋ Manual Order Mode", 
-      variable=self.v_manual_order_enabled,
-      command=self._toggle_manual_order
-    )
-    self._manual_order_check.grid(row=0, column=0, sticky="w", padx=(0, 16))
-    
-    self._manual_order_hint = ttk.Label(
-      order_toolbar,
-      text="(Drag rows to reorder)",
-      foreground=self._colors["muted"]
-    )
-    self._manual_order_hint.grid(row=0, column=1, sticky="w", padx=(0, 16))
-    
-    if TTKBOOTSTRAP_AVAILABLE:
-      self._reset_order_btn = ttk.Button(
-        order_toolbar, 
-        text="↺ Reset to Auto Sort", 
-        bootstyle="warning-outline",
-        command=self._reset_manual_order
-      )
-    else:
-      self._reset_order_btn = ttk.Button(
-        order_toolbar, 
-        text="↺ Reset to Auto Sort", 
-        command=self._reset_manual_order
-      )
-    self._reset_order_btn.grid(row=0, column=2, sticky="e", padx=(0, 8))
-    
-    # Move up/down buttons for keyboard users
-    if TTKBOOTSTRAP_AVAILABLE:
-      self._move_up_btn = ttk.Button(order_toolbar, text="▲ Up", bootstyle="secondary-outline", command=self._move_item_up)
-      self._move_down_btn = ttk.Button(order_toolbar, text="▼ Down", bootstyle="secondary-outline", command=self._move_item_down)
-    else:
-      self._move_up_btn = ttk.Button(order_toolbar, text="▲ Up", command=self._move_item_up)
-      self._move_down_btn = ttk.Button(order_toolbar, text="▼ Down", command=self._move_item_down)
-    self._move_up_btn.grid(row=0, column=3, sticky="e", padx=(8, 4))
-    self._move_down_btn.grid(row=0, column=4, sticky="e", padx=(0, 8))
-    
-    order_toolbar.columnconfigure(1, weight=1)
 
-    order_wrap = ttk.Frame(order_fr)
-    order_wrap.grid(row=1, column=0, sticky="nsew", padx=(12, 0), pady=(0, 8))
-    order_wrap.rowconfigure(0, weight=1)
-    order_wrap.columnconfigure(0, weight=1)
-
-    order_scroll = ttk.Scrollbar(order_wrap, orient="vertical")
-    order_scroll.grid(row=0, column=1, sticky="ns")
-
-    # Use Treeview for drag-and-drop support
-    # Note: "#0" column (tree column) is used for album artwork
-    columns = ("#", "Artist", "Title", "Year", "Label", "Price")
-    
-    # Determine style based on current theme
-    tree_style = "Dark.Treeview" if self.v_dark_mode.get() else "Light.Treeview"
-    
-    self.order_tree = ttk.Treeview(
-      order_wrap,
-      columns=columns,
-      show="tree headings",  # Show both tree column (for images) and headings
-      yscrollcommand=order_scroll.set,
-      selectmode="browse",  # Single selection for drag-drop
-      style=tree_style,
-    )
-    self.order_tree.grid(row=0, column=0, sticky="nsew")
-    order_scroll.config(command=self.order_tree.yview)
-    
-    # Configure the #0 (tree) column for album artwork
-    self.order_tree.heading("#0", text="", anchor="center")
-    self.order_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
-    
-    # Configure column headings and widths
-    self.order_tree.heading("#", text="#", anchor="center")
-    self.order_tree.heading("Artist", text="Artist", anchor="w")
-    self.order_tree.heading("Title", text="Title", anchor="w")
-    self.order_tree.heading("Year", text="Year", anchor="center")
-    self.order_tree.heading("Label", text="Label / Cat#", anchor="w")
-    self.order_tree.heading("Price", text="Price", anchor="e")
-    
-    # Column widths - text columns stretch proportionally to fill width
-    self.order_tree.column("#", width=35, minwidth=30, stretch=False, anchor="center")
-    self.order_tree.column("Artist", width=200, minwidth=100, stretch=True, anchor="w")
-    self.order_tree.column("Title", width=260, minwidth=120, stretch=True, anchor="w")
-    self.order_tree.column("Year", width=50, minwidth=45, stretch=False, anchor="center")
-    self.order_tree.column("Label", width=280, minwidth=100, stretch=True, anchor="w")
-    self.order_tree.column("Price", width=80, minwidth=70, stretch=False, anchor="e")
-    
-    # Initially hide Price column if Show Prices is disabled
-    if not self.v_show_prices.get():
-      self.order_tree.column("Price", width=0, minwidth=0, stretch=False)
-    
-    # Configure row tags for alternating colors (with foreground for dark mode)
-    self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
-    self.order_tree.tag_configure("row_odd", background="#1a2d4d" if self.v_dark_mode.get() else "#f0f4f8", foreground=self._colors["order_fg"])
-    self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
-    self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
-    
-    # Configure Treeview style for dark mode
-    self._configure_treeview_style()
-    
-    # Bind drag-and-drop events
-    self.order_tree.bind("<ButtonPress-1>", self._on_drag_start)
-    self.order_tree.bind("<B1-Motion>", self._on_drag_motion)
-    self.order_tree.bind("<ButtonRelease-1>", self._on_drag_end)
-    
-    # Bind hover events for album artwork preview
-    self.order_tree.bind("<Motion>", self._on_tree_motion)
-    self.order_tree.bind("<Leave>", self._on_tree_leave)
-
-    # Bind double-click to show album info popup
-    self.order_tree.bind("<Double-1>", self._on_album_double_click)
-
-    # ...existing code...
-    # Bind double-click to show album info popup
-    self.order_tree.bind("<Double-1>", self._on_album_double_click)
-
-    # Initialize image preview popup
-    self._image_preview = ImagePreviewPopup(self.root, self._thumbnail_cache)
-    self._hover_release_id: int | None = None
-
-    # Keep Text widget reference for backward compatibility (hidden)
-    self.order_text = tk.Text(order_wrap, height=1, width=1)
-    # Don't grid it - it's just for compatibility with existing code
-
-    # Store reference to rows for drag-drop operations
-    self._tree_rows: list[ReleaseRow] = []
-
+  def _build_log_tab(self, nb):
     log_fr = ttk.Frame(nb)
     nb.add(log_fr, text="📜 Log")
     log_fr.rowconfigure(0, weight=1)
@@ -2349,6 +2327,7 @@ class App:
     log_wrap.columnconfigure(0, weight=1)
     log_scroll = ttk.Scrollbar(log_wrap, orient="vertical")
     log_scroll.grid(row=0, column=1, sticky="ns")
+    import tkinter as tk
     self.log = tk.Text(
       log_wrap,
       height=18,
@@ -3171,7 +3150,7 @@ class App:
       self._progress_dialog = None
       self._set_action_buttons_state("normal")
     elif action == "done" and self._progress_dialog is not None:
-      self._progress_dialog.set_done(message or "Done!")
+      self._progress_dialog.set_done(message or self._progress_dialog.DONE_MESSAGE)
       self._progress_dialog = None
       self._set_action_buttons_state("normal")
     elif action == "close" and self._progress_dialog is not None:
