@@ -411,6 +411,7 @@ class ThumbnailCache:
   
   THUMB_SIZE = (40, 40)  # Size for display in Treeview
   PREVIEW_SIZE = (200, 200)  # Size for hover preview
+  POPUP_SIZE = (300, 300)  # Size for popup dialog
   
   def __init__(self):
     """Initialize thumbnail cache."""
@@ -418,6 +419,7 @@ class ThumbnailCache:
     self.cache_dir.mkdir(exist_ok=True)
     self._photo_cache: dict[int, "ImageTk.PhotoImage"] = {}  # In-memory cache of PhotoImage objects
     self._preview_cache: dict[int, "ImageTk.PhotoImage"] = {}  # Cache for larger preview images
+    self._popup_cache: dict[int, "ImageTk.PhotoImage"] = {}  # Cache for popup images
     self._placeholder: "ImageTk.PhotoImage | None" = None
     self._pil_available = False
     self._check_pil()
@@ -535,8 +537,70 @@ class ThumbnailCache:
     """Clear the in-memory PhotoImage cache."""
     self._photo_cache.clear()
     self._preview_cache.clear()
+    self._popup_cache.clear()
     self._placeholder = None
   
+  def _get_popup_cache_path(self, release_id: int) -> Path:
+    """Get the cache path for popup-sized images."""
+    return self.cache_dir / f"{release_id}_popup.png"
+  
+  def load_popup_image(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
+    """Load a high-quality image for popup display (larger than preview)."""
+    if not self._pil_available:
+      return None
+    
+    # Check memory cache first
+    if release_id in self._popup_cache:
+      return self._popup_cache[release_id]
+    
+    # Check if popup file exists on disk
+    popup_path = self._get_popup_cache_path(release_id)
+    if popup_path.exists():
+      try:
+        from PIL import Image, ImageTk
+        img = Image.open(popup_path)
+        photo = ImageTk.PhotoImage(img)
+        self._popup_cache[release_id] = photo
+        return photo
+      except Exception:
+        pass
+    
+    # If we have a cover_url, download the larger image
+    if cover_url and headers:
+      try:
+        import requests
+        from PIL import Image, ImageTk
+        from io import BytesIO
+        
+        resp = requests.get(cover_url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+          img = Image.open(BytesIO(resp.content))
+          img = img.convert("RGBA")
+          
+          # Resize to popup size while maintaining aspect ratio
+          img.thumbnail(self.POPUP_SIZE, Image.Resampling.LANCZOS)
+          
+          # Create a square canvas and center the image
+          square = Image.new("RGBA", self.POPUP_SIZE, (30, 30, 50, 255))
+          offset = ((self.POPUP_SIZE[0] - img.width) // 2, (self.POPUP_SIZE[1] - img.height) // 2)
+          square.paste(img, offset)
+          
+          # Save to cache
+          square.save(popup_path, "PNG")
+          
+          photo = ImageTk.PhotoImage(square)
+          self._popup_cache[release_id] = photo
+          return photo
+      except Exception:
+        pass
+    
+    # Fall back to preview size if available
+    preview_img = self.load_preview(release_id, cover_url, headers)
+    if preview_img:
+      return preview_img
+    
+    return None
+
   def load_preview(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
     """Load a larger preview image for hover display."""
     if not self._pil_available:
@@ -1189,39 +1253,61 @@ def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, release
 
 
 class App:
-  # Hoverable album cover preview for wishlist
+  # Track hover state for wishlist
+  _wishlist_hover_release_id: int | None = None
+
   def _on_wishlist_tree_motion(self, event):
+    """Handle mouse motion over the wishlist treeview for album artwork preview."""
+    if not self._thumbnails_enabled or not self._image_preview:
+      return
+
+    def hide_preview():
+      if self._image_preview and self._wishlist_hover_release_id is not None:
+        self._image_preview.hide(delay=50)
+        self._wishlist_hover_release_id = None
+
+    region = self.wishlist_tree.identify_region(event.x, event.y)
+    column = self.wishlist_tree.identify_column(event.x)
+
+    # Only show preview when hovering the image column (#0 or tree region)
+    if column != "#0" and region != "tree":
+      hide_preview()
+      return
+
     item = self.wishlist_tree.identify_row(event.y)
     if not item:
-      if hasattr(self, '_image_preview'):
-        self._image_preview.hide()
+      hide_preview()
       return
-    values = self.wishlist_tree.item(item, "values")
-    artist, title = values[0], values[1]
-    # Try to get release_id or thumb_url
-    entry = None
-    from core.wishlist import load_wishlist
-    for w in load_wishlist():
-      if w["artist"] == artist and w["title"] == title:
-        entry = w
-        break
-    if not entry:
-      return
-    release_id = entry.get("release_id")
-    thumb_url = entry.get("thumb") or entry.get("cover_image_url")
-    img = None
-    if hasattr(self, '_thumbnail_cache') and release_id:
-      img = self._thumbnail_cache.get_photo(release_id)
-    if not img and hasattr(self, '_thumbnail_cache') and thumb_url:
-      img = self._thumbnail_cache.load_preview(release_id or 0, thumb_url)
-    if not img and hasattr(self, '_thumbnail_cache'):
-      img = self._thumbnail_cache.get_placeholder()
-    if hasattr(self, '_image_preview'):
-      self._image_preview.show(event.x_root, event.y_root, img)
+
+    try:
+      idx = self.wishlist_tree.index(item)
+      if idx < 0 or idx >= len(self._wishlist_rows):
+        return
+
+      row = self._wishlist_rows[idx]
+      if not row.release_id or row.release_id == self._wishlist_hover_release_id:
+        return
+
+      self._wishlist_hover_release_id = row.release_id
+
+      try:
+        from discogs_app import make_headers
+        headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+      except Exception:
+        headers = {"User-Agent": "Mozilla/5.0"}
+
+      screen_x = event.x_root
+      screen_y = event.y_root
+      cover_url = getattr(row, 'cover_image_url', '') or getattr(row, 'thumb_url', '')
+      self._image_preview.show(row.release_id, cover_url, headers, screen_x, screen_y)
+    except Exception as e:
+      print(f"Wishlist hover error: {e}")
 
   def _on_wishlist_tree_leave(self, event):
-    if hasattr(self, '_image_preview'):
+    """Handle mouse leaving the wishlist treeview."""
+    if self._image_preview:
       self._image_preview.hide()
+    self._wishlist_hover_release_id = None
 
   def _set_action_buttons_state(self, state: str) -> None:
     """Enable or disable main action buttons (refresh, export, print) during refresh."""
@@ -2079,6 +2165,11 @@ class App:
       remove_from_wishlist(artist, title)
       refresh_wishlist_tree()
     self.wishlist_tree.bind("<Button-3>", on_wishlist_right_click)
+    
+    # Hover preview for wishlist (same as shelf order)
+    self.wishlist_tree.bind("<Motion>", self._on_wishlist_tree_motion)
+    self.wishlist_tree.bind("<Leave>", self._on_wishlist_tree_leave)
+    
     order_fr.rowconfigure(1, weight=1)
     order_fr.columnconfigure(0, weight=1)
     
@@ -2288,9 +2379,20 @@ class App:
 
   def _add_album_cover_to_popup(self, popup, row, bg):
     cover_img = None
-    # Try to load the preview image for the release (works for both shelf and wishlist rows)
+    # Get headers for downloading high-quality image
+    try:
+      from discogs_app import make_headers
+      headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+    except Exception:
+      headers = {"User-Agent": "Mozilla/5.0"}
+    
+    # Try to load high-quality popup image for the release
     if hasattr(self, '_thumbnail_cache') and getattr(row, 'release_id', None):
-      cover_img = self._thumbnail_cache.load_preview(row.release_id, getattr(row, 'cover_image_url', None))
+      cover_url = getattr(row, 'cover_image_url', None) or getattr(row, 'thumb_url', None)
+      cover_img = self._thumbnail_cache.load_popup_image(row.release_id, cover_url, headers)
+      if not cover_img:
+        # Fall back to preview size
+        cover_img = self._thumbnail_cache.load_preview(row.release_id, cover_url, headers)
       if not cover_img:
         cover_img = self._thumbnail_cache.load_photo(row.release_id)
     # Always fall back to placeholder if no image is found
