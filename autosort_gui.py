@@ -1576,118 +1576,136 @@ class App:
                          foreground=c["muted"],
                          font=(FONT_SEGOE_UI, 11))
     
-    # Card/LabelFrame styles - softer look
-    self.style.configure("Card.TLabelframe", 
+    # Card/LabelFrame styles - enhanced with subtle depth
+    self.style.configure("Card.TLabelframe",
                          background=c["panel"],
                          bordercolor=c["panel2"],
                          lightcolor=c["panel"],
-                         darkcolor=c["panel"],
-                         relief="flat",
-                         borderwidth=0)
-    self.style.configure("Card.TLabelframe.Label", 
+                         darkcolor=c["panel2"],
+                         relief="solid",
+                         borderwidth=1)
+    self.style.configure("Card.TLabelframe.Label",
                          foreground=c["accent"],
                          background=c["panel"],
                          font=(FONT_SEGOE_UI_SEMIBOLD, 11))
     
-    # Primary button style - more rounded feel with padding
+    # Primary button style - enhanced with subtle border for depth
     PRIMARY_TBUTTON_STYLE = "Primary.TButton"
     self.style.configure(PRIMARY_TBUTTON_STYLE,
                          background=c["accent"],
                          foreground=c["button_fg"],
-                         borderwidth=0,
+                         borderwidth=1,
+                         bordercolor=c["accent2"],
                          focuscolor=c["accent"],
                          lightcolor=c["accent"],
-                         darkcolor=c["accent"],
+                         darkcolor=c["button_hover"],
+                         relief="raised",
                          padding=(20, 12),
                          font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map(PRIMARY_TBUTTON_STYLE,
                    background=[("active", c["button_hover"]), ("pressed", c["button_hover"]), ("disabled", c["muted"])],
-                   foreground=[("active", c["button_fg"]), ("disabled", "#888888")])
+                   foreground=[("active", c["button_fg"]), ("disabled", "#888888")],
+                   relief=[("pressed", "sunken")])
     
-    # Success button style (green) - matching rounded feel
+    # Success button style (green) - enhanced with depth
     SUCCESS_TBUTTON_STYLE = "Success.TButton"
     self.style.configure(SUCCESS_TBUTTON_STYLE,
                          background=c["success"],
                          foreground="#ffffff",
-                         borderwidth=0,
+                         borderwidth=1,
+                         bordercolor="#00e65a",
                          lightcolor=c["success"],
-                         darkcolor=c["success"],
+                         darkcolor="#00a844",
+                         relief="raised",
                          padding=(20, 12),
                          font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map(SUCCESS_TBUTTON_STYLE,
-                   background=[("active", "#00a844"), ("pressed", "#00a844")])
+                   background=[("active", "#00a844"), ("pressed", "#00a844")],
+                   relief=[("pressed", "sunken")])
     
-    # Secondary button style - subtle
+    # Secondary button style - subtle with border
     SECONDARY_TBUTTON_STYLE = "Secondary.TButton"
     self.style.configure(SECONDARY_TBUTTON_STYLE,
                          background=c["panel2"],
                          foreground=c["text"],
-                         borderwidth=0,
+                         borderwidth=1,
+                         bordercolor=c["muted"],
                          lightcolor=c["panel2"],
-                         darkcolor=c["panel2"],
+                         darkcolor=c["order_bg"],
+                         relief="raised",
                          padding=(16, 10),
                          font=(FONT_SEGOE_UI, 10))
     self.style.map(SECONDARY_TBUTTON_STYLE,
-                   background=[("active", c["order_bg"])])
+                   background=[("active", c["order_bg"])],
+                   relief=[("pressed", "sunken")])
     
-    # Danger button style (red) - matching rounded feel
+    # Danger button style (red) - enhanced with depth
     DANGER_TBUTTON_STYLE = "Danger.TButton"
     self.style.configure(DANGER_TBUTTON_STYLE,
                          background=c["accent3"],
                          foreground="#ffffff",
-                         borderwidth=0,
+                         borderwidth=1,
+                         bordercolor="#ff8989",
                          lightcolor=c["accent3"],
-                         darkcolor=c["accent3"],
+                         darkcolor="#c41840",
+                         relief="raised",
                          padding=(20, 12),
                          font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map(DANGER_TBUTTON_STYLE,
-                   background=[("active", "#c41840"), ("pressed", "#c41840")])
+                   background=[("active", "#c41840"), ("pressed", "#c41840")],
+                   relief=[("pressed", "sunken")])
     
-    # Regular button - clean look
+    # Regular button - enhanced with subtle border
     self.style.configure("TButton",
                          background=c["panel2"],
                          foreground=c["text"],
-                         borderwidth=0,
+                         borderwidth=1,
+                         bordercolor=c["muted"],
                          lightcolor=c["panel2"],
-                         darkcolor=c["panel2"],
+                         darkcolor=c["order_bg"],
                          focuscolor=c["panel2"],
+                         relief="raised",
                          padding=(16, 10),
                          font=(FONT_SEGOE_UI, 10))
     self.style.map("TButton",
-                   background=[("active", c["order_bg"]), ("pressed", c["order_bg"])])
+                   background=[("active", c["order_bg"]), ("pressed", c["order_bg"])],
+                   relief=[("pressed", "sunken")])
     
-    # Entry style - more padding for cleaner look
+    # Entry style - enhanced with subtle border for definition
     self.style.configure("TEntry",
                          fieldbackground=c["order_bg"],
                          foreground=c["text"],
                          insertcolor=c["text"],
-                         borderwidth=0,
-                         lightcolor=c["order_bg"],
-                         darkcolor=c["order_bg"],
-                         relief="flat",
+                         borderwidth=1,
+                         lightcolor=c["panel2"],
+                         darkcolor=c["panel2"],
+                         relief="solid",
                          padding=10)
     self.style.map("TEntry",
                    fieldbackground=[("focus", c["order_bg"])],
                    lightcolor=[("focus", c["accent"])],
-                   darkcolor=[("focus", c["accent"])])
+                   darkcolor=[("focus", c["accent"])],
+                   bordercolor=[("focus", c["accent"])])
     
-    # Combobox style - clean dropdown
+    # Combobox style - enhanced with subtle border
     self.style.configure("TCombobox",
                          fieldbackground=c["order_bg"],
                          background=c["order_bg"],
                          foreground=c["text"],
                          arrowcolor=c["accent"],
-                         borderwidth=0,
-                         lightcolor=c["order_bg"],
-                         darkcolor=c["order_bg"],
+                         borderwidth=1,
+                         lightcolor=c["panel2"],
+                         darkcolor=c["panel2"],
                          selectbackground=c["accent"],
                          selectforeground="#ffffff",
+                         relief="solid",
                          padding=8)
     self.style.map("TCombobox",
                    fieldbackground=[("readonly", c["order_bg"]), ("focus", c["order_bg"])],
                    foreground=[("readonly", c["text"])],
                    background=[("readonly", c["order_bg"]), ("active", c["order_bg"])],
-                   arrowcolor=[("active", c["accent2"])])
+                   arrowcolor=[("active", c["accent2"])],
+                   bordercolor=[("focus", c["accent"])])
     
     # Also configure the dropdown listbox via option_add
     try:
@@ -1709,33 +1727,38 @@ class App:
                    background=[("active", c["panel"])],
                    indicatorcolor=[("selected", c["accent"]), ("!selected", c["order_bg"])])
     
-    # Spinbox style - matching entries
+    # Spinbox style - enhanced with subtle border
     self.style.configure("TSpinbox",
                          fieldbackground=c["order_bg"],
                          foreground=c["text"],
                          arrowcolor=c["accent"],
-                         borderwidth=0,
-                         lightcolor=c["order_bg"],
-                         darkcolor=c["order_bg"],
+                         borderwidth=1,
+                         lightcolor=c["panel2"],
+                         darkcolor=c["panel2"],
+                         relief="solid",
                          padding=8)
     self.style.map("TSpinbox",
-                   arrowcolor=[("active", c["accent2"])])
+                   arrowcolor=[("active", c["accent2"])],
+                   bordercolor=[("focus", c["accent"])])
     
     # Notebook styles - clean tabs
     self.style.configure("TNotebook",
                          background=c["panel2"],
-                         borderwidth=0,
-                         tabmargins=[0, 0, 0, 0])
+                         borderwidth=1,
+                         bordercolor=c["panel2"],
+                         tabmargins=[2, 2, 2, 0])
     self.style.configure("TNotebook.Tab",
                          background=c["panel2"],
                          foreground=c["muted"],
                          padding=(24, 12),
-                         borderwidth=0,
+                         borderwidth=1,
+                         bordercolor=c["panel2"],
                          font=(FONT_SEGOE_UI_SEMIBOLD, 10))
     self.style.map("TNotebook.Tab",
                    background=[("selected", c["panel"])],
                    foreground=[("selected", c["accent"])],
-                   expand=[("selected", [0, 0, 0, 2])])  # Slight raise effect
+                   bordercolor=[("selected", c["accent"])],
+                   expand=[("selected", [0, 0, 0, 3])])  # Enhanced raise effect
     
     # Scrollbar style - slim modern scrollbar
     self.style.configure("TScrollbar",
@@ -1776,14 +1799,15 @@ class App:
                          background=c["order_bg"],
                          foreground=c["order_fg"],
                          fieldbackground=c["order_bg"],
-                         borderwidth=0,
-                         relief="flat",
+                         borderwidth=1,
+                         bordercolor=c["panel2"],
+                         relief="solid",
                          rowheight=44)
     self.style.configure(f"{style_name}.Heading",
                          background=c["panel2"],
                          foreground=c["text"],
-                         relief="flat",
-                         borderwidth=0)
+                         relief="raised",
+                         borderwidth=1)
     self.style.map(style_name,
                    background=[("selected", c["accent"])],
                    foreground=[("selected", "#ffffff")])
@@ -1795,14 +1819,15 @@ class App:
                          background=c["order_bg"],
                          foreground=c["order_fg"],
                          fieldbackground=c["order_bg"],
-                         borderwidth=0,
-                         relief="flat",
+                         borderwidth=1,
+                         bordercolor=c["panel2"],
+                         relief="solid",
                          rowheight=44)
     self.style.configure("Treeview.Heading",
                          background=c["panel2"],
                          foreground=c["text"],
-                         relief="flat",
-                         borderwidth=0)
+                         relief="raised",
+                         borderwidth=1)
     self.style.map("Treeview",
                    background=[("selected", c["accent"])],
                    foreground=[("selected", "#ffffff")])
@@ -1887,15 +1912,18 @@ class App:
   def _build_settings_panel(self, frm, row):
     import tkinter as tk
     self._settings_frame = tk.LabelFrame(
-      frm, 
+      frm,
       text="⚙️ Settings",
       font=(FONT_SEGOE_UI_SEMIBOLD, 11),
       bg=self._colors["panel"],
       fg=self._colors["accent"],
-      bd=1,
-      relief="groove",
-      padx=8,
-      pady=8,
+      bd=2,
+      relief="solid",
+      highlightthickness=1,
+      highlightbackground=self._colors["panel2"],
+      highlightcolor=self._colors["accent"],
+      padx=10,
+      pady=10,
     )
     self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(12, 6), pady=8)
     self._build_settings_content(self._settings_frame)
