@@ -1447,13 +1447,14 @@ class App:
       "accent3": "#e11d48",   # rose accent
       "success": "#16a34a",   # green
       "warn": "#d97706",      # amber
-      "order_bg": "#f8fafc",  # very light for table cells
+      "order_bg": "#ffffff",  # white for table cells
       "order_fg": "#1a1a2e",  # dark text
       "button_bg": "#6c63ff", # purple button
       "button_fg": "#ffffff", # white text
       "button_hover": "#5a52d5", # darker purple on hover
       "border": "#cbd5e1",    # visible border color
       "shadow": "#94a3b8",    # shadow for depth
+      "card_border": "#94a3b8", # Card border for light mode
     }
     self._colors = self._dark_colors.copy()
 
@@ -1845,7 +1846,7 @@ class App:
 
   def _build_ui(self, root: Tk) -> None:
     import tkinter as tk
-    frm = ttk.Frame(root)
+    frm = ctk.CTkFrame(root, fg_color="transparent")
     frm.grid(row=0, column=0, sticky="nsew")
     root.columnconfigure(0, weight=1)
     root.rowconfigure(0, weight=1)
@@ -1861,48 +1862,39 @@ class App:
     self._build_notebook(main_content)
 
   def _build_header(self, frm, row):
-    import tkinter as tk
-    self._header = tk.Frame(frm, bg=self._colors["bg"], bd=0, highlightthickness=0)
+    # Clean, minimal header
+    self._header = ctk.CTkFrame(frm, fg_color="transparent")
     self._header.grid(row=row, column=0, columnspan=2, sticky="ew", padx=0, pady=(0, 8))
     self._header.columnconfigure(0, weight=1)
-    accent_strip = tk.Frame(self._header, bg=self._colors["accent"], height=5)
-    accent_strip.grid(row=0, column=0, columnspan=3, sticky="ew")
-    self._header_title = tk.Label(
+
+    # Simple title
+    self._header_title = ctk.CTkLabel(
       self._header,
       text="💿 Discogs Auto-Sort",
-      bg=self._colors["bg"],
-      fg=self._colors["text"],
       font=(FONT_SEGOE_UI_SEMIBOLD, 22),
-      padx=20,
-      pady=14,
     )
-    self._header_title.grid(row=1, column=0, sticky="w")
-    self._header_subtitle = tk.Label(
+    self._header_title.grid(row=0, column=0, sticky="w", padx=20, pady=(8, 4))
+
+    self._header_subtitle = ctk.CTkLabel(
       self._header,
       text="Vinyl Collection Manager  •  Live Updates  •  Export & Print",
-      bg=self._colors["bg"],
-      fg=self._colors["muted"],
       font=(FONT_SEGOE_UI, 11),
-      padx=20,
-      pady=0,
+      text_color=self._colors["muted"],
     )
-    self._header_subtitle.grid(row=2, column=0, sticky="w", pady=(0, 8))
-    self.theme_btn = tk.Button(
+    self._header_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 8))
+
+    # Modern theme toggle button
+    self.theme_btn = ctk.CTkButton(
       self._header,
       text="🌙 Dark",
-      bg=self._colors["accent"],
-      fg="#ffffff",
-      font=(FONT_SEGOE_UI_SEMIBOLD, 10),
-      bd=0,
-      relief="flat",
-      padx=14,
-      pady=8,
-      cursor="hand2",
-      activebackground=self._colors["button_hover"],
-      activeforeground="#ffffff",
       command=self._toggle_theme,
+      width=100,
+      height=36,
+      corner_radius=8,
+      fg_color=self._colors["accent"],
+      hover_color=self._colors["button_hover"],
     )
-    self.theme_btn.grid(row=1, column=1, rowspan=2, sticky="e", padx=16, pady=8)
+    self.theme_btn.grid(row=0, column=1, rowspan=2, sticky="e", padx=20, pady=8)
 
   def _build_settings_panel(self, frm, row):
     # Modern card-style settings panel with pronounced elevation
@@ -2037,7 +2029,7 @@ class App:
 
   def _build_main_content(self, frm, row):
     import tkinter as tk
-    main_content = ttk.Frame(frm)
+    main_content = ctk.CTkFrame(frm, fg_color="transparent")
     main_content.grid(row=row, column=1, sticky="nsew", padx=(6, 12), pady=8)
     main_content.columnconfigure(0, weight=1)
     main_content.rowconfigure(2, weight=1)
@@ -2123,7 +2115,7 @@ class App:
     self._build_log_tab(nb)
 
   def _build_order_tab(self, nb):
-    order_fr = ttk.Frame(nb)
+    order_fr = ctk.CTkFrame(nb, fg_color="transparent")
     nb.add(order_fr, text="📋 Shelf Order")
     order_fr.rowconfigure(1, weight=1)
     order_fr.columnconfigure(0, weight=1)
@@ -2131,7 +2123,7 @@ class App:
     self._build_order_tree(order_fr)
 
   def _build_order_toolbar(self, order_fr):
-    order_toolbar = ttk.Frame(order_fr)
+    order_toolbar = ctk.CTkFrame(order_fr, fg_color="transparent")
     order_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
     self._manual_order_check = ttk.Checkbutton(
       order_toolbar, 
@@ -2229,13 +2221,13 @@ class App:
     self._tree_rows: list[ReleaseRow] = []
 
   def _build_wishlist_tab(self, nb):
-    wishlist_fr = ttk.Frame(nb)
+    wishlist_fr = ctk.CTkFrame(nb, fg_color="transparent")
     nb.add(wishlist_fr, text="⭐ Wishlist")
     wishlist_fr.rowconfigure(1, weight=1)
     wishlist_fr.columnconfigure(0, weight=1)
-    
+
     # Top toolbar with action buttons
-    toolbar_fr = ttk.Frame(wishlist_fr)
+    toolbar_fr = ctk.CTkFrame(wishlist_fr, fg_color="transparent")
     toolbar_fr.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
     
     # Check Availability button
@@ -2517,11 +2509,11 @@ class App:
     threading.Thread(target=check_availability, daemon=True).start()
 
   def _build_log_tab(self, nb):
-    log_fr = ttk.Frame(nb)
+    log_fr = ctk.CTkFrame(nb, fg_color="transparent")
     nb.add(log_fr, text="📜 Log")
     log_fr.rowconfigure(0, weight=1)
     log_fr.columnconfigure(0, weight=1)
-    log_wrap = ttk.Frame(log_fr)
+    log_wrap = ctk.CTkFrame(log_fr, fg_color="transparent")
     log_wrap.grid(row=0, column=0, sticky="nsew")
     log_wrap.rowconfigure(0, weight=1)
     log_wrap.columnconfigure(0, weight=1)
@@ -3137,6 +3129,7 @@ class App:
     self._configure_styles()
     self._update_theme_button()
     self._update_header()
+    self._update_ctk_frames()
     self._update_status_bar_widgets()
     self._update_treeview_widget()
     self._update_search_entry()
@@ -3148,31 +3141,53 @@ class App:
   def _set_theme_colors(self):
     if self.v_dark_mode.get():
       self._colors = self._dark_colors.copy()
-      self.theme_btn.config(text="🌙 Dark")
-      if TTKBOOTSTRAP_AVAILABLE:
-        self.style.theme_use("darkly")
+      self.theme_btn.configure(text="🌙 Dark")
+      ctk.set_appearance_mode("dark")
     else:
       self._colors = self._light_colors.copy()
-      self.theme_btn.config(text="☀️ Light")
-      if TTKBOOTSTRAP_AVAILABLE:
-        self.style.theme_use("litera")
+      self.theme_btn.configure(text="☀️ Light")
+      ctk.set_appearance_mode("light")
 
   def _update_theme_button(self):
-    self.theme_btn.config(
-      bg=self._colors["accent"],
-      fg="#ffffff",
-      activebackground=self._colors["button_hover"],
-      activeforeground="#ffffff"
-    )
+    # Update CustomTkinter button
+    try:
+      if self.v_dark_mode.get():
+        self.theme_btn.configure(text="🌙 Dark", fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
+        ctk.set_appearance_mode("dark")
+      else:
+        self.theme_btn.configure(text="☀️ Light", fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
+        ctk.set_appearance_mode("light")
+    except Exception:
+      pass
 
   def _update_header(self):
+    # Update CustomTkinter header widgets
     try:
-      self._header.config(bg=self._colors["bg"])
-      self._header_title.config(bg=self._colors["bg"], fg=self._colors["text"])
-      self._header_subtitle.config(bg=self._colors["bg"], fg=self._colors["muted"])
-      for child in self._header.winfo_children():
-        if child.winfo_class() == "Frame" and child.cget("height") == 4:
-          child.config(bg=self._colors["accent"])
+      self._header_title.configure(text_color=self._colors["text"])
+      self._header_subtitle.configure(text_color=self._colors["muted"])
+    except Exception:
+      pass
+
+  def _update_ctk_frames(self):
+    """Update CustomTkinter frame colors for theme"""
+    try:
+      # Update Settings panel
+      if hasattr(self, '_settings_frame'):
+        self._settings_frame.configure(
+          fg_color=self._colors["panel"],
+          border_color=self._colors.get("card_border", self._colors["border"])
+        )
+      # Update table wrapper if it exists
+      if hasattr(self, 'order_tree'):
+        parent = self.order_tree.master
+        if hasattr(parent, 'configure'):
+          try:
+            parent.configure(
+              fg_color=self._colors["panel"],
+              border_color=self._colors.get("card_border", self._colors["border"])
+            )
+          except:
+            pass
     except Exception:
       pass
 
@@ -3213,14 +3228,10 @@ class App:
       pass
 
   def _update_search_entry(self):
+    # Update CustomTkinter search entry
     try:
-      self._search_entry.config(
-        bg=self._colors["order_bg"],
-        fg=self._colors["order_fg"],
-        insertbackground=self._colors["order_fg"],
-        highlightbackground=self._colors["border"],
-        highlightcolor=self._colors["accent"],
-      )
+      # CTkEntry doesn't need color updates - it follows the theme automatically
+      pass
     except Exception:
       pass
 
@@ -3295,8 +3306,9 @@ class App:
       pass
 
   def _update_root_bg(self):
+    # Update CustomTkinter root window
     try:
-      self.root.config(bg=self._colors["panel2"])
+      self.root.configure(fg_color=self._colors["panel2"])
     except Exception:
       pass
 
