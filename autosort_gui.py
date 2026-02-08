@@ -1417,23 +1417,24 @@ class App:
 
     # Palette (best-effort; note: macOS may still use native button chrome)
     self._dark_colors = {
-      "bg": "#0d0d1a",        # very dark navy background
-      "panel": "#1e2746",     # medium blue - for elevated cards
-      "panel2": "#151a2e",    # dark blue - for main areas
-      "text": "#eaeaea",      # light gray
-      "muted": "#8892b0",     # muted blue-gray
+      "bg": "#0a0e1a",        # VERY dark background (like Employee Hub)
+      "panel": "#1e293b",     # Elevated card color (brighter for contrast)
+      "panel2": "#0f1419",    # Even darker for main area background
+      "text": "#f1f5f9",      # Brighter text for better contrast
+      "muted": "#94a3b8",     # Lighter muted color
       "accent": "#6c63ff",    # purple accent
       "accent2": "#00d9ff",   # cyan accent
       "accent3": "#ff6b6b",   # coral/red accent
-      "success": "#00c853",   # green
+      "success": "#10b981",   # Brighter green
       "warn": "#ffab00",      # amber
-      "order_bg": "#1a2138",  # table cells background
-      "order_fg": "#eaeaea",  # light text
+      "order_bg": "#1e293b",  # Match panel for consistency
+      "order_fg": "#f1f5f9",  # Brighter text
       "button_bg": "#6c63ff", # purple button
       "button_fg": "#ffffff", # white text
       "button_hover": "#5a52d5", # darker purple on hover
-      "border": "#2d3a5c",    # visible border color
-      "shadow": "#0a0a12",    # shadow for depth
+      "border": "#334155",    # More visible border (lighter)
+      "shadow": "#000000",    # Pure black shadow
+      "card_border": "#475569", # Even lighter border for cards
     }
     self._light_colors = {
       "bg": "#f0f4f8",        # light blue-gray
@@ -1904,81 +1905,79 @@ class App:
     self.theme_btn.grid(row=1, column=1, rowspan=2, sticky="e", padx=16, pady=8)
 
   def _build_settings_panel(self, frm, row):
-    import tkinter as tk
-    self._settings_frame = tk.LabelFrame(
+    # Modern card-style settings panel with pronounced elevation
+    self._settings_frame = ctk.CTkFrame(
       frm,
-      text="⚙️ Settings",
-      font=(FONT_SEGOE_UI_SEMIBOLD, 11),
-      bg=self._colors["panel"],
-      fg=self._colors["accent"],
-      bd=3,
-      relief="groove",
-      highlightthickness=2,
-      highlightbackground=self._colors["border"],
-      highlightcolor=self._colors["accent"],
-      padx=12,
-      pady=12,
+      corner_radius=12,
+      fg_color=self._colors["panel"],
+      border_width=2,
+      border_color=self._colors.get("card_border", self._colors["border"]),
     )
-    self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(16, 8), pady=(12, 8))
+    self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(20, 10), pady=(16, 12))
+
+    # Settings header label - larger and more prominent
+    settings_label = ctk.CTkLabel(
+      self._settings_frame,
+      text="⚙️ Settings",
+      font=(FONT_SEGOE_UI_SEMIBOLD, 16),
+      text_color=self._colors["text"],
+    )
+    settings_label.grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(16, 12))
+
     self._build_settings_content(self._settings_frame)
 
   def _build_settings_content(self, settings):
     import tkinter as tk
-    srow = 0
-    def make_entry(parent, textvar, width=28, show=""):
-      e = tk.Entry(
+    srow = 1  # Start at row 1 (row 0 is the header)
+
+    def make_entry(parent, textvar, width=200, show=""):
+      # Modern CustomTkinter entry with better sizing
+      e = ctk.CTkEntry(
         parent,
         textvariable=textvar,
         width=width,
+        height=32,
         show=show,
-        font=(FONT_SEGOE_UI, 10),
-        bg=self._colors["order_bg"],
-        fg=self._colors["order_fg"],
-        insertbackground=self._colors["order_fg"],
-        relief="solid",
-        bd=1,
-        highlightthickness=1,
-        highlightbackground=self._colors["border"],
-        highlightcolor=self._colors["accent"],
+        font=(FONT_SEGOE_UI, 11),
+        corner_radius=8,
       )
       return e
-    tk.Label(settings, text="Token", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=srow, column=0, sticky="w", padx=4, pady=4)
-    self.token_entry = make_entry(settings, self.v_token, width=24, show="•")
-    self.token_entry.grid(row=srow, column=1, sticky="ew", padx=4, pady=4, ipady=4)
-    ttk.Checkbutton(settings, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility).grid(row=srow, column=2, sticky="w", padx=4, pady=4)
+
+    # Token field - more spacious
+    ctk.CTkLabel(settings, text="Token", font=(FONT_SEGOE_UI, 10)).grid(row=srow, column=0, sticky="w", padx=16, pady=8)
+    self.token_entry = make_entry(settings, self.v_token, width=180, show="•")
+    self.token_entry.grid(row=srow, column=1, sticky="ew", padx=8, pady=8)
+    ctk.CTkCheckBox(settings, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility, width=60).grid(row=srow, column=2, sticky="w", padx=8, pady=8)
     srow += 1
-    self._useragent_entry = make_entry(settings, self.v_user_agent)
-    self._out_row = tk.Frame(settings, bg=self._colors["panel"])
-    self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    # Output directory row
+    self._out_row = ctk.CTkFrame(settings, fg_color="transparent")
+    self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=12, pady=4)
     self._out_row.columnconfigure(0, weight=1)
-    tk.Label(self._out_row, text="Output Dir", font=(FONT_SEGOE_UI, 10), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w", columnspan=2)
-    self._output_entry = make_entry(self._out_row, self.v_output_dir, width=20)
-    self._output_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0), ipady=4)
-    if TTKBOOTSTRAP_AVAILABLE:
-      self._browse_btn = ttk.Button(self._out_row, text="📂", bootstyle="info-outline", command=self._choose_dir, width=3)
-      self._browse_btn.grid(row=1, column=1, sticky="e", padx=(4, 0))
-    else:
-      self._browse_btn = ttk.Button(self._out_row, text="📂", command=self._choose_dir, width=3)
-      self._browse_btn.grid(row=1, column=1, sticky="e", padx=(4, 0))
+    ctk.CTkLabel(self._out_row, text="Output Dir", font=(FONT_SEGOE_UI, 10)).grid(row=0, column=0, sticky="w", columnspan=2)
+    self._output_entry = make_entry(self._out_row, self.v_output_dir, width=180)
+    self._output_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+    self._browse_btn = ctk.CTkButton(self._out_row, text="📂", command=self._choose_dir, width=40, corner_radius=6)
+    self._browse_btn.grid(row=1, column=1, sticky="e", padx=(4, 0))
     self._open_btn = None
     srow += 1
-    self._opt_row = tk.Frame(settings, bg=self._colors["panel"])
-    self._opt_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    self._opt_row = ctk.CTkFrame(settings, fg_color="transparent")
+    self._opt_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=12, pady=4)
     self._build_options_content(self._opt_row)
     srow += 1
-    self._sort_row = tk.Frame(settings, bg=self._colors["panel"])
-    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    self._sort_row = ctk.CTkFrame(settings, fg_color="transparent")
+    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=12, pady=4)
     self._build_sort_content(self._sort_row)
     srow += 1
-    self._price_info = tk.Frame(settings, bg=self._colors["panel"])
-    self._price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=4, pady=(8, 4))
-    tk.Label(self._price_info, text="ℹ️ Prices = lowest listed\nfor your specific pressing", font=(FONT_SEGOE_UI, 8), bg=self._colors["panel"], fg=self._colors["muted"], justify="left").grid(row=0, column=0, sticky="w")
+    self._price_info = ctk.CTkFrame(settings, fg_color="transparent")
+    self._price_info.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=12, pady=(8, 4))
+    ctk.CTkLabel(self._price_info, text="ℹ️ Prices = lowest listed\nfor your specific pressing", font=(FONT_SEGOE_UI, 8), text_color=self._colors["muted"], justify="left").grid(row=0, column=0, sticky="w")
 
   def _build_options_content(self, opt_row):
     import tkinter as tk
-    poll_frame = tk.Frame(opt_row, bg=self._colors["panel"])
+    poll_frame = ctk.CTkFrame(opt_row, fg_color="transparent")
     poll_frame.grid(row=0, column=0, sticky="w", pady=2)
-    tk.Label(poll_frame, text="Poll (sec)", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+    ctk.CTkLabel(poll_frame, text="Poll (sec)", font=(FONT_SEGOE_UI, 9)).grid(row=0, column=0, sticky="w")
+    # Keep tk.Spinbox for now (no CTk equivalent)
     self._poll_spin = tk.Spinbox(
       poll_frame, from_=15, to=3600, textvariable=self.v_poll, width=6,
       font=(FONT_SEGOE_UI, 9),
@@ -1993,59 +1992,46 @@ class App:
       highlightcolor=self._colors["accent"],
     )
     self._poll_spin.grid(row=0, column=1, padx=(4, 0), ipady=2)
-    self._json_check = ttk.Checkbutton(opt_row, text="Also export JSON", variable=self.v_json)
+
+    # Modern checkboxes
+    self._json_check = ctk.CTkCheckBox(opt_row, text="Also export JSON", variable=self.v_json)
     self._json_check.grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
-    self._prices_check = ttk.Checkbutton(opt_row, text="Show Prices", variable=self.v_show_prices)
+    self._prices_check = ctk.CTkCheckBox(opt_row, text="Show Prices", variable=self.v_show_prices)
     self._prices_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
-    currency_frame = tk.Frame(opt_row, bg=self._colors["panel"])
+
+    # Modern currency dropdown
+    currency_frame = ctk.CTkFrame(opt_row, fg_color="transparent")
     currency_frame.grid(row=3, column=0, columnspan=2, sticky="w", pady=2)
-    tk.Label(currency_frame, text="Currency", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
-    self._currency_combo = tk.OptionMenu(currency_frame, self.v_currency, "USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY")
-    self._currency_combo.config(
-      font=(FONT_SEGOE_UI, 9),
-      bg=self._colors["order_bg"],
-      fg=self._colors["order_fg"],
-      activebackground=self._colors["accent"],
-      activeforeground="#ffffff",
-      highlightthickness=0,
-      bd=0,
-      relief="flat",
-      width=6,
-    )
-    self._currency_combo["menu"].config(
-      bg=self._colors["order_bg"],
-      fg=self._colors["order_fg"],
-      activebackground=self._colors["accent"],
-      activeforeground="#ffffff",
+    ctk.CTkLabel(currency_frame, text="Currency", font=(FONT_SEGOE_UI, 9)).grid(row=0, column=0, sticky="w")
+    self._currency_combo = ctk.CTkOptionMenu(
+      currency_frame,
+      variable=self.v_currency,
+      values=["USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY"],
+      width=80,
+      corner_radius=6,
     )
     self._currency_combo.grid(row=0, column=1, padx=(4, 0))
-    if TTKBOOTSTRAP_AVAILABLE:
-      self._refresh_prices_btn = ttk.Button(opt_row, text="🔄 Refresh Prices", bootstyle="warning-outline", command=self._refresh_prices)
-    else:
-      self._refresh_prices_btn = ttk.Button(opt_row, text="🔄 Refresh Prices", command=self._refresh_prices)
+
+    # Modern refresh prices button
+    self._refresh_prices_btn = ctk.CTkButton(
+      opt_row,
+      text="🔄 Refresh Prices",
+      command=self._refresh_prices,
+      corner_radius=6,
+      fg_color=self._colors["warn"],
+      hover_color="#cc8c00",
+    )
     self._refresh_prices_btn.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
   def _build_sort_content(self, sort_row):
-    import tkinter as tk
-    tk.Label(sort_row, text="Sort By", font=(FONT_SEGOE_UI, 9), bg=self._colors["panel"], fg=self._colors["text"]).grid(row=0, column=0, sticky="w")
+    ctk.CTkLabel(sort_row, text="Sort By", font=(FONT_SEGOE_UI, 9)).grid(row=0, column=0, sticky="w")
     sort_options = ["artist", "title", "year", "price_asc", "price_desc"]
-    self._sort_combo = tk.OptionMenu(sort_row, self.v_sort_by, *sort_options)
-    self._sort_combo.config(
-      font=(FONT_SEGOE_UI, 9),
-      bg=self._colors["order_bg"],
-      fg=self._colors["order_fg"],
-      activebackground=self._colors["accent"],
-      activeforeground="#ffffff",
-      highlightthickness=0,
-      bd=0,
-      relief="flat",
-      width=10,
-    )
-    self._sort_combo["menu"].config(
-      bg=self._colors["order_bg"],
-      fg=self._colors["order_fg"],
-      activebackground=self._colors["accent"],
-      activeforeground="#ffffff",
+    self._sort_combo = ctk.CTkOptionMenu(
+      sort_row,
+      variable=self.v_sort_by,
+      values=sort_options,
+      width=120,
+      corner_radius=6,
     )
     self._sort_combo.grid(row=0, column=1, padx=(4, 0), sticky="w")
 
@@ -2060,62 +2046,74 @@ class App:
     return main_content
 
   def _build_search_row(self, main_content):
-    import tkinter as tk
-    search_row = ttk.Frame(main_content)
+    search_row = ctk.CTkFrame(main_content, fg_color="transparent")
     search_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
     search_row.columnconfigure(1, weight=1)
-    ttk.Label(search_row, text="🔍 Search").grid(row=0, column=0, sticky="w")
-    self._search_entry = tk.Entry(
+
+    ctk.CTkLabel(search_row, text="🔍 Search", font=(FONT_SEGOE_UI, 11)).grid(row=0, column=0, sticky="w", padx=(0, 8))
+
+    # Modern rounded search entry
+    self._search_entry = ctk.CTkEntry(
       search_row,
       textvariable=self.v_search,
       font=(FONT_SEGOE_UI, 11),
-      bg=self._colors["order_bg"],
-      fg=self._colors["order_fg"],
-      insertbackground=self._colors["order_fg"],
-      relief="solid",
-      bd=1,
-      highlightthickness=1,
-      highlightbackground=self._colors["border"],
-      highlightcolor=self._colors["accent"],
+      height=32,
+      corner_radius=8,
     )
-    self._search_entry.grid(row=0, column=1, sticky="ew", padx=6, ipady=6)
-    if TTKBOOTSTRAP_AVAILABLE:
-      self._clear_btn = ttk.Button(search_row, text="✕ Clear", bootstyle="secondary-outline", command=lambda: self.v_search.set(""))
-      self._clear_btn.grid(row=0, column=2, sticky="e")
-    else:
-      self._clear_btn = ttk.Button(search_row, text="✕ Clear", style=SECONDARY_TBUTTON_STYLE, command=lambda: self.v_search.set(""))
-      self._clear_btn.grid(row=0, column=2, sticky="e")
-    ttk.Label(search_row, textvariable=self.v_match).grid(row=0, column=3, sticky="e", padx=6)
+    self._search_entry.grid(row=0, column=1, sticky="ew", padx=6)
+
+    # Modern clear button
+    self._clear_btn = ctk.CTkButton(
+      search_row,
+      text="✕ Clear",
+      command=lambda: self.v_search.set(""),
+      width=80,
+      height=32,
+      corner_radius=8,
+      fg_color="#4a5568",
+      hover_color="#2d3748",
+    )
+    self._clear_btn.grid(row=0, column=2, sticky="e", padx=6)
+
+    ctk.CTkLabel(search_row, textvariable=self.v_match, font=(FONT_SEGOE_UI, 10)).grid(row=0, column=3, sticky="e", padx=6)
     self.v_search.trace_add("write", lambda *_: self._on_search_change())
 
   def _build_action_buttons(self, main_content):
-    btn = ttk.Frame(main_content)
+    btn = ctk.CTkFrame(main_content, fg_color="transparent")
     btn.grid(row=1, column=0, sticky="ew", pady=(0, 8))
     btn.columnconfigure(0, weight=1)
     btn.columnconfigure(1, weight=1)
     btn.columnconfigure(2, weight=1)
     btn.columnconfigure(3, weight=1)
-    if TTKBOOTSTRAP_AVAILABLE:
-      self._refresh_btn = ttk.Button(btn, text="🔄 Refresh", bootstyle="primary", command=self._refresh_now)
-      self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
-      self._export_btn = ttk.Button(btn, text="📁 Export", bootstyle="success", command=self._export_files)
-      self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=4)
-      self._print_btn = ttk.Button(btn, text="🖨️ Print", bootstyle="secondary", command=self._print_current)
-      self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
-      self._stop_btn = ttk.Button(btn, text="⏹️ Stop", bootstyle="danger", command=self._stop_app)
-      self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
-    else:
-      PRIMARY_TBUTTON_STYLE = "Primary.TButton"
-      SUCCESS_TBUTTON_STYLE = "Success.TButton"
-      DANGER_TBUTTON_STYLE = "Danger.TButton"
-      self._refresh_btn = ttk.Button(btn, text="🔄 Refresh", style=PRIMARY_TBUTTON_STYLE, command=self._refresh_now)
-      self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
-      self._export_btn = ttk.Button(btn, text="📁 Export", style=SUCCESS_TBUTTON_STYLE, command=self._export_files)
-      self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=4)
-      self._print_btn = ttk.Button(btn, text="🖨️ Print", style=SECONDARY_TBUTTON_STYLE, command=self._print_current)
-      self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
-      self._stop_btn = ttk.Button(btn, text="⏹️ Stop", style=DANGER_TBUTTON_STYLE, command=self._stop_app)
-      self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
+
+    # Modern CustomTkinter buttons with color coding
+    self._refresh_btn = ctk.CTkButton(
+      btn, text="🔄 Refresh", command=self._refresh_now,
+      corner_radius=8, height=36,
+      fg_color=self._colors["accent"], hover_color=self._colors["button_hover"]
+    )
+    self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
+
+    self._export_btn = ctk.CTkButton(
+      btn, text="📁 Export", command=self._export_files,
+      corner_radius=8, height=36,
+      fg_color=self._colors["success"], hover_color="#00a844"
+    )
+    self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=4)
+
+    self._print_btn = ctk.CTkButton(
+      btn, text="🖨️ Print", command=self._print_current,
+      corner_radius=8, height=36,
+      fg_color="#4a5568", hover_color="#2d3748"
+    )
+    self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
+
+    self._stop_btn = ctk.CTkButton(
+      btn, text="⏹️ Stop", command=self._stop_app,
+      corner_radius=8, height=36,
+      fg_color=self._colors["accent3"], hover_color="#c41840"
+    )
+    self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
 
   def _build_notebook(self, main_content):
     nb = ttk.Notebook(main_content)
@@ -2173,8 +2171,15 @@ class App:
     order_toolbar.columnconfigure(1, weight=1)
 
   def _build_order_tree(self, order_fr):
-    order_wrap = ttk.Frame(order_fr)
-    order_wrap.grid(row=1, column=0, sticky="nsew", padx=(12, 0), pady=(0, 8))
+    # Rounded card for the table
+    order_wrap = ctk.CTkFrame(
+      order_fr,
+      corner_radius=12,
+      fg_color=self._colors["panel"],
+      border_width=2,
+      border_color=self._colors.get("card_border", self._colors["border"]),
+    )
+    order_wrap.grid(row=1, column=0, sticky="nsew", padx=(12, 12), pady=(0, 12))
     order_wrap.rowconfigure(0, weight=1)
     order_wrap.columnconfigure(0, weight=1)
     order_scroll = ttk.Scrollbar(order_wrap, orient="vertical")
