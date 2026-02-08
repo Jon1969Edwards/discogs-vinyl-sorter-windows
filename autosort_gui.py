@@ -1432,7 +1432,7 @@ class App:
       "panel2": "#151a2e",    # dark blue - for main areas
       "text": "#eaeaea",      # light gray
       "muted": "#8892b0",     # muted blue-gray
-      "accent": "#ff6600",    # BRIGHT ORANGE - testing if changes load
+      "accent": "#6c63ff",    # purple accent
       "accent2": "#00d9ff",   # cyan accent
       "accent3": "#ff6b6b",   # coral/red accent
       "success": "#00c853",   # green
@@ -1451,7 +1451,7 @@ class App:
       "panel2": "#e8eef4",    # light gray-blue - for background
       "text": "#1a1a2e",      # dark text
       "muted": "#64748b",     # muted gray
-      "accent": "#ff6600",    # BRIGHT ORANGE - testing if changes load
+      "accent": "#6c63ff",    # purple accent
       "accent2": "#0891b2",   # teal accent
       "accent3": "#e11d48",   # rose accent
       "success": "#16a34a",   # green
