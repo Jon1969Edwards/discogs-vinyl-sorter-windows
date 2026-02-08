@@ -35,16 +35,14 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
-# Use ttkbootstrap for modern rounded widgets
-try:
-  import ttkbootstrap as ttk
-  TTKBOOTSTRAP_AVAILABLE = True
-except ImportError:
-  from tkinter import ttk
-  TTKBOOTSTRAP_AVAILABLE = False
-
-from tkinter import Tk, StringVar, BooleanVar, IntVar, filedialog, messagebox
+# Use CustomTkinter for modern UI
+import customtkinter as ctk
+from tkinter import StringVar, BooleanVar, IntVar, filedialog, messagebox
 import tkinter as tk
+from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
+
+# No longer using ttkbootstrap
+TTKBOOTSTRAP_AVAILABLE = False
 
 import discogs_app as core
 from core.models import ReleaseRow, BuildResult
@@ -1413,17 +1411,9 @@ class App:
     # Dark mode toggle
     self.v_dark_mode = BooleanVar(value=True)
 
-    # Use ttkbootstrap theming if available
-    if TTKBOOTSTRAP_AVAILABLE:
-      # Use 'darkly' theme for dark mode (has nice rounded corners)
-      self.style = ttk.Style(theme="darkly")
-    else:
-      self.style = ttk.Style()
-      try:
-        if "clam" in self.style.theme_names():
-          self.style.theme_use("clam")
-      except Exception:
-        pass
+    # CustomTkinter handles theming automatically
+    # We only need ttk.Style for Treeview widget (no CTk replacement yet)
+    self.style = ttk.Style()
 
     # Palette (best-effort; note: macOS may still use native button chrome)
     self._dark_colors = {
@@ -3813,20 +3803,14 @@ class App:
 
 
 def main() -> None:
-  # Use ttkbootstrap Window for better theming if available
-  if TTKBOOTSTRAP_AVAILABLE:
-    try:
-      import ttkbootstrap as ttk_bs
-      root = ttk_bs.Window(themename="darkly")
-    except ImportError:
-      root = Tk()
-  else:
-    root = Tk()
-  
-  try:
-    root.call("tk", "scaling", 1.2)
-  except Exception:
-    pass
+  # Set CustomTkinter appearance and theme
+  ctk.set_appearance_mode("dark")  # "dark" or "light"
+  ctk.set_default_color_theme("blue")  # "blue", "green", "dark-blue"
+
+  # Create CustomTkinter root window
+  root = ctk.CTk()
+  root.title("Discogs Auto-Sort")
+
   # Start maximized (fullscreen window)
   root.state('zoomed')
   App(root)
