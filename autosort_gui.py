@@ -1427,9 +1427,9 @@ class App:
 
     # Palette (best-effort; note: macOS may still use native button chrome)
     self._dark_colors = {
-      "bg": "#1a1a2e",        # deep navy
-      "panel": "#16213e",     # dark blue
-      "panel2": "#0f0f1a",    # darker
+      "bg": "#0d0d1a",        # very dark navy background
+      "panel": "#1e2746",     # medium blue - for elevated cards
+      "panel2": "#151a2e",    # dark blue - for main areas
       "text": "#eaeaea",      # light gray
       "muted": "#8892b0",     # muted blue-gray
       "accent": "#6c63ff",    # purple accent
@@ -1437,16 +1437,18 @@ class App:
       "accent3": "#ff6b6b",   # coral/red accent
       "success": "#00c853",   # green
       "warn": "#ffab00",      # amber
-      "order_bg": "#1e2746",  # slightly lighter navy
+      "order_bg": "#1a2138",  # table cells background
       "order_fg": "#eaeaea",  # light text
       "button_bg": "#6c63ff", # purple button
       "button_fg": "#ffffff", # white text
       "button_hover": "#5a52d5", # darker purple on hover
+      "border": "#2d3a5c",    # visible border color
+      "shadow": "#0a0a12",    # shadow for depth
     }
     self._light_colors = {
       "bg": "#f0f4f8",        # light blue-gray
-      "panel": "#ffffff",     # white
-      "panel2": "#e8eef4",    # light gray-blue
+      "panel": "#ffffff",     # white - for cards
+      "panel2": "#e8eef4",    # light gray-blue - for background
       "text": "#1a1a2e",      # dark text
       "muted": "#64748b",     # muted gray
       "accent": "#6c63ff",    # purple accent
@@ -1454,11 +1456,13 @@ class App:
       "accent3": "#e11d48",   # rose accent
       "success": "#16a34a",   # green
       "warn": "#d97706",      # amber
-      "order_bg": "#ffffff",  # white
+      "order_bg": "#f8fafc",  # very light for table cells
       "order_fg": "#1a1a2e",  # dark text
       "button_bg": "#6c63ff", # purple button
       "button_fg": "#ffffff", # white text
       "button_hover": "#5a52d5", # darker purple on hover
+      "border": "#cbd5e1",    # visible border color
+      "shadow": "#94a3b8",    # shadow for depth
     }
     self._colors = self._dark_colors.copy()
 
@@ -1576,14 +1580,14 @@ class App:
                          foreground=c["muted"],
                          font=(FONT_SEGOE_UI, 11))
     
-    # Card/LabelFrame styles - enhanced with subtle depth
+    # Card/LabelFrame styles - enhanced with visible borders
     self.style.configure("Card.TLabelframe",
                          background=c["panel"],
-                         bordercolor=c["panel2"],
-                         lightcolor=c["panel"],
-                         darkcolor=c["panel2"],
+                         bordercolor=c["border"],
+                         lightcolor=c["border"],
+                         darkcolor=c["border"],
                          relief="solid",
-                         borderwidth=1)
+                         borderwidth=2)
     self.style.configure("Card.TLabelframe.Label",
                          foreground=c["accent"],
                          background=c["panel"],
@@ -1671,14 +1675,14 @@ class App:
                    background=[("active", c["order_bg"]), ("pressed", c["order_bg"])],
                    relief=[("pressed", "sunken")])
     
-    # Entry style - enhanced with subtle border for definition
+    # Entry style - enhanced with visible border
     self.style.configure("TEntry",
                          fieldbackground=c["order_bg"],
                          foreground=c["text"],
                          insertcolor=c["text"],
-                         borderwidth=1,
-                         lightcolor=c["panel2"],
-                         darkcolor=c["panel2"],
+                         borderwidth=2,
+                         lightcolor=c["border"],
+                         darkcolor=c["border"],
                          relief="solid",
                          padding=10)
     self.style.map("TEntry",
@@ -1687,15 +1691,15 @@ class App:
                    darkcolor=[("focus", c["accent"])],
                    bordercolor=[("focus", c["accent"])])
     
-    # Combobox style - enhanced with subtle border
+    # Combobox style - enhanced with visible border
     self.style.configure("TCombobox",
                          fieldbackground=c["order_bg"],
                          background=c["order_bg"],
                          foreground=c["text"],
                          arrowcolor=c["accent"],
-                         borderwidth=1,
-                         lightcolor=c["panel2"],
-                         darkcolor=c["panel2"],
+                         borderwidth=2,
+                         lightcolor=c["border"],
+                         darkcolor=c["border"],
                          selectbackground=c["accent"],
                          selectforeground="#ffffff",
                          relief="solid",
@@ -1727,14 +1731,14 @@ class App:
                    background=[("active", c["panel"])],
                    indicatorcolor=[("selected", c["accent"]), ("!selected", c["order_bg"])])
     
-    # Spinbox style - enhanced with subtle border
+    # Spinbox style - enhanced with visible border
     self.style.configure("TSpinbox",
                          fieldbackground=c["order_bg"],
                          foreground=c["text"],
                          arrowcolor=c["accent"],
-                         borderwidth=1,
-                         lightcolor=c["panel2"],
-                         darkcolor=c["panel2"],
+                         borderwidth=2,
+                         lightcolor=c["border"],
+                         darkcolor=c["border"],
                          relief="solid",
                          padding=8)
     self.style.map("TSpinbox",
@@ -1799,15 +1803,15 @@ class App:
                          background=c["order_bg"],
                          foreground=c["order_fg"],
                          fieldbackground=c["order_bg"],
-                         borderwidth=1,
-                         bordercolor=c["panel2"],
+                         borderwidth=2,
+                         bordercolor=c["border"],
                          relief="solid",
                          rowheight=44)
     self.style.configure(f"{style_name}.Heading",
-                         background=c["panel2"],
+                         background=c["panel"],
                          foreground=c["text"],
                          relief="raised",
-                         borderwidth=1)
+                         borderwidth=2)
     self.style.map(style_name,
                    background=[("selected", c["accent"])],
                    foreground=[("selected", "#ffffff")])
@@ -1819,15 +1823,15 @@ class App:
                          background=c["order_bg"],
                          foreground=c["order_fg"],
                          fieldbackground=c["order_bg"],
-                         borderwidth=1,
-                         bordercolor=c["panel2"],
+                         borderwidth=2,
+                         bordercolor=c["border"],
                          relief="solid",
                          rowheight=44)
     self.style.configure("Treeview.Heading",
-                         background=c["panel2"],
+                         background=c["panel"],
                          foreground=c["text"],
                          relief="raised",
-                         borderwidth=1)
+                         borderwidth=2)
     self.style.map("Treeview",
                    background=[("selected", c["accent"])],
                    foreground=[("selected", "#ffffff")])
@@ -1917,15 +1921,15 @@ class App:
       font=(FONT_SEGOE_UI_SEMIBOLD, 11),
       bg=self._colors["panel"],
       fg=self._colors["accent"],
-      bd=2,
-      relief="solid",
-      highlightthickness=1,
-      highlightbackground=self._colors["panel2"],
+      bd=3,
+      relief="groove",
+      highlightthickness=2,
+      highlightbackground=self._colors["border"],
       highlightcolor=self._colors["accent"],
-      padx=10,
-      pady=10,
+      padx=12,
+      pady=12,
     )
-    self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(12, 6), pady=8)
+    self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(16, 8), pady=(12, 8))
     self._build_settings_content(self._settings_frame)
 
   def _build_settings_content(self, settings):
@@ -1933,18 +1937,18 @@ class App:
     srow = 0
     def make_entry(parent, textvar, width=28, show=""):
       e = tk.Entry(
-        parent, 
-        textvariable=textvar, 
+        parent,
+        textvariable=textvar,
         width=width,
         show=show,
         font=(FONT_SEGOE_UI, 10),
         bg=self._colors["order_bg"],
         fg=self._colors["order_fg"],
         insertbackground=self._colors["order_fg"],
-        relief="flat",
-        bd=0,
+        relief="solid",
+        bd=1,
         highlightthickness=1,
-        highlightbackground=self._colors["panel2"],
+        highlightbackground=self._colors["border"],
         highlightcolor=self._colors["accent"],
       )
       return e
@@ -1990,12 +1994,12 @@ class App:
       font=(FONT_SEGOE_UI, 9),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
-      buttonbackground=self._colors["panel2"],
+      buttonbackground=self._colors["border"],
       insertbackground=self._colors["order_fg"],
-      relief="flat",
-      bd=0,
+      relief="solid",
+      bd=1,
       highlightthickness=1,
-      highlightbackground=self._colors["panel2"],
+      highlightbackground=self._colors["border"],
       highlightcolor=self._colors["accent"],
     )
     self._poll_spin.grid(row=0, column=1, padx=(4, 0), ipady=2)
@@ -2072,16 +2076,16 @@ class App:
     search_row.columnconfigure(1, weight=1)
     ttk.Label(search_row, text="🔍 Search").grid(row=0, column=0, sticky="w")
     self._search_entry = tk.Entry(
-      search_row, 
+      search_row,
       textvariable=self.v_search,
       font=(FONT_SEGOE_UI, 11),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
       insertbackground=self._colors["order_fg"],
-      relief="flat",
-      bd=0,
+      relief="solid",
+      bd=1,
       highlightthickness=1,
-      highlightbackground=self._colors["panel2"],
+      highlightbackground=self._colors["border"],
       highlightcolor=self._colors["accent"],
     )
     self._search_entry.grid(row=0, column=1, sticky="ew", padx=6, ipady=6)
@@ -3219,7 +3223,7 @@ class App:
         bg=self._colors["order_bg"],
         fg=self._colors["order_fg"],
         insertbackground=self._colors["order_fg"],
-        highlightbackground=self._colors["panel2"],
+        highlightbackground=self._colors["border"],
         highlightcolor=self._colors["accent"],
       )
     except Exception:
@@ -3231,7 +3235,7 @@ class App:
         "bg": self._colors["order_bg"],
         "fg": self._colors["order_fg"],
         "insertbackground": self._colors["order_fg"],
-        "highlightbackground": self._colors["panel2"],
+        "highlightbackground": self._colors["border"],
         "highlightcolor": self._colors["accent"],
       }
       for widget in [self.token_entry, self._useragent_entry, self._output_entry]:
@@ -3242,9 +3246,9 @@ class App:
       self._poll_spin.config(
         bg=self._colors["order_bg"],
         fg=self._colors["order_fg"],
-        buttonbackground=self._colors["panel2"],
+        buttonbackground=self._colors["border"],
         insertbackground=self._colors["order_fg"],
-        highlightbackground=self._colors["panel2"],
+        highlightbackground=self._colors["border"],
         highlightcolor=self._colors["accent"],
       )
       menu_config = {
@@ -3267,6 +3271,8 @@ class App:
       self._settings_frame.config(
         bg=self._colors["panel"],
         fg=self._colors["accent"],
+        highlightbackground=self._colors["border"],
+        highlightcolor=self._colors["accent"],
       )
       frame_config = {"bg": self._colors["panel"]}
       for frame in [self._out_row, self._opt_row, self._sort_row, self._price_info]:
