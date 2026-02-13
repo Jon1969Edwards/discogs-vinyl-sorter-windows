@@ -1970,10 +1970,12 @@ class App:
 
   def _build_settings_content(self, settings):
     import tkinter as tk
-    srow = 1  # Start at row 1 (row 0 is the header)
+    settings.columnconfigure(0, weight=1)
+    SECTION_PADX = 20
+    SECTION_PADY = 16
+    ITEM_SPACING = 10
 
     def make_entry(parent, textvar, width=200, show=""):
-      # Modern CustomTkinter entry with better sizing
       e = ctk.CTkEntry(
         parent,
         textvariable=textvar,
@@ -1985,52 +1987,57 @@ class App:
       )
       return e
 
-    def add_section_header(text, icon=""):
-      """Add a section header with spacing"""
-      nonlocal srow
-      # Add spacing before section (except first)
-      if srow > 1:
-        srow += 1
-      header = ctk.CTkLabel(
+    def make_section(title, icon=""):
+      """Create a visually separated section card."""
+      section = ctk.CTkFrame(
         settings,
-        text=f"{icon} {text}" if icon else text,
+        fg_color=self._colors.get("panel2", self._colors["panel"]),
+        corner_radius=10,
+        border_width=1,
+        border_color=self._colors.get("border", "#334155"),
+      )
+      section.grid(row=settings.grid_size()[1], column=0, sticky="ew", padx=SECTION_PADX, pady=(0, SECTION_PADY))
+      section.columnconfigure(0, weight=1)
+      if not hasattr(self, "_settings_section_frames"):
+        self._settings_section_frames = []
+      self._settings_section_frames.append(section)
+      section_header = ctk.CTkLabel(
+        section,
+        text=f"{icon}  {title}" if icon else title,
         font=(FONT_SEGOE_UI_SEMIBOLD, FONT_LG),
         text_color=self._colors["accent"],
       )
-      header.grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=(8, 4))
-      srow += 1
+      section_header.grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
+      return section
 
-    # === AUTHENTICATION SECTION ===
-    add_section_header("Authentication", "🔐")
+    # === AUTHENTICATION ===
+    auth_section = make_section("Authentication", "🔐")
+    ctk.CTkLabel(auth_section, text="Discogs Token", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
+    token_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
+    token_row.columnconfigure(0, weight=1)
+    self.token_entry = make_entry(token_row, self.v_token, width=200, show="•")
+    self.token_entry.grid(row=0, column=0, sticky="ew")
+    ctk.CTkCheckBox(token_row, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility, width=80, corner_radius=6).grid(row=0, column=1, sticky="w", padx=(12, 0))
 
-    ctk.CTkLabel(settings, text="Discogs Token", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=srow, column=0, sticky="w", padx=16, pady=(4, 2))
-    srow += 1
-    self.token_entry = make_entry(settings, self.v_token, width=180, show="•")
-    self.token_entry.grid(row=srow, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 2))
-    ctk.CTkCheckBox(settings, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility, width=60, corner_radius=6).grid(row=srow, column=2, sticky="w", padx=8, pady=(0, 2))
-    srow += 1
-    # === OUTPUT SETTINGS SECTION ===
-    add_section_header("Output Settings", "📁")
-
-    ctk.CTkLabel(settings, text="Output Directory", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 2))
-    srow += 1
-    self._out_row = ctk.CTkFrame(settings, fg_color="transparent")
-    self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 8))
+    # === OUTPUT SETTINGS ===
+    output_section = make_section("Output Settings", "📁")
+    ctk.CTkLabel(output_section, text="Output directory", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    self._out_row = ctk.CTkFrame(output_section, fg_color="transparent")
+    self._out_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, ITEM_SPACING))
     self._out_row.columnconfigure(0, weight=1)
-    self._output_entry = make_entry(self._out_row, self.v_output_dir, width=180)
+    self._output_entry = make_entry(self._out_row, self.v_output_dir, width=200)
     self._output_entry.grid(row=0, column=0, sticky="ew")
-    self._browse_btn = ctk.CTkButton(self._out_row, text="📂", command=self._choose_dir, width=40, corner_radius=6)
-    self._browse_btn.grid(row=0, column=1, sticky="e", padx=(4, 0))
+    self._browse_btn = ctk.CTkButton(self._out_row, text="📂 Browse", command=self._choose_dir, width=100, corner_radius=8, height=38, fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
+    self._browse_btn.grid(row=0, column=1, sticky="e", padx=(12, 0))
     self._open_btn = None
-    srow += 1
 
-    # Auto-refresh interval
-    poll_frame = ctk.CTkFrame(settings, fg_color="transparent")
-    poll_frame.grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=4)
-    ctk.CTkLabel(poll_frame, text="Auto-refresh interval (seconds)", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w")
+    ctk.CTkLabel(output_section, text="Auto-refresh interval (seconds)", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=3, column=0, sticky="w", padx=16, pady=(8, 4))
+    poll_row = ctk.CTkFrame(output_section, fg_color="transparent")
+    poll_row.grid(row=4, column=0, sticky="w", padx=16, pady=(0, ITEM_SPACING))
     self._poll_spin = tk.Spinbox(
-      poll_frame, from_=15, to=3600, textvariable=self.v_poll, width=6,
-      font=(FONT_SEGOE_UI, FONT_XS),
+      poll_row, from_=15, to=3600, textvariable=self.v_poll, width=8,
+      font=(FONT_SEGOE_UI, FONT_SM),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
       buttonbackground=self._colors["border"],
@@ -2041,78 +2048,73 @@ class App:
       highlightbackground=self._colors["border"],
       highlightcolor=self._colors["accent"],
     )
-    self._poll_spin.grid(row=0, column=1, padx=(8, 0), ipady=2)
-    srow += 1
+    self._poll_spin.grid(row=0, column=0, ipady=4, ipadx=6)
+    ctk.CTkLabel(output_section, text="How often to check Discogs for collection updates", font=(FONT_SEGOE_UI, FONT_XS), text_color=self._colors["muted"]).grid(row=5, column=0, sticky="w", padx=16, pady=(0, 4))
 
-    # Export JSON option
-    self._json_check = ctk.CTkCheckBox(settings, text="Also export JSON files", variable=self.v_json, corner_radius=6)
-    self._json_check.grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=4)
-    srow += 1
-    # === PRICE SETTINGS SECTION ===
-    add_section_header("Price Settings", "💰")
+    self._json_check = ctk.CTkCheckBox(output_section, text="Also export JSON files", variable=self.v_json, corner_radius=6, font=(FONT_SEGOE_UI, FONT_SM))
+    self._json_check.grid(row=6, column=0, sticky="w", padx=16, pady=(8, 14))
 
-    self._prices_check = ctk.CTkCheckBox(settings, text="Show Prices", variable=self.v_show_prices, corner_radius=6)
-    self._prices_check.grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=4)
-    srow += 1
+    # === PRICE SETTINGS ===
+    price_section = make_section("Price Settings", "💰")
+    self._prices_check = ctk.CTkCheckBox(price_section, text="Show prices in shelf order", variable=self.v_show_prices, corner_radius=6, font=(FONT_SEGOE_UI, FONT_SM))
+    self._prices_check.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
 
-    # Currency and Refresh button in same row
-    currency_row = ctk.CTkFrame(settings, fg_color="transparent")
-    currency_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=16, pady=4)
-    ctk.CTkLabel(currency_row, text="Currency", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w", padx=(0, 8))
+    ctk.CTkLabel(price_section, text="Currency", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=2, column=0, sticky="w", padx=16, pady=(0, 4))
+    price_row = ctk.CTkFrame(price_section, fg_color="transparent")
+    price_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 8))
+    price_row.columnconfigure(0, weight=1)
     self._currency_combo = ctk.CTkOptionMenu(
-      currency_row,
+      price_row,
       variable=self.v_currency,
       values=["USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY"],
-      width=80,
-      corner_radius=6,
+      width=100,
+      corner_radius=8,
     )
-    self._currency_combo.grid(row=0, column=1, padx=(0, 12))
+    self._currency_combo.grid(row=0, column=0, sticky="w")
     self._refresh_prices_btn = ctk.CTkButton(
-      currency_row,
+      price_row,
       text="🔄 Refresh Prices",
       command=self._refresh_prices,
-      corner_radius=6,
+      corner_radius=8,
       height=38,
       fg_color=self._colors["accent"],
       hover_color=self._colors["button_hover"],
+      font=(FONT_SEGOE_UI, FONT_SM),
     )
-    self._refresh_prices_btn.grid(row=0, column=2, sticky="w")
-    srow += 1
+    self._refresh_prices_btn.grid(row=0, column=1, sticky="w", padx=(12, 0))
 
-    # Price info helper text
     ctk.CTkLabel(
-      settings,
-      text="ℹ️ Prices show lowest listed for your specific pressing",
+      price_section,
+      text="Prices show lowest listed for your specific pressing",
       font=(FONT_SEGOE_UI, FONT_XS),
       text_color=self._colors["muted"],
-      justify="left"
-    ).grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 8))
-    srow += 1
+      justify="left",
+    ).grid(row=4, column=0, sticky="w", padx=16, pady=(4, 14))
 
-    # === SORTING SECTION ===
-    add_section_header("Sorting", "🔤")
-
-    self._sort_row = ctk.CTkFrame(settings, fg_color="transparent")
-    self._sort_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=16, pady=4)
+    # === SORTING ===
+    sort_section = make_section("Sorting", "🔤")
+    ctk.CTkLabel(sort_section, text="Default sort order", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    self._sort_row = ctk.CTkFrame(sort_section, fg_color="transparent")
+    self._sort_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
     self._build_sort_content(self._sort_row)
-    srow += 1
 
   # Note: _build_options_content functionality moved into _build_settings_content for better organization
 
   def _build_sort_content(self, sort_row):
-    ctk.CTkLabel(sort_row, text="Sort order", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w", padx=(0, 8))
+    sort_row.columnconfigure(0, weight=1)
     sort_options = ["artist", "title", "year", "price_asc", "price_desc"]
     self._sort_combo = ctk.CTkOptionMenu(
       sort_row,
       variable=self.v_sort_by,
       values=sort_options,
-      width=140,
-      corner_radius=6,
-      fg_color=self._colors["panel2"],
+      width=160,
+      corner_radius=8,
+      fg_color=self._colors.get("panel2", self._colors["panel"]),
       button_color=self._colors["accent"],
       button_hover_color=self._colors["button_hover"],
+      font=(FONT_SEGOE_UI, FONT_SM),
     )
-    self._sort_combo.grid(row=0, column=1, sticky="w")
+    self._sort_combo.grid(row=0, column=0, sticky="ew")
 
   def _build_main_content(self, frm, row):
     import tkinter as tk
@@ -3599,24 +3601,14 @@ class App:
 
   def _update_settings_frames(self):
     try:
-      self._settings_frame.config(
-        bg=self._colors["panel"],
-        fg=self._colors["accent"],
-        highlightbackground=self._colors["border"],
-        highlightcolor=self._colors["accent"],
-      )
-      frame_config = {"bg": self._colors["panel"]}
-      for frame in [self._out_row, self._opt_row, self._sort_row, self._price_info]:
-        try:
-          frame.config(**frame_config)
-          for child in frame.winfo_children():
-            if child.winfo_class() == "Label":
-              try:
-                child.config(bg=self._colors["panel"])
-              except Exception:
-                pass
-        except Exception:
-          pass
+      if hasattr(self, "_settings_section_frames"):
+        panel2 = self._colors.get("panel2", self._colors["panel"])
+        border = self._colors.get("border", "#334155")
+        for section in self._settings_section_frames:
+          try:
+            section.configure(fg_color=panel2, border_color=border)
+          except Exception:
+            pass
     except Exception:
       pass
 
