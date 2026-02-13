@@ -37,7 +37,7 @@ from pathlib import Path
 
 # Use CustomTkinter for modern UI
 import customtkinter as ctk
-from tkinter import StringVar, BooleanVar, IntVar, filedialog, messagebox
+from tkinter import StringVar, BooleanVar, IntVar, filedialog, messagebox, Tk
 import tkinter as tk
 from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 
@@ -1373,8 +1373,7 @@ class App:
       self._wishlist_hover_release_id = row.release_id
 
       try:
-        from discogs_app import make_headers
-        headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+        headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
         headers = {"User-Agent": DEFAULT_USER_AGENT}
 
@@ -2694,8 +2693,7 @@ class App:
     cover_img = None
     # Get headers for downloading high-quality image
     try:
-      from discogs_app import make_headers
-      headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+      headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
     except Exception:
       headers = {"User-Agent": "Mozilla/5.0"}
     
@@ -3009,8 +3007,7 @@ class App:
       self._hover_release_id = row.release_id
 
       try:
-        from discogs_app import make_headers
-        headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+        headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
         headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -3660,8 +3657,7 @@ class App:
     
     # Get current headers
     try:
-      from discogs_app import make_headers
-      headers = make_headers(self.v_token.get(), self.v_user_agent.get())
+      headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
     except Exception:
       headers = {"User-Agent": "Mozilla/5.0"}
     
@@ -3879,6 +3875,7 @@ class App:
       lines.append(line)
 
     # Try Windows printing first, fall back to lpr
+    tmp_path = None
     try:
       import tempfile
       with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
@@ -3898,6 +3895,12 @@ class App:
     except Exception as e:
       messagebox.showerror("Print", f"Printing failed: {e}")
       self.v_status.set("Print failed.")
+    finally:
+      if tmp_path and Path(tmp_path).exists():
+        try:
+          Path(tmp_path).unlink()
+        except Exception:
+          pass
 
   def _watch_loop(self) -> None:
     """Background thread: poll collection count; rebuild on change or manual refresh."""
