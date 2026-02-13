@@ -58,6 +58,13 @@ _OBFUSCATE_KEY = b"DiscogsVinylSorter2026"
 # UI font constants (avoid duplicated literals for linters and consistency)
 FONT_SEGOE_UI = "Segoe UI"
 FONT_SEGOE_UI_SEMIBOLD = "Segoe UI Semibold"
+# Font sizes – tuned for readability (bump these if text still feels small)
+FONT_XS = 12   # tiny labels, combobox
+FONT_SM = 14   # secondary text, muted labels
+FONT_MD = 15   # body text, buttons, entries
+FONT_LG = 16   # section headers
+FONT_XL = 20   # panel titles
+FONT_2XL = 26  # main header
 
 # Button style constants
 SECONDARY_TBUTTON_STYLE = "Secondary.TButton"
@@ -909,7 +916,7 @@ class ProgressDialog:
     self.title_label = tk.Label(
       self.top,
       text=title,
-      font=(FONT_SEGOE_UI_SEMIBOLD, 15),
+      font=(FONT_SEGOE_UI_SEMIBOLD, FONT_XL),
       bg="#16213e",
       fg="#6c63ff"
     )
@@ -936,7 +943,7 @@ class ProgressDialog:
     self.msg_label = tk.Label(
       info_frame,
       text=message,
-      font=(FONT_SEGOE_UI, 10),
+      font=(FONT_SEGOE_UI, FONT_SM),
       bg="#16213e",
       fg="#eaeaea",
       wraplength=300,
@@ -948,7 +955,7 @@ class ProgressDialog:
     self.progress_label = tk.Label(
       info_frame,
       text="Starting...",
-      font=(FONT_SEGOE_UI_SEMIBOLD, 12),
+      font=(FONT_SEGOE_UI_SEMIBOLD, FONT_LG),
       bg="#16213e",
       fg="#6c63ff"
     )
@@ -960,7 +967,7 @@ class ProgressDialog:
     log_label = tk.Label(
       log_header,
       text="Activity Log",
-      font=(FONT_SEGOE_UI_SEMIBOLD, 10),
+      font=(FONT_SEGOE_UI_SEMIBOLD, FONT_SM),
       bg="#16213e",
       fg="#8892b0"
     )
@@ -974,7 +981,7 @@ class ProgressDialog:
       log_container,
       height=8,
       width=50,
-      font=("Cascadia Code", 9),
+      font=("Cascadia Code", FONT_XS),
       bg="#0f0f1a",
       fg="#8892b0",
       relief="flat",
@@ -1154,7 +1161,7 @@ class ToolTip:
       justify="left",
       background="#1a1a2e",
       foreground="#eaeaea",
-      font=(FONT_SEGOE_UI, 9),
+      font=(FONT_SEGOE_UI, FONT_XS),
       wraplength=self.wraplength,
       padx=10,
       pady=6,
@@ -1561,15 +1568,15 @@ class App:
     self.style.configure("TLabel", 
                          background=c["panel"], 
                          foreground=c["text"],
-                         font=(FONT_SEGOE_UI, 10))
+                         font=(FONT_SEGOE_UI, FONT_SM))
     self.style.configure("Header.TLabel",
                          background=c["bg"],
                          foreground=c["text"],
-                         font=(FONT_SEGOE_UI_SEMIBOLD, 18))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, FONT_2XL))
     self.style.configure("Subtitle.TLabel",
                          background=c["bg"],
                          foreground=c["muted"],
-                         font=(FONT_SEGOE_UI, 11))
+                         font=(FONT_SEGOE_UI, FONT_MD))
     
     # Card/LabelFrame styles - enhanced with visible borders
     self.style.configure("Card.TLabelframe",
@@ -1582,7 +1589,7 @@ class App:
     self.style.configure("Card.TLabelframe.Label",
                          foreground=c["accent"],
                          background=c["panel"],
-                         font=(FONT_SEGOE_UI_SEMIBOLD, 11))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, FONT_MD))
     
     # Primary button style - enhanced with subtle border for depth
     PRIMARY_TBUTTON_STYLE = "Primary.TButton"
@@ -1596,7 +1603,7 @@ class App:
                          darkcolor=c["button_hover"],
                          relief="raised",
                          padding=(20, 12),
-                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, FONT_SM))
     self.style.map(PRIMARY_TBUTTON_STYLE,
                    background=[("active", c["button_hover"]), ("pressed", c["button_hover"]), ("disabled", c["muted"])],
                    foreground=[("active", c["button_fg"]), ("disabled", "#888888")],
@@ -1613,7 +1620,7 @@ class App:
                          darkcolor="#00a844",
                          relief="raised",
                          padding=(20, 12),
-                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, FONT_SM))
     self.style.map(SUCCESS_TBUTTON_STYLE,
                    background=[("active", "#00a844"), ("pressed", "#00a844")],
                    relief=[("pressed", "sunken")])
@@ -1629,7 +1636,7 @@ class App:
                          darkcolor=c["order_bg"],
                          relief="raised",
                          padding=(16, 10),
-                         font=(FONT_SEGOE_UI, 10))
+                         font=(FONT_SEGOE_UI, FONT_SM))
     self.style.map(SECONDARY_TBUTTON_STYLE,
                    background=[("active", c["order_bg"])],
                    relief=[("pressed", "sunken")])
@@ -1645,7 +1652,7 @@ class App:
                          darkcolor="#c41840",
                          relief="raised",
                          padding=(20, 12),
-                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, FONT_SM))
     self.style.map(DANGER_TBUTTON_STYLE,
                    background=[("active", "#c41840"), ("pressed", "#c41840")],
                    relief=[("pressed", "sunken")])
@@ -1661,7 +1668,7 @@ class App:
                          focuscolor=c["panel2"],
                          relief="raised",
                          padding=(16, 10),
-                         font=(FONT_SEGOE_UI, 10))
+                         font=(FONT_SEGOE_UI, FONT_SM))
     self.style.map("TButton",
                    background=[("active", c["order_bg"]), ("pressed", c["order_bg"])],
                    relief=[("pressed", "sunken")])
@@ -1708,7 +1715,7 @@ class App:
       self.root.option_add("*TCombobox*Listbox.foreground", c["text"])
       self.root.option_add("*TCombobox*Listbox.selectBackground", c["accent"])
       self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
-      self.root.option_add("*TCombobox*Listbox.font", (FONT_SEGOE_UI, 10))
+      self.root.option_add("*TCombobox*Listbox.font", (FONT_SEGOE_UI, FONT_SM))
     except Exception:
       pass
     
@@ -1717,7 +1724,7 @@ class App:
                          background=c["panel"],
                          foreground=c["text"],
                          focuscolor=c["panel"],
-                         font=(FONT_SEGOE_UI, 10))
+                         font=(FONT_SEGOE_UI, FONT_SM))
     self.style.map("TCheckbutton",
                    background=[("active", c["panel"])],
                    indicatorcolor=[("selected", c["accent"]), ("!selected", c["order_bg"])])
@@ -1748,7 +1755,7 @@ class App:
                          padding=(24, 12),
                          borderwidth=1,
                          bordercolor=c["panel2"],
-                         font=(FONT_SEGOE_UI_SEMIBOLD, 10))
+                         font=(FONT_SEGOE_UI_SEMIBOLD, FONT_SM))
     self.style.map("TNotebook.Tab",
                    background=[("selected", c["panel"])],
                    foreground=[("selected", c["accent"])],
@@ -1796,7 +1803,7 @@ class App:
                          fieldbackground=c["order_bg"],
                          borderwidth=0,
                          relief="flat",
-                         rowheight=44)
+                         rowheight=52)
     self.style.configure(f"{style_name}.Heading",
                          background=c["panel"],
                          foreground=c["text"],
@@ -1815,7 +1822,7 @@ class App:
                          fieldbackground=c["order_bg"],
                          borderwidth=0,
                          relief="flat",
-                         rowheight=44)
+                         rowheight=52)
     self.style.configure("Treeview.Heading",
                          background=c["panel"],
                          foreground=c["text"],
@@ -1868,14 +1875,14 @@ class App:
     self._header_title = ctk.CTkLabel(
       self._header,
       text="💿 Discogs Auto-Sort",
-      font=(FONT_SEGOE_UI_SEMIBOLD, 22),
+      font=(FONT_SEGOE_UI_SEMIBOLD, FONT_2XL),
     )
     self._header_title.grid(row=0, column=0, sticky="w", padx=20, pady=(8, 4))
 
     self._header_subtitle = ctk.CTkLabel(
       self._header,
       text="Vinyl Collection Manager  •  Live Updates  •  Export & Print",
-      font=(FONT_SEGOE_UI, 11),
+      font=(FONT_SEGOE_UI, FONT_MD),
       text_color=self._colors["muted"],
     )
     self._header_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 8))
@@ -1886,7 +1893,7 @@ class App:
       text="☀️ Light",
       command=self._toggle_theme,
       width=100,
-      height=36,
+      height=42,
       corner_radius=8,
       fg_color=self._colors["accent"],
       hover_color=self._colors["button_hover"],
@@ -1908,7 +1915,7 @@ class App:
     settings_label = ctk.CTkLabel(
       self._settings_frame,
       text="⚙️ Settings",
-      font=(FONT_SEGOE_UI_SEMIBOLD, 16),
+      font=(FONT_SEGOE_UI_SEMIBOLD, FONT_XL),
       text_color=self._colors["text"],
     )
     settings_label.grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(16, 12))
@@ -1925,9 +1932,9 @@ class App:
         parent,
         textvariable=textvar,
         width=width,
-        height=32,
+        height=38,
         show=show,
-        font=(FONT_SEGOE_UI, 11),
+        font=(FONT_SEGOE_UI, FONT_MD),
         corner_radius=8,
       )
       return e
@@ -1941,7 +1948,7 @@ class App:
       header = ctk.CTkLabel(
         settings,
         text=f"{icon} {text}" if icon else text,
-        font=(FONT_SEGOE_UI_SEMIBOLD, 12),
+        font=(FONT_SEGOE_UI_SEMIBOLD, FONT_LG),
         text_color=self._colors["accent"],
       )
       header.grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=(8, 4))
@@ -1950,7 +1957,7 @@ class App:
     # === AUTHENTICATION SECTION ===
     add_section_header("Authentication", "🔐")
 
-    ctk.CTkLabel(settings, text="Discogs Token", font=(FONT_SEGOE_UI, 10), text_color=self._colors["muted"]).grid(row=srow, column=0, sticky="w", padx=16, pady=(4, 2))
+    ctk.CTkLabel(settings, text="Discogs Token", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=srow, column=0, sticky="w", padx=16, pady=(4, 2))
     srow += 1
     self.token_entry = make_entry(settings, self.v_token, width=180, show="•")
     self.token_entry.grid(row=srow, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 2))
@@ -1959,7 +1966,7 @@ class App:
     # === OUTPUT SETTINGS SECTION ===
     add_section_header("Output Settings", "📁")
 
-    ctk.CTkLabel(settings, text="Output Directory", font=(FONT_SEGOE_UI, 10), text_color=self._colors["muted"]).grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 2))
+    ctk.CTkLabel(settings, text="Output Directory", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 2))
     srow += 1
     self._out_row = ctk.CTkFrame(settings, fg_color="transparent")
     self._out_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 8))
@@ -1974,10 +1981,10 @@ class App:
     # Auto-refresh interval
     poll_frame = ctk.CTkFrame(settings, fg_color="transparent")
     poll_frame.grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=4)
-    ctk.CTkLabel(poll_frame, text="Auto-refresh interval (seconds)", font=(FONT_SEGOE_UI, 10), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w")
+    ctk.CTkLabel(poll_frame, text="Auto-refresh interval (seconds)", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w")
     self._poll_spin = tk.Spinbox(
       poll_frame, from_=15, to=3600, textvariable=self.v_poll, width=6,
-      font=(FONT_SEGOE_UI, 9),
+      font=(FONT_SEGOE_UI, FONT_XS),
       bg=self._colors["order_bg"],
       fg=self._colors["order_fg"],
       buttonbackground=self._colors["border"],
@@ -2005,7 +2012,7 @@ class App:
     # Currency and Refresh button in same row
     currency_row = ctk.CTkFrame(settings, fg_color="transparent")
     currency_row.grid(row=srow, column=0, columnspan=3, sticky="ew", padx=16, pady=4)
-    ctk.CTkLabel(currency_row, text="Currency", font=(FONT_SEGOE_UI, 10), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w", padx=(0, 8))
+    ctk.CTkLabel(currency_row, text="Currency", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w", padx=(0, 8))
     self._currency_combo = ctk.CTkOptionMenu(
       currency_row,
       variable=self.v_currency,
@@ -2019,7 +2026,7 @@ class App:
       text="🔄 Refresh Prices",
       command=self._refresh_prices,
       corner_radius=6,
-      height=32,
+      height=38,
       fg_color=self._colors["accent"],
       hover_color=self._colors["button_hover"],
     )
@@ -2030,7 +2037,7 @@ class App:
     ctk.CTkLabel(
       settings,
       text="ℹ️ Prices show lowest listed for your specific pressing",
-      font=(FONT_SEGOE_UI, 8),
+      font=(FONT_SEGOE_UI, FONT_XS),
       text_color=self._colors["muted"],
       justify="left"
     ).grid(row=srow, column=0, columnspan=3, sticky="w", padx=16, pady=(4, 8))
@@ -2047,7 +2054,7 @@ class App:
   # Note: _build_options_content functionality moved into _build_settings_content for better organization
 
   def _build_sort_content(self, sort_row):
-    ctk.CTkLabel(sort_row, text="Sort order", font=(FONT_SEGOE_UI, 10), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w", padx=(0, 8))
+    ctk.CTkLabel(sort_row, text="Sort order", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=0, column=0, sticky="w", padx=(0, 8))
     sort_options = ["artist", "title", "year", "price_asc", "price_desc"]
     self._sort_combo = ctk.CTkOptionMenu(
       sort_row,
@@ -2076,14 +2083,14 @@ class App:
     search_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
     search_row.columnconfigure(1, weight=1)
 
-    ctk.CTkLabel(search_row, text="🔍 Search", font=(FONT_SEGOE_UI, 11)).grid(row=0, column=0, sticky="w", padx=(0, 8))
+    ctk.CTkLabel(search_row, text="🔍 Search", font=(FONT_SEGOE_UI, FONT_MD)).grid(row=0, column=0, sticky="w", padx=(0, 8))
 
     # Modern rounded search entry
     self._search_entry = ctk.CTkEntry(
       search_row,
       textvariable=self.v_search,
-      font=(FONT_SEGOE_UI, 11),
-      height=32,
+      font=(FONT_SEGOE_UI, FONT_MD),
+      height=38,
       corner_radius=8,
       placeholder_text="Search artist, title, label…",
     )
@@ -2095,14 +2102,14 @@ class App:
       text="✕ Clear",
       command=lambda: self.v_search.set(""),
       width=80,
-      height=32,
+      height=38,
       corner_radius=8,
       fg_color="#4a5568",
       hover_color="#2d3748",
     )
     self._clear_btn.grid(row=0, column=2, sticky="e", padx=6)
 
-    ctk.CTkLabel(search_row, textvariable=self.v_match, font=(FONT_SEGOE_UI, 10)).grid(row=0, column=3, sticky="e", padx=6)
+    ctk.CTkLabel(search_row, textvariable=self.v_match, font=(FONT_SEGOE_UI, FONT_SM)).grid(row=0, column=3, sticky="e", padx=6)
 
     # Shortcuts help button
     shortcuts_text = (
@@ -2113,11 +2120,11 @@ class App:
       search_row,
       text="⌨",
       width=36,
-      height=32,
+      height=38,
       corner_radius=8,
       fg_color="#4a5568",
       hover_color="#2d3748",
-      font=(FONT_SEGOE_UI, 12),
+      font=(FONT_SEGOE_UI, FONT_LG),
       command=lambda: messagebox.showinfo("Keyboard Shortcuts", shortcuts_text),
     )
     self._shortcuts_btn.grid(row=0, column=4, sticky="e", padx=(0, 6))
@@ -2135,28 +2142,28 @@ class App:
     # Modern CustomTkinter buttons with color coding
     self._refresh_btn = ctk.CTkButton(
       btn, text="🔄 Refresh", command=self._refresh_now,
-      corner_radius=8, height=36,
+      corner_radius=8, height=42,
       fg_color=self._colors["accent"], hover_color=self._colors["button_hover"]
     )
     self._refresh_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=4)
 
     self._export_btn = ctk.CTkButton(
       btn, text="📁 Export", command=self._export_files,
-      corner_radius=8, height=36,
+      corner_radius=8, height=42,
       fg_color=self._colors["success"], hover_color="#00a844"
     )
     self._export_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=4)
 
     self._print_btn = ctk.CTkButton(
       btn, text="🖨️ Print", command=self._print_current,
-      corner_radius=8, height=36,
+      corner_radius=8, height=42,
       fg_color="#4a5568", hover_color="#2d3748"
     )
     self._print_btn.grid(row=0, column=2, sticky="ew", padx=(0, 6), pady=4)
 
     self._stop_btn = ctk.CTkButton(
       btn, text="⏹️ Stop", command=self._stop_app,
-      corner_radius=8, height=36,
+      corner_radius=8, height=42,
       fg_color=self._colors["accent3"], hover_color="#c41840"
     )
     self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
@@ -2174,7 +2181,7 @@ class App:
       values=["📋 Shelf Order", "⭐ Wishlist", "📜 Log"],
       command=self._switch_tab,
       corner_radius=8,
-      height=36,
+      height=42,
       fg_color=self._colors["panel"],
       selected_color=self._colors["accent"],
       selected_hover_color=self._colors["button_hover"],
@@ -2215,7 +2222,7 @@ class App:
       variable=self.v_manual_order_enabled,
       command=self._toggle_manual_order,
       corner_radius=6,
-      font=(FONT_SEGOE_UI, 11),
+      font=(FONT_SEGOE_UI, FONT_MD),
       fg_color=self._colors["accent"],
       hover_color=self._colors["button_hover"],
     )
@@ -2223,7 +2230,7 @@ class App:
     self._manual_order_hint = ctk.CTkLabel(
       order_toolbar,
       text="(Drag rows to reorder)",
-      font=(FONT_SEGOE_UI, 10),
+      font=(FONT_SEGOE_UI, FONT_SM),
       text_color=self._colors["muted"]
     )
     self._manual_order_hint.grid(row=0, column=1, sticky="w", padx=(0, 16))
@@ -2232,10 +2239,10 @@ class App:
       text="↺ Reset to Auto Sort",
       command=self._reset_manual_order,
       corner_radius=8,
-      height=36,
+      height=42,
       fg_color="#f59e0b",
       hover_color="#d97706",
-      font=(FONT_SEGOE_UI, 11),
+      font=(FONT_SEGOE_UI, FONT_MD),
     )
     self._reset_order_btn.grid(row=0, column=2, sticky="e", padx=(0, 8))
     self._move_up_btn = ctk.CTkButton(
@@ -2243,11 +2250,11 @@ class App:
       text="▲ Up",
       command=self._move_item_up,
       corner_radius=8,
-      height=36,
+      height=42,
       width=80,
       fg_color="#4a5568",
       hover_color="#2d3748",
-      font=(FONT_SEGOE_UI, 11),
+      font=(FONT_SEGOE_UI, FONT_MD),
     )
     self._move_up_btn.grid(row=0, column=3, sticky="e", padx=(8, 4))
 
@@ -2256,11 +2263,11 @@ class App:
       text="▼ Down",
       command=self._move_item_down,
       corner_radius=8,
-      height=36,
+      height=42,
       width=80,
       fg_color="#4a5568",
       hover_color="#2d3748",
-      font=(FONT_SEGOE_UI, 11),
+      font=(FONT_SEGOE_UI, FONT_MD),
     )
     self._move_down_btn.grid(row=0, column=4, sticky="e", padx=(0, 8))
     order_toolbar.columnconfigure(1, weight=1)
@@ -2296,7 +2303,7 @@ class App:
     self._order_empty_label = ctk.CTkLabel(
       order_wrap,
       text="No albums yet. Add items to your Discogs collection\nor check your token and refresh.",
-      font=(FONT_SEGOE_UI, 12),
+      font=(FONT_SEGOE_UI, FONT_LG),
       text_color=self._colors["muted"],
       justify="center",
     )
@@ -2307,7 +2314,7 @@ class App:
     self._order_loading_label = ctk.CTkLabel(
       order_wrap,
       text="Loading your collection…",
-      font=(FONT_SEGOE_UI, 12),
+      font=(FONT_SEGOE_UI, FONT_LG),
       text_color=self._colors["muted"],
       justify="center",
     )
@@ -2363,10 +2370,10 @@ class App:
       text="🔍 Check Availability",
       command=self._check_wishlist_availability,
       corner_radius=8,
-      height=36,
+      height=42,
       fg_color=self._colors["accent"],
       hover_color=self._colors["button_hover"],
-      font=(FONT_SEGOE_UI, 11),
+      font=(FONT_SEGOE_UI, FONT_MD),
     )
     self._wishlist_check_btn.pack(side="left", padx=(0, 8))
     ToolTip(self._wishlist_check_btn, "Check Discogs Marketplace for available copies of wishlist items")
@@ -2376,7 +2383,7 @@ class App:
     wishlist_status_lbl = ctk.CTkLabel(
       toolbar_fr,
       textvariable=self._wishlist_status_var,
-      font=(FONT_SEGOE_UI, 10),
+      font=(FONT_SEGOE_UI, FONT_SM),
       text_color=self._colors["muted"]
     )
     wishlist_status_lbl.pack(side="left", padx=8)
@@ -2426,7 +2433,7 @@ class App:
     self._wishlist_empty_label = ctk.CTkLabel(
       wishlist_wrap,
       text="Add items to your Discogs wantlist to see them here",
-      font=(FONT_SEGOE_UI, 12),
+      font=(FONT_SEGOE_UI, FONT_LG),
       text_color=self._colors["muted"],
       justify="center",
     )
@@ -2695,7 +2702,7 @@ class App:
       height=18,
       width=90,
       yscrollcommand=log_scroll.set,
-      font=("Cascadia Code", 10),
+      font=("Cascadia Code", FONT_SM),
       background=self._colors["panel2"],
       foreground=self._colors["text"],
       insertbackground=self._colors["text"],
@@ -2827,8 +2834,8 @@ class App:
     ]
     for i, (label, value) in enumerate(details):
       if value:
-        tk.Label(details_frame, text=label+":", anchor="e", font=(FONT_SEGOE_UI, 14, "bold"), bg=bg, fg=fg).grid(row=i+row_offset, column=0, sticky="e", padx=(0,18), pady=10)
-        tk.Label(details_frame, text=str(value), anchor="w", font=(FONT_SEGOE_UI, 14), bg=bg, fg=fg, wraplength=480, justify="left").grid(row=i+row_offset, column=1, sticky="w", padx=(0,12), pady=10)
+        tk.Label(details_frame, text=label+":", anchor="e", font=(FONT_SEGOE_UI, FONT_LG, "bold"), bg=bg, fg=fg).grid(row=i+row_offset, column=0, sticky="e", padx=(0,18), pady=10)
+        tk.Label(details_frame, text=str(value), anchor="w", font=(FONT_SEGOE_UI, FONT_LG), bg=bg, fg=fg, wraplength=480, justify="left").grid(row=i+row_offset, column=1, sticky="w", padx=(0,12), pady=10)
 
   def _setup_details_scroll(self, details_frame, details_canvas):
     details_frame.update_idletasks()
@@ -2867,7 +2874,7 @@ class App:
         def open_url():
             import webbrowser
             webbrowser.open(url)
-        btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, 13), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
+        btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, FONT_MD), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
         btn.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
     # Play on Spotify button
@@ -2878,7 +2885,7 @@ class App:
         open_album_on_spotify(artist, album)
     btn_spotify = tk.Button(
         btn_frame, text="Play on Spotify", command=play_on_spotify,
-        font=(FONT_SEGOE_UI, 13), bg="#1db954", fg="#fff", activebackground="#1ed760", activeforeground="#fff", relief="groove"
+        font=(FONT_SEGOE_UI, FONT_MD), bg="#1db954", fg="#fff", activebackground="#1ed760", activeforeground="#fff", relief="groove"
     )
     btn_spotify.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
@@ -2915,11 +2922,11 @@ class App:
     update_wishlist_state()
     btn_wishlist = tk.Button(
         btn_frame, textvariable=wishlist_state, command=toggle_wishlist,
-        font=(FONT_SEGOE_UI, 13), bg="#ffb347", fg="#222", activebackground="#ffd580", activeforeground="#222", relief="groove"
+        font=(FONT_SEGOE_UI, FONT_MD), bg="#ffb347", fg="#222", activebackground="#ffd580", activeforeground="#222", relief="groove"
     )
     btn_wishlist.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
-    tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, 13), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="top", fill="x", padx=12, pady=(0, 0), ipadx=12, ipady=4)
+    tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, FONT_MD), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="top", fill="x", padx=12, pady=(0, 0), ipadx=12, ipady=4)
 
   def _choose_dir(self) -> None:
     directory = filedialog.askdirectory(initialdir=self.v_output_dir.get() or str(Path.cwd()))
