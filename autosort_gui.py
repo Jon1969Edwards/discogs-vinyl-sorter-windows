@@ -2302,6 +2302,20 @@ class App:
     )
     self._order_empty_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
     self._order_empty_label.grid_remove()
+
+    # Loading-state overlay (shown until first build completes)
+    self._order_loading_label = ctk.CTkLabel(
+      order_wrap,
+      text="Loading your collection…",
+      font=(FONT_SEGOE_UI, 12),
+      text_color=self._colors["muted"],
+      justify="center",
+    )
+    self._order_loading_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
+    if self._last_result is None:
+      self._order_loading_label.grid()  # Show until first result
+    else:
+      self._order_loading_label.grid_remove()
     self.order_tree.heading("#0", text="", anchor="center")
     self.order_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
     self.order_tree.heading("#", text="#", anchor="center")
@@ -2407,6 +2421,18 @@ class App:
     self.wishlist_tree.column("Lowest Price", width=100, minwidth=80, stretch=False, anchor="e")
     self.wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
     self._wishlist_rows = []
+
+    # Empty-state overlay for wishlist (hidden by default)
+    self._wishlist_empty_label = ctk.CTkLabel(
+      wishlist_wrap,
+      text="Add items to your Discogs wantlist to see them here",
+      font=(FONT_SEGOE_UI, 12),
+      text_color=self._colors["muted"],
+      justify="center",
+    )
+    self._wishlist_empty_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
+    self._wishlist_empty_label.grid_remove()
+
     self._setup_wishlist_tree_events()
 
   def _setup_wishlist_tree_events(self):
@@ -2416,6 +2442,12 @@ class App:
       self.wishlist_tree.delete(*self.wishlist_tree.get_children())
       self._wishlist_rows = []
       wishlist_data = list(load_wishlist())
+      if not wishlist_data:
+        if hasattr(self, "_wishlist_empty_label"):
+          self._wishlist_empty_label.grid()
+        return
+      if hasattr(self, "_wishlist_empty_label"):
+        self._wishlist_empty_label.grid_remove()
       for i, entry in enumerate(wishlist_data):
         row = self._make_wishlist_row(entry)
         self._wishlist_rows.append(row)
@@ -3429,6 +3461,10 @@ class App:
       self._configure_treeview_style()
       if hasattr(self, "_order_empty_label"):
         self._order_empty_label.configure(text_color=self._colors["muted"])
+      if hasattr(self, "_order_loading_label"):
+        self._order_loading_label.configure(text_color=self._colors["muted"])
+      if hasattr(self, "_wishlist_empty_label"):
+        self._wishlist_empty_label.configure(text_color=self._colors["muted"])
       if self.v_dark_mode.get():
         self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
@@ -3591,6 +3627,7 @@ class App:
 
   def _render_order(self, result: BuildResult) -> None:
     """Render the shelf order in the Treeview widget."""
+    self._show_order_loading_state(False)  # First build arrived
     self._clear_treeview()
     if not result.rows_sorted:
       self._tree_rows = []
@@ -3608,6 +3645,14 @@ class App:
     self._highlight_search()
     if self._thumbnails_enabled:
       self._download_missing_thumbnails(rows)
+
+  def _show_order_loading_state(self, show: bool) -> None:
+    """Show or hide the loading collection message."""
+    if hasattr(self, "_order_loading_label"):
+      if show:
+        self._order_loading_label.grid()
+      else:
+        self._order_loading_label.grid_remove()
 
   def _show_order_empty_state(self, show: bool) -> None:
     """Show or hide the empty shelf placeholder message."""
@@ -3809,7 +3854,10 @@ class App:
       self._set_match_count_label()
       return
     matches, first_match_item = self._find_and_highlight_matches(q)
-    self.v_match.set(f"{matches} matches" if matches != 1 else "1 match")
+    if matches == 0:
+      self.v_match.set("No matches — try a different term")
+    else:
+      self.v_match.set(f"{matches} matches" if matches != 1 else "1 match")
     if first_match_item is not None:
       self.order_tree.see(first_match_item)
       self.order_tree.selection_set(first_match_item)
