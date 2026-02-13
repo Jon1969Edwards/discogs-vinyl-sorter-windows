@@ -1901,6 +1901,8 @@ class App:
     self.theme_btn.grid(row=0, column=1, rowspan=2, sticky="e", padx=20, pady=8)
 
   def _build_settings_panel(self, frm, row):
+    self._settings_collapsed = False
+
     # Modern card-style settings panel with pronounced elevation
     self._settings_frame = ctk.CTkFrame(
       frm,
@@ -1910,17 +1912,61 @@ class App:
       border_color=self._colors.get("card_border", self._colors["border"]),
     )
     self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(20, 10), pady=(16, 12))
+    self._settings_frame.columnconfigure(0, weight=1)
 
-    # Settings header label - larger and more prominent
+    # Settings header row: title + collapse button
+    settings_header = ctk.CTkFrame(self._settings_frame, fg_color="transparent")
+    settings_header.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 4))
+    settings_header.columnconfigure(0, weight=1)
+
     settings_label = ctk.CTkLabel(
-      self._settings_frame,
+      settings_header,
       text="⚙️ Settings",
       font=(FONT_SEGOE_UI_SEMIBOLD, FONT_XL),
       text_color=self._colors["text"],
     )
-    settings_label.grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(16, 12))
+    settings_label.grid(row=0, column=0, sticky="w")
+
+    self._settings_collapse_btn = ctk.CTkButton(
+      settings_header,
+      text="◀",
+      width=36,
+      height=32,
+      corner_radius=6,
+      fg_color=self._colors["accent"],
+      hover_color=self._colors["button_hover"],
+      font=(FONT_SEGOE_UI, FONT_SM),
+      command=self._toggle_settings_sidebar,
+    )
+    self._settings_collapse_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
+    ToolTip(self._settings_collapse_btn, "Hide settings panel")
 
     self._build_settings_content(self._settings_frame)
+
+    # Slim expand tab (shown when sidebar is collapsed)
+    self._settings_expand_tab = ctk.CTkFrame(
+      frm,
+      width=28,
+      fg_color=self._colors["panel"],
+      border_width=1,
+      border_color=self._colors.get("card_border", self._colors["border"]),
+      corner_radius=8,
+    )
+    self._settings_expand_tab.pack_propagate(False)
+    self._settings_expand_btn = ctk.CTkButton(
+      self._settings_expand_tab,
+      text="⚙️ ▶",
+      width=26,
+      height=80,
+      corner_radius=6,
+      fg_color=self._colors["accent"],
+      hover_color=self._colors["button_hover"],
+      font=(FONT_SEGOE_UI, FONT_SM),
+      command=self._toggle_settings_sidebar,
+    )
+    self._settings_expand_btn.pack(expand=True, fill="y", padx=2, pady=8)
+    ToolTip(self._settings_expand_btn, "Show settings panel")
+    self._settings_row = row  # Store for toggle
 
   def _build_settings_content(self, settings):
     import tkinter as tk
@@ -3310,6 +3356,20 @@ class App:
 
     self._current_tab = tab_name
 
+  def _toggle_settings_sidebar(self) -> None:
+    """Collapse or expand the settings sidebar."""
+    self._settings_collapsed = not self._settings_collapsed
+    frm = self._settings_frame.master
+    row = getattr(self, "_settings_row", 1)
+    if self._settings_collapsed:
+      self._settings_frame.grid_remove()
+      self._settings_expand_tab.grid(row=row, column=0, sticky="ns", padx=(20, 10), pady=(16, 12))
+      self._settings_collapse_btn.configure(text="▶")
+    else:
+      self._settings_expand_tab.grid_remove()
+      self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(20, 10), pady=(16, 12))
+      self._settings_collapse_btn.configure(text="◀")
+
   def _toggle_theme(self) -> None:
     """Toggle between dark and light mode."""
     self.v_dark_mode.set(not self.v_dark_mode.get())
@@ -3368,6 +3428,11 @@ class App:
       # Update Settings panel
       if hasattr(self, '_settings_frame'):
         self._settings_frame.configure(
+          fg_color=self._colors["panel"],
+          border_color=self._colors.get("card_border", self._colors["border"])
+        )
+      if hasattr(self, '_settings_expand_tab'):
+        self._settings_expand_tab.configure(
           fg_color=self._colors["panel"],
           border_color=self._colors.get("card_border", self._colors["border"])
         )
