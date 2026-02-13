@@ -4179,13 +4179,8 @@ def main() -> None:
   root = ctk.CTk()
   root.title("Discogs Auto-Sort")
 
-  # Start in full screen
-  root.attributes('-fullscreen', True)
-
-  def _toggle_fullscreen(_event=None):
-    root.attributes('-fullscreen', not root.attributes('-fullscreen'))
-
-  root.bind('<Escape>', _toggle_fullscreen)
+  # Start maximized (full screen with title bar, X and - buttons)
+  root.state('zoomed')
 
   App(root)
   root.mainloop()
