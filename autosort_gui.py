@@ -1887,7 +1887,39 @@ class App:
     )
     self._header_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 8))
 
-    # Modern theme toggle button (label = target mode; default is dark so show "Light")
+    # Window controls (minimize, close) - needed in fullscreen when title bar is hidden
+    win_ctrl = ctk.CTkFrame(self._header, fg_color="transparent")
+    win_ctrl.grid(row=0, column=1, rowspan=2, sticky="e", padx=(8, 8), pady=8)
+
+    min_btn = ctk.CTkButton(
+      win_ctrl,
+      text="−",
+      width=40,
+      height=36,
+      corner_radius=6,
+      fg_color=self._colors["accent"],
+      hover_color=self._colors["button_hover"],
+      font=(FONT_SEGOE_UI, 18),
+      command=lambda: self.root.iconify(),
+    )
+    min_btn.pack(side="left", padx=(0, 4))
+    ToolTip(min_btn, "Minimize")
+
+    close_btn = ctk.CTkButton(
+      win_ctrl,
+      text="×",
+      width=40,
+      height=36,
+      corner_radius=6,
+      fg_color=self._colors["accent"],
+      hover_color="#e74c3c",
+      font=(FONT_SEGOE_UI, 20),
+      command=lambda: self.root.destroy(),
+    )
+    close_btn.pack(side="left")
+    ToolTip(close_btn, "Close")
+
+    # Theme toggle button
     self.theme_btn = ctk.CTkButton(
       self._header,
       text="☀️ Light",
@@ -1898,7 +1930,7 @@ class App:
       fg_color=self._colors["accent"],
       hover_color=self._colors["button_hover"],
     )
-    self.theme_btn.grid(row=0, column=1, rowspan=2, sticky="e", padx=20, pady=8)
+    self.theme_btn.grid(row=0, column=2, rowspan=2, sticky="e", padx=20, pady=8)
 
   def _build_settings_panel(self, frm, row):
     self._settings_collapsed = True  # Start with settings panel closed
@@ -4179,8 +4211,8 @@ def main() -> None:
   root = ctk.CTk()
   root.title("Discogs Auto-Sort")
 
-  # Start maximized (full screen with title bar, X and - buttons)
-  root.state('zoomed')
+  # Start in full screen
+  root.attributes('-fullscreen', True)
 
   App(root)
   root.mainloop()
