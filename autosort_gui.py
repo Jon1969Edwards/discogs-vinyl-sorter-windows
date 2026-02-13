@@ -1901,7 +1901,7 @@ class App:
     self.theme_btn.grid(row=0, column=1, rowspan=2, sticky="e", padx=20, pady=8)
 
   def _build_settings_panel(self, frm, row):
-    self._settings_collapsed = False
+    self._settings_collapsed = True  # Start with settings panel closed
 
     # Modern card-style settings panel with pronounced elevation
     self._settings_frame = ctk.CTkFrame(
@@ -1967,6 +1967,12 @@ class App:
     self._settings_expand_btn.pack(expand=True, fill="y", padx=2, pady=8)
     ToolTip(self._settings_expand_btn, "Show settings panel")
     self._settings_row = row  # Store for toggle
+
+    # If starting collapsed, hide settings and show expand tab
+    if self._settings_collapsed:
+      self._settings_frame.grid_remove()
+      self._settings_expand_tab.grid(row=row, column=0, sticky="ns", padx=(20, 10), pady=(16, 12))
+      self._settings_collapse_btn.configure(text="▶")
 
   def _build_settings_content(self, settings):
     import tkinter as tk
@@ -4173,8 +4179,14 @@ def main() -> None:
   root = ctk.CTk()
   root.title("Discogs Auto-Sort")
 
-  # Start maximized (fullscreen window)
-  root.state('zoomed')
+  # Start in full screen
+  root.attributes('-fullscreen', True)
+
+  def _toggle_fullscreen(_event=None):
+    root.attributes('-fullscreen', not root.attributes('-fullscreen'))
+
+  root.bind('<Escape>', _toggle_fullscreen)
+
   App(root)
   root.mainloop()
 
