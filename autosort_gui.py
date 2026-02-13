@@ -1880,10 +1880,10 @@ class App:
     )
     self._header_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 8))
 
-    # Modern theme toggle button
+    # Modern theme toggle button (label = target mode; default is dark so show "Light")
     self.theme_btn = ctk.CTkButton(
       self._header,
-      text="🌙 Dark",
+      text="☀️ Light",
       command=self._toggle_theme,
       width=100,
       height=36,
@@ -2085,6 +2085,7 @@ class App:
       font=(FONT_SEGOE_UI, 11),
       height=32,
       corner_radius=8,
+      placeholder_text="Search artist, title, label…",
     )
     self._search_entry.grid(row=0, column=1, sticky="ew", padx=6)
 
@@ -2102,6 +2103,25 @@ class App:
     self._clear_btn.grid(row=0, column=2, sticky="e", padx=6)
 
     ctk.CTkLabel(search_row, textvariable=self.v_match, font=(FONT_SEGOE_UI, 10)).grid(row=0, column=3, sticky="e", padx=6)
+
+    # Shortcuts help button
+    shortcuts_text = (
+      "Ctrl+F: Focus search\nF5 / Ctrl+R: Refresh\nCtrl+S: Export\n"
+      "Ctrl+P: Print\nCtrl+Q: Stop/Quit\nCtrl+D: Toggle theme\nAlt+Up/Down: Move item (manual order)"
+    )
+    self._shortcuts_btn = ctk.CTkButton(
+      search_row,
+      text="⌨",
+      width=36,
+      height=32,
+      corner_radius=8,
+      fg_color="#4a5568",
+      hover_color="#2d3748",
+      font=(FONT_SEGOE_UI, 12),
+      command=lambda: messagebox.showinfo("Keyboard Shortcuts", shortcuts_text),
+    )
+    self._shortcuts_btn.grid(row=0, column=4, sticky="e", padx=(0, 6))
+    ToolTip(self._shortcuts_btn, "Keyboard shortcuts")
     self.v_search.trace_add("write", lambda *_: self._on_search_change())
 
   def _build_action_buttons(self, main_content):
@@ -2271,6 +2291,17 @@ class App:
     )
     self.order_tree.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
     order_scroll.config(command=self.order_tree.yview)
+
+    # Empty-state overlay (hidden by default)
+    self._order_empty_label = ctk.CTkLabel(
+      order_wrap,
+      text="No albums yet. Add items to your Discogs collection\nor check your token and refresh.",
+      font=(FONT_SEGOE_UI, 12),
+      text_color=self._colors["muted"],
+      justify="center",
+    )
+    self._order_empty_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
+    self._order_empty_label.grid_remove()
     self.order_tree.heading("#0", text="", anchor="center")
     self.order_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
     self.order_tree.heading("#", text="#", anchor="center")
@@ -3265,21 +3296,21 @@ class App:
   def _set_theme_colors(self):
     if self.v_dark_mode.get():
       self._colors = self._dark_colors.copy()
-      self.theme_btn.configure(text="🌙 Dark")
+      self.theme_btn.configure(text="☀️ Light")  # Label = target mode (click to switch to light)
       ctk.set_appearance_mode("dark")
     else:
       self._colors = self._light_colors.copy()
-      self.theme_btn.configure(text="☀️ Light")
+      self.theme_btn.configure(text="🌙 Dark")  # Label = target mode (click to switch to dark)
       ctk.set_appearance_mode("light")
 
   def _update_theme_button(self):
-    # Update CustomTkinter button
+    # Update CustomTkinter button - label shows target mode (what you switch to)
     try:
       if self.v_dark_mode.get():
-        self.theme_btn.configure(text="🌙 Dark", fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
+        self.theme_btn.configure(text="☀️ Light", fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
         ctk.set_appearance_mode("dark")
       else:
-        self.theme_btn.configure(text="☀️ Light", fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
+        self.theme_btn.configure(text="🌙 Dark", fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
         ctk.set_appearance_mode("light")
     except Exception:
       pass
@@ -3396,6 +3427,8 @@ class App:
   def _update_treeview_widget(self):
     try:
       self._configure_treeview_style()
+      if hasattr(self, "_order_empty_label"):
+        self._order_empty_label.configure(text_color=self._colors["muted"])
       if self.v_dark_mode.get():
         self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
@@ -3562,8 +3595,10 @@ class App:
     if not result.rows_sorted:
       self._tree_rows = []
       self.v_match.set("0 items")
+      self._show_order_empty_state(True)
       return
 
+    self._show_order_empty_state(False)
     rows = self._apply_manual_order_if_enabled(result)
     self._tree_rows = list(rows)
     self._show_or_hide_price_column()
@@ -3573,6 +3608,14 @@ class App:
     self._highlight_search()
     if self._thumbnails_enabled:
       self._download_missing_thumbnails(rows)
+
+  def _show_order_empty_state(self, show: bool) -> None:
+    """Show or hide the empty shelf placeholder message."""
+    if hasattr(self, "_order_empty_label"):
+      if show:
+        self._order_empty_label.grid()
+      else:
+        self._order_empty_label.grid_remove()
 
   def _clear_treeview(self):
     """Clear all items from the treeview."""
