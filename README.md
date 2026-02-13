@@ -59,23 +59,22 @@ GUI prerequisites:
   ```
 - If it fails, either install Python from python.org and recreate the venv using that interpreter, or install `tcl-tk` via Homebrew and recreate your environment.
 
-### Auto-Sort GUI (watch for new additions)
+### Auto-Sort GUI (Recommended)
 
-If you want the shelf order to update automatically as you add items to Discogs, use the auto-sort GUI:
+The Auto-Sort GUI is the main graphical interface. It monitors your Discogs collection and regenerates the shelf order when it changes:
 
 ```bash
+# macOS / Linux
 ./.venv/bin/python autosort_gui.py
+
+# Windows
+LaunchAutoSortGUI.bat
+# Or: .venv\Scripts\python autosort_gui.py
 ```
 
-What it does:
-- Polls your Discogs collection item count every N seconds.
-- When the count changes, it rebuilds the shelf order and shows it in the app.
-- Use **“Export TXT/CSV”** to write `vinyl_shelf_order.txt` and `vinyl_shelf_order.csv` to the chosen Output Dir (and `vinyl_shelf_order.json` if “Also JSON” is checked).
-- Use **“Print…”** to send the current shelf order to your default printer (via `lpr`).
-- Provides a **“Refresh Now”** button to force an immediate inventory check + rebuild.
+Features: Auto-watch, Refresh Now, Export TXT/CSV/JSON, Print, album thumbnails, wishlist tab, manual drag-and-drop ordering, search/filter, optional price display, sort by artist/title/year/price.
 
-No-terminal launch (macOS):
-- Double-click `LaunchAutoSortGUI.command`.
+No-terminal launch: Windows: `LaunchAutoSortGUI.bat` | macOS: `LaunchAutoSortGUI.command`
 
 Tip: to avoid entering your token each time, set `DISCOGS_TOKEN` in your environment (or create a `.env` file in the project directory).
 
