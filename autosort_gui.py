@@ -2166,6 +2166,7 @@ class App:
     )
     self._signout_btn.pack(side="left")
     ToolTip(self._signout_btn, "Clear saved sign-in and use token instead")
+    self._update_auth_buttons_state()
     ctk.CTkLabel(auth_section, text="Or enter token", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
     token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
     token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
@@ -3491,6 +3492,14 @@ class App:
     except Exception:
       pass
 
+  def _update_auth_buttons_state(self) -> None:
+    """Enable/disable Sign in and Sign out based on OAuth state."""
+    if not hasattr(self, "_signin_btn") or not hasattr(self, "_signout_btn"):
+      return
+    signed_in = bool((self._oauth_access_token or "").strip())
+    self._signin_btn.configure(state="disabled" if signed_in else "normal")
+    self._signout_btn.configure(state="normal" if signed_in else "disabled")
+
   def _do_oauth_signin(self) -> None:
     """Run OAuth flow and save tokens. Requires DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in .env"""
     from core.oauth_discogs import run_oauth_flow, _get_consumer_credentials
@@ -3514,6 +3523,7 @@ class App:
       self._oauth_access_token = access_token
       self._oauth_access_secret = access_secret
       self._save_settings()
+      self._update_auth_buttons_state()
       self._log("Signed in successfully. Refresh to load your collection.")
       messagebox.showinfo("Signed in", "Sign-in complete. Refreshing your collection…")
       self._refresh_now()
@@ -3526,6 +3536,7 @@ class App:
     self._oauth_access_token = ""
     self._oauth_access_secret = ""
     self._save_settings()
+    self._update_auth_buttons_state()
 
     # Clear collection cache so next refresh fetches fresh (or requires re-auth)
     self._collection_cache.clear()
