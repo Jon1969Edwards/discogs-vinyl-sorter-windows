@@ -3522,12 +3522,33 @@ class App:
       messagebox.showerror("Sign-in Failed", str(e))
 
   def _do_oauth_signout(self) -> None:
-    """Clear OAuth tokens and fall back to token."""
+    """Clear OAuth tokens, clear all records from view, and fall back to token."""
     self._oauth_access_token = ""
     self._oauth_access_secret = ""
     self._save_settings()
-    self._log("Signed out. Using token if provided.")
-    messagebox.showinfo("Signed out", "Cleared saved sign-in. Enter a token or sign in again.")
+
+    # Clear collection cache so next refresh fetches fresh (or requires re-auth)
+    self._collection_cache.clear()
+
+    # Clear manual order state
+    self._manual_order.clear()
+    if hasattr(self, "v_manual_order_enabled"):
+      self.v_manual_order_enabled.set(False)
+
+    # Clear the shelf order view
+    self._last_result = None
+    self._tree_rows = []
+    if hasattr(self, "order_tree"):
+      self._clear_treeview()
+    if hasattr(self, "_order_empty_label"):
+      self._show_order_empty_state(True)
+    if hasattr(self, "_order_loading_label"):
+      self._show_order_loading_state(False)
+    if hasattr(self, "v_match"):
+      self.v_match.set("0 items")
+
+    self._log("Signed out. Records cleared. Enter a token or sign in again.")
+    messagebox.showinfo("Signed out", "Cleared saved sign-in and collection view. Enter a token or sign in again.")
 
   def _toggle_token_visibility(self) -> None:
     try:
