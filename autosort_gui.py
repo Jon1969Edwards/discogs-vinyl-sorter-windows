@@ -1864,6 +1864,8 @@ class App:
     self._build_settings_panel(frm, row)
     main_content = self._build_main_content(frm, row)
     self._build_notebook(main_content)
+    row += 1
+    self._build_status_bar(frm, row)
 
   def _build_header(self, frm, row):
     # Clean, minimal header
@@ -1931,6 +1933,62 @@ class App:
       hover_color=self._colors["button_hover"],
     )
     self.theme_btn.grid(row=0, column=2, rowspan=2, sticky="e", padx=20, pady=8)
+
+  def _build_status_bar(self, frm, row):
+    """Build the status bar at the bottom with collection info, sync time, and optional value."""
+    self._status_bar = ctk.CTkFrame(
+      frm,
+      height=36,
+      fg_color=self._colors["accent"],
+      corner_radius=0,
+    )
+    self._status_bar.grid(row=row, column=0, columnspan=2, sticky="ew", padx=0, pady=0)
+    self._status_bar.grid_propagate(False)
+    self._status_bar.columnconfigure(0, weight=1)
+
+    # Main status message (left)
+    self._status_label = ctk.CTkLabel(
+      self._status_bar,
+      textvariable=self.v_status,
+      font=(FONT_SEGOE_UI, FONT_SM),
+      text_color="#ffffff",
+    )
+    self._status_label.grid(row=0, column=0, sticky="w", padx=16, pady=6)
+
+    # Right-side info: collection count, sync time, optional value
+    info_frame = ctk.CTkFrame(self._status_bar, fg_color="transparent")
+    info_frame.grid(row=0, column=1, sticky="e", padx=16, pady=6)
+
+    self._count_icon = ctk.CTkLabel(info_frame, text="💿", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._count_icon.pack(side="left", padx=(0, 4))
+    self._count_label = ctk.CTkLabel(
+      info_frame,
+      textvariable=self.v_collection_count,
+      font=(FONT_SEGOE_UI, FONT_SM),
+      text_color="#ffffff",
+    )
+    self._count_label.pack(side="left", padx=(0, 16))
+
+    self._sync_icon = ctk.CTkLabel(info_frame, text="🕐", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._sync_icon.pack(side="left", padx=(0, 4))
+    self._sync_label = ctk.CTkLabel(
+      info_frame,
+      textvariable=self.v_last_sync,
+      font=(FONT_SEGOE_UI, FONT_SM),
+      text_color="#ffffff",
+    )
+    self._sync_label.pack(side="left", padx=(0, 16))
+
+    self._value_sep = ctk.CTkLabel(info_frame, text="|", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._value_sep.pack(side="left", padx=(0, 8))
+    self._value_icon = ctk.CTkLabel(info_frame, text="💰", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._value_label = ctk.CTkLabel(
+      info_frame,
+      textvariable=self.v_total_value,
+      font=(FONT_SEGOE_UI, FONT_SM),
+      text_color="#ffffff",
+    )
+    # Value section not packed initially; _show_value_section() shows when prices available
 
   def _build_settings_panel(self, frm, row):
     self._settings_collapsed = True  # Start with settings panel closed
@@ -3552,17 +3610,14 @@ class App:
 
   def _update_status_bar_widgets(self):
     try:
-      self._status_bar.config(bg=self._colors["accent"])
-      self._status_label.config(bg=self._colors["accent"], fg="#ffffff")
-      for widget in [self._count_icon, self._count_label, self._sync_icon, self._sync_label, 
+      if not hasattr(self, "_status_bar"):
+        return
+      self._status_bar.configure(fg_color=self._colors["accent"])
+      self._status_label.configure(fg_color="transparent", text_color="#ffffff")
+      for widget in [self._count_icon, self._count_label, self._sync_icon, self._sync_label,
                      self._value_sep, self._value_icon, self._value_label]:
         try:
-          widget.config(bg=self._colors["accent"])
-        except Exception:
-          pass
-      for child in self._status_bar.winfo_children():
-        try:
-          child.config(bg=self._colors["accent"])
+          widget.configure(fg_color="transparent", text_color="#ffffff")
         except Exception:
           pass
     except Exception:
@@ -3939,14 +3994,17 @@ class App:
       return f"{total_value:.0f} {currency}"
 
   def _show_value_section(self) -> None:
-    for attr in ['_value_sep', '_value_icon', '_value_label']:
-      if hasattr(self, attr):
-        getattr(self, attr).grid()
+    if hasattr(self, '_value_sep'):
+      self._value_sep.pack(side="left", padx=(16, 8))
+    if hasattr(self, '_value_icon'):
+      self._value_icon.pack(side="left", padx=(0, 4))
+    if hasattr(self, '_value_label'):
+      self._value_label.pack(side="left")
 
   def _hide_value_section(self) -> None:
     for attr in ['_value_sep', '_value_icon', '_value_label']:
       if hasattr(self, attr):
-        getattr(self, attr).grid_remove()
+        getattr(self, attr).pack_forget()
 
   def _highlight_search(self) -> None:
     """Highlight matching rows in the Treeview based on search query."""
