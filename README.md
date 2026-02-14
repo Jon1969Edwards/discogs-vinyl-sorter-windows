@@ -18,16 +18,23 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Authentication
+
+There are two ways to authenticate with Discogs:
+
+| Method | Use case | Variables |
+|--------|----------|-----------|
+| **Personal Access Token (PAT)** | CLI, simple GUI, Auto-Sort GUI | `DISCOGS_TOKEN` |
+| **OAuth** | Auto-Sort GUI “Sign in” (browser flow) | `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET` |
+
+- **PAT**: Discogs → Settings → Developers → Personal Access Tokens → Generate. Set `DISCOGS_TOKEN` or pass `--token <your_token>` to the CLI.
+- **OAuth**: Create an app at Discogs → Settings → Developers → Create Application. Put the key/secret in `.env`; the Auto-Sort GUI uses them for the “Sign in with OAuth” flow.
+- You can use one or both. Copy `.env.example` to `.env` and fill in your values.
+
 Provide your token either via environment variable or CLI flag:
 
 - Environment: `DISCOGS_TOKEN` (you can use a `.env` file if you have `python-dotenv` installed)
 - CLI: `--token <your_token>`
-
-Optionally create a `.env` file:
-
-```
-DISCOGS_TOKEN=your_token_here
-```
 
 ## Run
 
