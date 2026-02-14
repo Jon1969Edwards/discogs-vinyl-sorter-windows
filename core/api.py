@@ -79,9 +79,13 @@ def _polite_rate_limit_pause(resp) -> None:
         pass
 
 
-def api_get(url: str, headers: Dict[str, str], params: Optional[Dict[str, str]] = None,
+def api_get(url: str, headers: Optional[Dict[str, str]] = None,
+            session: Optional[Any] = None,
+            params: Optional[Dict[str, str]] = None,
             retries: int = 3, backoff: float = 1.0):
     """Execute a GET request to Discogs API with retry logic.
+
+    Use either headers (token auth) or session (OAuth). If both provided, session takes precedence.
 
     Returns:
         requests.Response object
@@ -91,10 +95,15 @@ def api_get(url: str, headers: Dict[str, str], params: Optional[Dict[str, str]] 
     """
     if requests is None:
         raise RuntimeError("Missing dependency 'requests'. Install requirements.txt (pip install -r requirements.txt).")
+    if session is None and headers is None:
+        raise ValueError("api_get requires either headers or session")
     last_error: Optional[Exception] = None
     for attempt in range(retries):
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=30)
+            if session is not None:
+                resp = session.get(url, params=params, timeout=30)
+            else:
+                resp = requests.get(url, headers=headers, params=params, timeout=30)
             status = resp.status_code
             if status < 400:
                 _polite_rate_limit_pause(resp)
@@ -116,25 +125,23 @@ def api_get(url: str, headers: Dict[str, str], params: Optional[Dict[str, str]] 
     raise RuntimeError("Discogs API request failed after retries")
 
 
-def get_identity(headers: Dict[str, str]) -> Dict:
-    """Get the authenticated user's identity from Discogs API."""
+def get_identity(headers: Optional[Dict[str, str]] = None, session: Optional[Any] = None) -> Dict:
+    """Get the authenticated user's identity from Discogs API. Use headers or session."""
     url = f"{API_BASE}/oauth/identity"
-    return api_get(url, headers).json()
+    return api_get(url, headers=headers, session=session).json()
 
 
-def fetch_release_price(headers: Dict[str, str], release_id: int, currency: str = "USD", debug_log: Optional[callable] = None) -> Tuple[Optional[float], Optional[int], str]:
+def fetch_release_price(headers: Optional[Dict[str, str]] = None, release_id: int = 0,
+                        currency: str = "USD", debug_log: Optional[callable] = None,
+                        session: Optional[Any] = None) -> Tuple[Optional[float], Optional[int], str]:
     """Fetch the lowest price and number for sale for a release from Discogs Marketplace.
 
-    Returns (lowest_price, num_for_sale, actual_currency) tuple. Values are None if not available.
-    Uses the Marketplace Statistics endpoint for accurate current pricing.
-
-    Note: This fetches the price for the SPECIFIC pressing (release_id), not the master release.
-    This gives the most accurate value for the user's exact record.
+    Use headers (token auth) or session (OAuth). Returns (lowest_price, num_for_sale, actual_currency).
     """
     url = f"{API_BASE}/marketplace/stats/{release_id}"
 
     try:
-        resp = api_get(url, headers, params={"curr_abbr": currency})
+        resp = api_get(url, headers=headers, session=session, params={"curr_abbr": currency})
         data = resp.json()
 
         if debug_log:
@@ -168,16 +175,14 @@ def fetch_release_price(headers: Dict[str, str], release_id: int, currency: str 
 
 
 def fetch_prices_for_rows(
-    headers: Dict[str, str],
-    rows: List["ReleaseRow"],
+    headers: Optional[Dict[str, str]] = None,
+    rows: Optional[List["ReleaseRow"]] = None,
     currency: str = "USD",
     log_callback: Optional[callable] = None,
     debug: bool = False,
+    session: Optional[Any] = None,
 ) -> None:
-    """Fetch and populate price info for a list of ReleaseRows in-place.
-
-    This makes API calls for each unique release, so it can be slow for large collections.
-    """
+    """Fetch and populate price info for a list of ReleaseRows. Use headers or session."""
     # Cache by release_id to avoid duplicate fetches
     # Cache: release_id -> (lowest_price, num_for_sale, actual_currency)
     price_cache: Dict[int, Tuple[Optional[float], Optional[int], str]] = {}
@@ -199,7 +204,7 @@ def fetch_prices_for_rows(
                 if len(album_info) > 40:
                     album_info = album_info[:37] + "..."
                 log_callback(f"[{fetched}/{total}] {album_info}")
-            price_cache[rid] = fetch_release_price(headers, rid, currency, debug_log=debug_log)
+            price_cache[rid] = fetch_release_price(headers=headers, session=session, release_id=rid, currency=currency, debug_log=debug_log)
         lowest, num_for_sale, actual_currency = price_cache[rid]
         row.lowest_price = lowest
         row.median_price = lowest  # Using lowest as median approximation
@@ -207,11 +212,10 @@ def fetch_prices_for_rows(
         row.price_currency = actual_currency  # Use actual currency from API
 
 
-def iterate_collection(headers: Dict[str, str], username: str, per_page: int = 100, max_pages: Optional[int] = None) -> Iterable[Dict]:
-    """Iterate through all releases in a user's collection.
-
-    Yields each release as a dict from the Discogs API.
-    """
+def iterate_collection(headers: Optional[Dict[str, str]] = None, username: str = "",
+                       per_page: int = 100, max_pages: Optional[int] = None,
+                       session: Optional[Any] = None) -> Iterable[Dict]:
+    """Iterate through all releases in a user's collection. Use headers or session."""
     page = 1
     total_pages: Optional[int] = None
     while True:
@@ -219,11 +223,10 @@ def iterate_collection(headers: Dict[str, str], username: str, per_page: int = 1
         params = {
             "page": str(page),
             "per_page": str(per_page),
-            # Sort isn't critical since we post-process, but helps UX if interrupted
             "sort": "artist",
             "sort_order": "asc",
         }
-        data = api_get(url, headers, params=params).json()
+        data = api_get(url, headers=headers, session=session, params=params).json()
         if total_pages is None:
             total_pages = int(data.get("pagination", {}).get("pages", 1))
         for item in data.get("releases", []):

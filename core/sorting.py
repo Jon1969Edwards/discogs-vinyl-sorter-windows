@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 import sys
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from core.models import ReleaseRow
 from core.api import iterate_collection, fetch_release_price, api_get, API_BASE
@@ -468,11 +468,11 @@ def _lp_process_item(
     )
 
 def collect_lp_rows(
-    headers: Dict[str, str],
-    username: str,
-    per_page: int,
-    max_pages: Optional[int],
-    extra_articles: List[str],
+    headers: Optional[Dict[str, str]] = None,
+    username: str = "",
+    per_page: int = 100,
+    max_pages: Optional[int] = None,
+    extra_articles: Optional[List[str]] = None,
     lp_strict: bool = False,
     lp_probable: bool = False,
     debug_stats: Optional[Dict[str, int]] = None,
@@ -481,16 +481,16 @@ def collect_lp_rows(
     lnf_exclude: Optional[Set[str]] = None,
     lnf_safe_bands: bool = False,
     collect_exclusions: bool = False,
+    session: Optional[Any] = None,
 ) -> List[ReleaseRow]:
-    """
-    Collects LP rows from a Discogs collection, filtering and tracking stats/exclusions.
-    Refactored to reduce cognitive complexity by splitting logic into helpers.
-    """
+    """Collects LP rows from a Discogs collection. Use headers or session for auth."""
+    if extra_articles is None:
+        extra_articles = []
     rows: List[ReleaseRow] = []
     stats = {"scanned": 0, "vinyl": 0, "vinyl_lp": 0, "vinyl_lp_33": 0}
     excluded_probable: List[Dict] = []
 
-    for item in iterate_collection(headers, username, per_page=per_page, max_pages=max_pages):
+    for item in iterate_collection(headers=headers, username=username, per_page=per_page, max_pages=max_pages, session=session):
         _lp_process_item(
             item,
             stats,
@@ -516,18 +516,21 @@ def collect_lp_rows(
 
 
 def collect_45_rows(
-  headers: Dict[str, str],
-  username: str,
-  per_page: int,
-  max_pages: Optional[int],
-  extra_articles: List[str],
+  headers: Optional[Dict[str, str]] = None,
+  username: str = "",
+  per_page: int = 100,
+  max_pages: Optional[int] = None,
+  extra_articles: Optional[List[str]] = None,
   last_name_first: bool = False,
   lnf_allow_3: bool = False,
   lnf_exclude: Optional[Set[str]] = None,
   lnf_safe_bands: bool = False,
+  session: Optional[Any] = None,
 ) -> List[ReleaseRow]:
+  if extra_articles is None:
+    extra_articles = []
   rows: List[ReleaseRow] = []
-  for item in iterate_collection(headers, username, per_page=per_page, max_pages=max_pages):
+  for item in iterate_collection(headers=headers, username=username, per_page=per_page, max_pages=max_pages, session=session):
     basic = item.get("basic_information") or {}
     if not basic:
       continue
@@ -547,18 +550,21 @@ def collect_45_rows(
 
 
 def collect_cd_rows(
-  headers: Dict[str, str],
-  username: str,
-  per_page: int,
-  max_pages: Optional[int],
-  extra_articles: List[str],
+  headers: Optional[Dict[str, str]] = None,
+  username: str = "",
+  per_page: int = 100,
+  max_pages: Optional[int] = None,
+  extra_articles: Optional[List[str]] = None,
   last_name_first: bool = False,
   lnf_allow_3: bool = False,
   lnf_exclude: Optional[Set[str]] = None,
   lnf_safe_bands: bool = False,
+  session: Optional[Any] = None,
 ) -> List[ReleaseRow]:
+  if extra_articles is None:
+    extra_articles = []
   rows: List[ReleaseRow] = []
-  for item in iterate_collection(headers, username, per_page=per_page, max_pages=max_pages):
+  for item in iterate_collection(headers=headers, username=username, per_page=per_page, max_pages=max_pages, session=session):
     basic = item.get("basic_information") or {}
     if not basic:
       continue

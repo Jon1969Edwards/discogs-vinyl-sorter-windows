@@ -99,9 +99,12 @@ def load_config() -> dict:
     if CONFIG_FILE.exists():
       with CONFIG_FILE.open("r", encoding="utf-8") as f:
         config = json.load(f)
-        # Deobfuscate the token if present
         if "token_encrypted" in config:
           config["token"] = _deobfuscate(config.pop("token_encrypted"))
+        if "oauth_access_token_encrypted" in config:
+          config["oauth_access_token"] = _deobfuscate(config.pop("oauth_access_token_encrypted"))
+        if "oauth_access_secret_encrypted" in config:
+          config["oauth_access_secret"] = _deobfuscate(config.pop("oauth_access_secret_encrypted"))
         return config
   except Exception:
     pass
@@ -111,10 +114,13 @@ def load_config() -> dict:
 def save_config(config: dict) -> None:
   """Save configuration to file."""
   try:
-    # Make a copy and encrypt the token
     save_data = config.copy()
     if "token" in save_data:
       save_data["token_encrypted"] = _obfuscate(save_data.pop("token"))
+    if "oauth_access_token" in save_data:
+      save_data["oauth_access_token_encrypted"] = _obfuscate(save_data.pop("oauth_access_token"))
+    if "oauth_access_secret" in save_data:
+      save_data["oauth_access_secret_encrypted"] = _obfuscate(save_data.pop("oauth_access_secret"))
     with CONFIG_FILE.open("w", encoding="utf-8") as f:
       json.dump(save_data, f, indent=2)
   except Exception:
@@ -856,12 +862,14 @@ class AutoConfig:
   show_prices: bool = False
   currency: str = "USD"
   sort_by: str = "artist"
+  oauth_access_token: str | None = None
+  oauth_access_secret: str | None = None
 
 
-def get_collection_count(headers: dict[str, str], username: str) -> int:
-  """Fetch collection size cheaply via pagination metadata."""
+def get_collection_count(headers: dict | None = None, username: str = "", session=None) -> int:
+  """Fetch collection size cheaply via pagination metadata. Use headers or session."""
   url = f"{core.API_BASE}/users/{username}/collection/folders/0/releases"
-  data = core.api_get(url, headers, params={"page": "1", "per_page": "1"}).json()
+  data = core.api_get(url, headers=headers, session=session, params={"page": "1", "per_page": "1"}).json()
   return int(data.get("pagination", {}).get("items", 0))
 
 
@@ -1188,18 +1196,18 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
   def get_headers_and_username():
     report("update", "Fetching collection from Discogs...")
     try:
-      _, headers, username = _get_user_headers(cfg, log)
+      _, headers, session, username = _get_user_headers(cfg, log)
       if cache:
         cache.set_username(username)
-      return headers, username
+      return headers, session, username
     except Exception as e:
       report("error", f"Failed to get user headers: {e}")
       raise
 
-  def collect_rows(headers, username):
+  def collect_rows(headers, session, username):
     report("update", "Collecting rows from Discogs...")
     try:
-      rows = _collect_rows(cfg, headers, username)
+      rows = _collect_rows(cfg, headers, session, username)
       if not rows:
         log("No matching LPs found.")
         report("error", "No matching LPs found.")
@@ -1209,13 +1217,13 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
       report("error", f"Failed to collect rows: {e}")
       raise
 
-  def handle_prices_if_needed(headers, rows):
+  def handle_prices_if_needed(headers, session, rows):
     need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
     report("update", "Checking if price data is needed...")
     if need_prices:
       report("update", "Fetching album prices from Discogs Marketplace...")
       try:
-        _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q)
+        _handle_prices(cfg, log, progress_callback, cache, headers, session, rows, main_progress_q)
       except Exception as e:
         report("error", f"Failed to fetch prices: {e}")
         raise
@@ -1238,27 +1246,49 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
     out_dir.mkdir(parents=True, exist_ok=True)
 
   ensure_output_dir_exists(cfg.output_dir)
-  headers, username = get_headers_and_username()
-  rows = collect_rows(headers, username)
+  headers, session, username = get_headers_and_username()
+  rows = collect_rows(headers, session, username)
   if not rows:
     return BuildResult(username=username, rows_sorted=[], lines=[])
-  need_prices = handle_prices_if_needed(headers, rows)
+  need_prices = handle_prices_if_needed(headers, session, rows)
   return sort_and_generate_output(rows, need_prices, username)
 
 def _get_user_headers(cfg: AutoConfig, log: callable):
+    """Return (token, headers, session, username). Use OAuth if available, else token."""
+    import os
+    from core.oauth_discogs import get_oauth_session, _get_consumer_credentials
+
+    if cfg.oauth_access_token and cfg.oauth_access_secret:
+        creds = _get_consumer_credentials(None)
+        if creds:
+            consumer_key, consumer_secret = creds
+            try:
+                session = get_oauth_session(
+                    consumer_key, consumer_secret,
+                    cfg.oauth_access_token, cfg.oauth_access_secret,
+                    cfg.user_agent,
+                )
+                ident = core.get_identity(session=session)
+                username = ident.get("username")
+                if username:
+                    log(f"User: {username} (signed in)")
+                    return None, None, session, username
+            except Exception as e:
+                log(f"OAuth session failed: {e}. Falling back to token.")
     token = core.get_token(cfg.token or None)
     headers = core.discogs_headers(token, cfg.user_agent)
-    ident = core.get_identity(headers)
+    ident = core.get_identity(headers=headers)
     username = ident.get("username")
     if not username:
         raise RuntimeError("Could not determine username from token.")
     log(f"User: {username}")
-    return token, headers, username
+    return token, headers, None, username
 
-def _collect_rows(cfg: AutoConfig, headers: dict, username: str):
+def _collect_rows(cfg: AutoConfig, headers: dict | None, session, username: str):
     return core.collect_lp_rows(
         headers=headers,
         username=username,
+        session=session,
         per_page=max(1, min(int(cfg.per_page), 100)),
         max_pages=None,
         extra_articles=[],
@@ -1272,12 +1302,12 @@ def _collect_rows(cfg: AutoConfig, headers: dict, username: str):
         collect_exclusions=False,
     )
 
-def _handle_prices(cfg, log, progress_callback, cache, headers, rows, main_progress_q=None):
+def _handle_prices(cfg, log, progress_callback, cache, headers, session, rows, main_progress_q=None):
   releases_needing_fetch, cached_count = _populate_prices_from_cache(cfg, cache, rows)
   if cached_count > 0:
     log(f"Loaded {cached_count} prices from cache.")
   if releases_needing_fetch:
-    _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count, main_progress_q)
+    _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, session, releases_needing_fetch, cached_count, main_progress_q)
   else:
     log("All prices loaded from cache.")
     if main_progress_q:
@@ -1304,7 +1334,7 @@ def _populate_prices_from_cache(cfg, cache, rows):
         releases_needing_fetch = [r for r in rows if r.release_id]
     return releases_needing_fetch, cached_count
 
-def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, releases_needing_fetch, cached_count, main_progress_q=None):
+def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, session, releases_needing_fetch, cached_count, main_progress_q=None):
     def _report_progress(action, message):
         if progress_callback:
             progress_callback(action, message)
@@ -1328,7 +1358,7 @@ def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, release
             log(msg)
             _report_progress("update", msg)
         try:
-            core.fetch_prices_for_rows(headers, releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
+            core.fetch_prices_for_rows(headers=headers, session=session, rows=releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
         except Exception as e:
             _report_progress("error", f"Price fetch failed: {e}")
             raise
@@ -1471,6 +1501,8 @@ class App:
     saved_cfg = load_config()
 
     self.v_token = StringVar(value=saved_cfg.get("token", ""))
+    self._oauth_access_token = saved_cfg.get("oauth_access_token") or ""
+    self._oauth_access_secret = saved_cfg.get("oauth_access_secret") or ""
     self.v_show_token = BooleanVar(value=False)
     self.v_user_agent = StringVar(value=saved_cfg.get("user_agent", "VinylSorter/1.0 (+contact)"))
     self.v_output_dir = StringVar(value=saved_cfg.get("output_dir", str(Path.cwd())))
@@ -2108,9 +2140,35 @@ class App:
 
     # === AUTHENTICATION ===
     auth_section = make_section("Authentication", "🔐")
-    ctk.CTkLabel(auth_section, text="Discogs Token", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    auth_btns = ctk.CTkFrame(auth_section, fg_color="transparent")
+    auth_btns.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
+    self._signin_btn = ctk.CTkButton(
+      auth_btns,
+      text="🔐 Sign in with Discogs",
+      command=self._do_oauth_signin,
+      width=180,
+      height=38,
+      corner_radius=8,
+      fg_color=self._colors["accent"],
+      hover_color=self._colors["button_hover"],
+    )
+    self._signin_btn.pack(side="left", padx=(0, 8))
+    ToolTip(self._signin_btn, "Sign in via Discogs OAuth (opens browser). Requires consumer key/secret in .env")
+    self._signout_btn = ctk.CTkButton(
+      auth_btns,
+      text="Sign out",
+      command=self._do_oauth_signout,
+      width=80,
+      height=38,
+      corner_radius=8,
+      fg_color="#4a5568",
+      hover_color="#2d3748",
+    )
+    self._signout_btn.pack(side="left")
+    ToolTip(self._signout_btn, "Clear saved sign-in and use token instead")
+    ctk.CTkLabel(auth_section, text="Or enter token", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
     token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
-    token_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
+    token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
     token_row.columnconfigure(0, weight=1)
     self.token_entry = make_entry(token_row, self.v_token, width=200, show="•")
     self.token_entry.grid(row=0, column=0, sticky="ew")
@@ -2761,21 +2819,19 @@ class App:
       self._wishlist_status_var.set("No items in wishlist")
       return
     
-    # Get token for API calls
-    token = self.v_token.get()
-    if not token:
-      messagebox.showwarning("Token Required", "Please enter your Discogs token in Settings to check marketplace availability.")
+    # Get auth (token or OAuth)
+    cfg = self._get_cfg()
+    if not self._has_valid_token(cfg):
+      messagebox.showwarning("Auth Required", "Sign in or enter your Discogs token in Settings to check marketplace availability.")
       return
     
-    # Disable button during check
     self._wishlist_check_btn.config(state="disabled")
     self._wishlist_status_var.set("Checking availability...")
     
     def check_availability():
       try:
         import core.api as api
-        
-        headers = api.discogs_headers(token, self.v_user_agent.get())
+        _, headers, session, _ = self._get_user_info(cfg)
         currency = self.v_currency.get()
         wishlist_data = list(load_wishlist())
         
@@ -2799,7 +2855,7 @@ class App:
             self.root.after(0, lambda i=i, t=total: self._wishlist_status_var.set(f"Checking {i+1}/{t}..."))
             
             # Fetch price from API
-            lowest, num_for_sale, actual_currency = api.fetch_release_price(headers, release_id, currency)
+            lowest, num_for_sale, actual_currency = api.fetch_release_price(headers=headers, session=session, release_id=release_id, currency=currency)
             
             # Update entry with availability info
             entry["lowest_price"] = lowest
@@ -3414,6 +3470,10 @@ class App:
         "currency": self.v_currency.get().strip(),
         "sort_by": self.v_sort_by.get().strip(),
       }
+      if getattr(self, "_oauth_access_token", None):
+        config["oauth_access_token"] = self._oauth_access_token
+      if getattr(self, "_oauth_access_secret", None):
+        config["oauth_access_secret"] = self._oauth_access_secret
       save_config(config)
     except Exception:
       pass
@@ -3430,6 +3490,44 @@ class App:
         subprocess.run(["xdg-open", path], check=False)
     except Exception:
       pass
+
+  def _do_oauth_signin(self) -> None:
+    """Run OAuth flow and save tokens. Requires DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in .env"""
+    from core.oauth_discogs import run_oauth_flow, _get_consumer_credentials
+    creds = _get_consumer_credentials(None)
+    if not creds:
+      messagebox.showerror(
+        "OAuth Setup",
+        "Sign-in requires consumer credentials.\n\n"
+        "Add to your .env file:\n"
+        "DISCOGS_CONSUMER_KEY=your_key\n"
+        "DISCOGS_CONSUMER_SECRET=your_secret\n\n"
+        "Get these from discogs.com/settings/developers after creating an app."
+      )
+      return
+    try:
+      self._log("Opening browser for Discogs sign-in…")
+      access_token, access_secret = run_oauth_flow(
+        creds[0], creds[1],
+        self.v_user_agent.get().strip() or "VinylSorter/1.0",
+      )
+      self._oauth_access_token = access_token
+      self._oauth_access_secret = access_secret
+      self._save_settings()
+      self._log("Signed in successfully. Refresh to load your collection.")
+      messagebox.showinfo("Signed in", "Sign-in complete. Refreshing your collection…")
+      self._refresh_now()
+    except Exception as e:
+      self._log(f"OAuth failed: {e}")
+      messagebox.showerror("Sign-in Failed", str(e))
+
+  def _do_oauth_signout(self) -> None:
+    """Clear OAuth tokens and fall back to token."""
+    self._oauth_access_token = ""
+    self._oauth_access_secret = ""
+    self._save_settings()
+    self._log("Signed out. Using token if provided.")
+    messagebox.showinfo("Signed out", "Cleared saved sign-in. Enter a token or sign in again.")
 
   def _toggle_token_visibility(self) -> None:
     try:
@@ -4063,6 +4161,8 @@ class App:
       show_prices=bool(self.v_show_prices.get()),
       currency=self.v_currency.get().strip() or "USD",
       sort_by=self.v_sort_by.get().strip() or "artist",
+      oauth_access_token=(self._oauth_access_token or "").strip() or None,
+      oauth_access_secret=(self._oauth_access_secret or "").strip() or None,
     )
 
   def _refresh_now(self) -> None:
@@ -4168,8 +4268,8 @@ class App:
           self._handle_missing_token(cfg)
           continue
 
-        _, headers, username = self._get_user_info(cfg)
-        count = get_collection_count(headers, username)
+        _, headers, session, username = self._get_user_info(cfg)
+        count = get_collection_count(headers=headers, session=session, username=username)
         force = self._force_rebuild
         self._force_rebuild = False
 
@@ -4189,22 +4289,24 @@ class App:
     self._log("Watcher stopped.")
 
   def _has_valid_token(self, cfg):
-    return bool(cfg.token or os.environ.get("DISCOGS_TOKEN", ""))
+    return bool(
+      cfg.token or os.environ.get("DISCOGS_TOKEN", "") or
+      (cfg.oauth_access_token and cfg.oauth_access_secret)
+    )
 
   def _handle_missing_token(self, cfg):
-    self._log("Error: No Discogs token provided. Enter your token in the Settings.")
+    self._log("Error: No Discogs authentication. Sign in or enter your token in Settings.")
     self.v_status.set("Error: No token (see Log tab)")
     self._wake.clear()
     self._wake.wait(timeout=cfg.poll_seconds)
 
   def _get_user_info(self, cfg):
-    token = core.get_token(cfg.token or None)
-    headers = core.discogs_headers(token, cfg.user_agent)
-    ident = core.get_identity(headers)
-    username = ident.get("username")
-    if not username:
-      raise RuntimeError("Could not determine username from token.")
-    return token, headers, username
+    """Return (token, headers, session, username). Uses OAuth if available."""
+    _, headers, session, username = _get_user_headers(cfg, self._log)
+    token = cfg.token or os.environ.get("DISCOGS_TOKEN", "") or None
+    if session:
+      return token, None, session, username
+    return token, headers, None, username
 
   def _should_build_initial(self, force):
     return self._last_count is None or force
@@ -4219,10 +4321,10 @@ class App:
     try:
       from core.wishlist import save_wishlist
       from core.discogs_api import fetch_discogs_wantlist
-      token = self.v_token.get().strip()
-      if token:
+      _, headers, session, _ = self._get_user_info(cfg)
+      if session or self.v_token.get().strip():
         self._log("Updating wishlist from Discogs…")
-        wantlist = fetch_discogs_wantlist(token)
+        wantlist = fetch_discogs_wantlist(token=self.v_token.get().strip() or None, session=session)
         save_wishlist(wantlist)
         self._log(f"Wishlist updated from Discogs. {len(wantlist)} items.")
         # Refresh wishlist tab if function is available
