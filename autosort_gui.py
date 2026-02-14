@@ -2167,13 +2167,30 @@ class App:
     self._signout_btn.pack(side="left")
     ToolTip(self._signout_btn, "Clear saved sign-in and use token instead")
     self._update_auth_buttons_state()
-    ctk.CTkLabel(auth_section, text="Or enter token", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
-    token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
-    token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
-    token_row.columnconfigure(0, weight=1)
-    self.token_entry = make_entry(token_row, self.v_token, width=200, show="•")
+
+    # Collapsible "Advanced: use Personal Access Token" section
+    self._token_section_collapsed = True  # Start collapsed; OAuth is primary
+    self._token_toggle_btn = ctk.CTkButton(
+      auth_section,
+      text="Advanced: use Personal Access Token  ▶",
+      font=(FONT_SEGOE_UI, FONT_SM),
+      fg_color="transparent",
+      hover_color=self._colors.get("panel2", self._colors["border"]),
+      text_color=self._colors["muted"],
+      anchor="w",
+      height=28,
+      corner_radius=6,
+      command=self._toggle_token_section,
+    )
+    self._token_toggle_btn.grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
+    ToolTip(self._token_toggle_btn, "Alternative to OAuth. Paste a token from Discogs → Settings → Developers")
+    self._token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
+    self._token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+    self._token_row.columnconfigure(0, weight=1)
+    self.token_entry = make_entry(self._token_row, self.v_token, width=200, show="•")
     self.token_entry.grid(row=0, column=0, sticky="ew")
-    ctk.CTkCheckBox(token_row, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility, width=80, corner_radius=6).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    ctk.CTkCheckBox(self._token_row, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility, width=80, corner_radius=6).grid(row=0, column=1, sticky="w", padx=(12, 0))
+    self._token_row.grid_remove()  # Start collapsed
 
     # === OUTPUT SETTINGS ===
     output_section = make_section("Output Settings", "📁")
@@ -3561,6 +3578,16 @@ class App:
     self._log("Signed out. Records cleared. Enter a token or sign in again.")
     messagebox.showinfo("Signed out", "Cleared saved sign-in and collection view. Enter a token or sign in again.")
 
+  def _toggle_token_section(self) -> None:
+    """Expand or collapse the 'Advanced: use Personal Access Token' section."""
+    self._token_section_collapsed = not self._token_section_collapsed
+    if self._token_section_collapsed:
+      self._token_row.grid_remove()
+      self._token_toggle_btn.configure(text="Advanced: use Personal Access Token  ▶")
+    else:
+      self._token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+      self._token_toggle_btn.configure(text="Advanced: use Personal Access Token  ▼")
+
   def _toggle_token_visibility(self) -> None:
     try:
       self.token_entry.configure(show="" if self.v_show_token.get() else "•")
@@ -3728,6 +3755,12 @@ class App:
         self._move_down_btn.configure(
           fg_color="#4a5568" if self.v_dark_mode.get() else "#64748b",
           hover_color="#2d3748" if self.v_dark_mode.get() else "#475569"
+        )
+      # Token section toggle (auth)
+      if hasattr(self, '_token_toggle_btn'):
+        self._token_toggle_btn.configure(
+          text_color=self._colors["muted"],
+          hover_color=self._colors.get("panel2", self._colors["border"]),
         )
       # Wishlist toolbar widgets
       if hasattr(self, '_wishlist_check_btn'):
