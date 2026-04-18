@@ -1,21 +1,21 @@
 """
 Bundled Discogs OAuth consumer key and secret (optional).
 
-Discogs requires a registered application for OAuth. If you ship this app to end
-users who should only click "Sign in" (no .env), register one application at
-https://www.discogs.com/settings/developers with callback URL:
+For a public GitHub repo: leave BUNDLED_* empty and use a local .env (gitignored)
+with DISCOGS_CONSUMER_KEY / DISCOGS_CONSUMER_SECRET, or core/discogs_oauth_secrets.py
+(copy from discogs_oauth_secrets.example.py; that file is gitignored). Do not commit
+real keys in this file.
+
+If you distribute a private build or installer where embedding keys is acceptable,
+register one app at https://www.discogs.com/settings/developers with callback:
 
     http://127.0.0.1:8765/callback
 
-Then paste the Consumer Key and Consumer Secret below. One registration serves
-all users of your build.
-
-DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in the environment still
-override these when both are set (for developers).
+Environment variables still override these when both are set.
 """
 
 from __future__ import annotations
 
-# Leave empty to rely on environment variables only; fill for zero-config sign-in.
+# Safe default for GitHub: empty; OAuth uses .env or discogs_oauth_secrets.py locally.
 BUNDLED_DISCOGS_CONSUMER_KEY: str = ""
 BUNDLED_DISCOGS_CONSUMER_SECRET: str = ""
