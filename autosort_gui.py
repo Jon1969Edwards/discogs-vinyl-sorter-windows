@@ -35,6 +35,14 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
+# Load .env from project folder before discogs_app / OAuth (cwd may differ e.g. IDE, shortcuts)
+try:
+  from dotenv import load_dotenv  # type: ignore
+
+  load_dotenv(Path(__file__).resolve().parent / ".env")
+except Exception:
+  pass
+
 # Use CustomTkinter for modern UI
 import customtkinter as ctk
 from tkinter import StringVar, BooleanVar, IntVar, filedialog, messagebox, Tk

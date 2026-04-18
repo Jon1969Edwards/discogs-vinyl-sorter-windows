@@ -63,10 +63,11 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Load .env if available
+# Load .env from project root (this file's directory), not only the process cwd
 try:
     from dotenv import load_dotenv  # type: ignore
-    load_dotenv()
+
+    load_dotenv(Path(__file__).resolve().parent / ".env")
 except Exception:
     pass
 

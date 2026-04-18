@@ -13,8 +13,21 @@ import os
 import threading
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
 from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlparse
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _ensure_dotenv_loaded() -> None:
+    """Load .env from project root so DISCOGS_* work even when cwd is not the project folder."""
+    try:
+        from dotenv import load_dotenv  # type: ignore
+
+        load_dotenv(_PROJECT_ROOT / ".env")
+    except Exception:
+        pass
 
 try:
     from requests_oauthlib import OAuth1Session
@@ -31,6 +44,7 @@ CALLBACK_PATH = "/callback"
 
 def _get_consumer_credentials(config: Optional[dict] = None) -> Optional[Tuple[str, str]]:
     """Get consumer key and secret from config, environment, or bundled app defaults."""
+    _ensure_dotenv_loaded()
     key = None
     secret = None
     if config:
