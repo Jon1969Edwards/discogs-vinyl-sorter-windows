@@ -13,14 +13,9 @@ Double-click **SETUP.bat** to:
 
 ### 2. Run the GUI
 
-**Option A: Discogs Collection GUI** (Main Interface)
-- Double-click **LaunchDiscogsGUI.bat**
-- Enter your Discogs token and preferences
-- Click "Fetch & Sort" to generate your shelf order
+Double-click **LaunchAutoSortGUI.bat** to open the Auto-Sort GUI (recommended). It can watch your collection, use browser sign-in (OAuth), and export shelf order. You can also run `.venv\Scripts\python autosort_gui.py`.
 
-**Option B: Auto-Sort GUI** (Background Monitoring)
-- Double-click **LaunchAutoSortGUI.bat**
-- Monitors your collection and auto-regenerates shelf order when it changes
+For a one-shot fetch without the Auto-Sort window, use the command line (see below) or run `python discogs_app.py` with your token.
 
 ### 3. Command Line Usage
 
@@ -98,13 +93,12 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 ## Files Included
 
 - `discogs_app.py` - Main CLI application
-- `gui_app.py` - Tkinter GUI wrapper
-- `autosort_gui.py` - Auto-monitoring GUI
+- `gui_app.py` - Optional legacy Tkinter GUI (run with `python gui_app.py` if needed)
+- `autosort_gui.py` - Auto-Sort GUI (recommended)
 - `demo_sort_preview.py` - Preview sorting behavior
 - `test_sorting.py` - Unit tests
 - `requirements.txt` - Python dependencies
-- `LaunchDiscogsGUI.bat` - Windows launcher for main GUI
-- `LaunchAutoSortGUI.bat` - Windows launcher for auto-sort GUI
+- `LaunchAutoSortGUI.bat` - Windows launcher for the Auto-Sort GUI
 - `SETUP.bat` - Windows setup script
 - `README.md` - Full documentation (cross-platform)
 

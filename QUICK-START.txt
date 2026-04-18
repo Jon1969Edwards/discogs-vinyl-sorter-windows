@@ -23,21 +23,10 @@ STEP 2: GET YOUR DISCOGS TOKEN
 STEP 3: RUN THE APP
 -------------------
 
-OPTION A - Main GUI (Recommended):
-  → Double-click: LaunchDiscogsGUI.bat
-  
-  Then:
-  1. Paste your Discogs token
-  2. Adjust settings if needed
-  3. Click "Fetch & Sort"
-  4. Wait for processing
-  5. Files saved to output directory!
-
-OPTION B - Auto-Sort GUI (Advanced):
   → Double-click: LaunchAutoSortGUI.bat
-  
-  This monitors your collection and automatically
-  regenerates your shelf order when it changes.
+
+  The Auto-Sort GUI can sign in with Discogs (OAuth) or use a token,
+  refresh your shelf order, and optionally watch your collection for changes.
 
 OUTPUT FILES
 ------------

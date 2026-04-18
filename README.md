@@ -46,25 +46,15 @@ Outputs:
 - `vinyl_shelf_order.txt` — printable shelf order
 - `vinyl_shelf_order.csv` — spreadsheet-friendly
 
-### Optional GUI
+### Optional: legacy Tkinter GUI
 
-Prefer a window instead of CLI? Launch the Tkinter GUI (no extra dependencies):
+A simpler one-shot Tk window is still available (standard Tkinter, no CustomTkinter):
 
 ```bash
 ./.venv/bin/python gui_app.py
 ```
 
-Features: set per-page / max-pages, enable last-name-first (with band-safe), dividers, alignment, JSON export, and view a live log. "Open Output" opens the target directory. Leave the token blank if `DISCOGS_TOKEN` is already set (env or `.env`).
-
-GUI prerequisites:
-- Your Python must include Tk support. On macOS, the python.org installer ships with Tk. Homebrew Python often lacks it by default.
-- Quick check:
-  ```bash
-  python - <<'PY'
-  import _tkinter; print('Tk linked OK')
-  PY
-  ```
-- If it fails, either install Python from python.org and recreate the venv using that interpreter, or install `tcl-tk` via Homebrew and recreate your environment.
+Prefer the Auto-Sort GUI below unless you want that minimal flow.
 
 ### Auto-Sort GUI (Recommended)
 

@@ -61,8 +61,7 @@ echo Setup complete!
 echo ==================================================
 echo.
 echo You can now run:
-echo   - LaunchDiscogsGUI.bat (main GUI)
-echo   - LaunchAutoSortGUI.bat (auto-sort GUI)
+echo   - LaunchAutoSortGUI.bat (Auto-Sort GUI)
 echo.
 echo Or use the command line:
 echo   .venv\Scripts\python discogs_app.py --help
