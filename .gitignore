@@ -14,6 +14,8 @@ __pycache__/
 .env
 env/
 venv/
+# Discogs OAuth consumer key/secret (copy from discogs_oauth_secrets.example.py)
+core/discogs_oauth_secrets.py
 
 # App config and cache (contains user token)
 .discogs_config.json

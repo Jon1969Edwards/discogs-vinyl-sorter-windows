@@ -24,14 +24,16 @@ To enable one-click sign-in for everyone **without** asking users to create a `.
    - **Callback URL:** `http://127.0.0.1:8765/callback`
 4. Create the application and copy the **Consumer Key** and **Consumer Secret**.
 
-5. **Recommended (end-user friendly):** Paste those values into `core/discogs_oauth_app.py`:
+5. **Recommended (keeps secrets out of Git):** Copy `core/discogs_oauth_secrets.example.py` to **`core/discogs_oauth_secrets.py`** (that filename is **gitignored**) and set:
 
 ```python
 BUNDLED_DISCOGS_CONSUMER_KEY = "your_consumer_key_here"
 BUNDLED_DISCOGS_CONSUMER_SECRET = "your_consumer_secret_here"
 ```
 
-Redistribute your build. All users can use **Sign in with Discogs** with no extra configuration.
+Commit only the `.example` file; never commit `discogs_oauth_secrets.py`. Redistribute your build with that file included for one-click **Sign in with Discogs**.
+
+If consumer credentials were ever committed or shared publicly, **regenerate the Consumer Secret** on Discogs (or create a new application) and update your local `discogs_oauth_secrets.py`.
 
 **Alternative (developers / CI):** Set environment variables or a `.env` file instead; they override the bundled values when both `DISCOGS_CONSUMER_KEY` and `DISCOGS_CONSUMER_SECRET` are set:
 
