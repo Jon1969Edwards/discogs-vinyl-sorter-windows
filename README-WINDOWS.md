@@ -17,6 +17,16 @@ Double-click **LaunchAutoSortGUI.bat** to open the Auto-Sort GUI (recommended). 
 
 For a one-shot fetch without the Auto-Sort window, use the command line (see below) or run `python discogs_app.py` with your token.
 
+### Optional: build a real Windows app (`.exe`)
+
+To get a normal program you can pin to the taskbar or Start menu (no `.bat`):
+
+1. Run **SETUP.bat** once so `.venv` exists.
+2. Double-click **BUILD_WINDOWS_EXE.bat** (installs PyInstaller if needed, then builds).
+3. Run **`dist\DiscogsVinylSorter\DiscogsVinylSorter.exe`**.
+
+Put your **`.env`** file in **the same folder as** `DiscogsVinylSorter.exe` if you use one (OAuth consumer key/secret, token, etc.). Config and cache files from the app are stored next to that `.exe` as well.
+
 ### 3. Command Line Usage
 
 ```batch
@@ -99,6 +109,7 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 - `test_sorting.py` - Unit tests
 - `requirements.txt` - Python dependencies
 - `LaunchAutoSortGUI.bat` - Windows launcher for the Auto-Sort GUI
+- `BUILD_WINDOWS_EXE.bat` - Optional: build `DiscogsVinylSorter.exe` (PyInstaller)
 - `SETUP.bat` - Windows setup script
 - `README.md` - Full documentation (cross-platform)
 

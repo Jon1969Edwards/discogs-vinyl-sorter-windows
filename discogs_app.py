@@ -63,11 +63,13 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Load .env from project root (this file's directory), not only the process cwd
+# Load .env from project root (works when cwd differs; same folder as .exe when frozen)
 try:
     from dotenv import load_dotenv  # type: ignore
 
-    load_dotenv(Path(__file__).resolve().parent / ".env")
+    from core.paths import project_root
+
+    load_dotenv(project_root() / ".env")
 except Exception:
     pass
 

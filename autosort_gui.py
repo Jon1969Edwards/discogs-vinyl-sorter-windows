@@ -35,11 +35,13 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.paths import project_root
+
 # Load .env from project folder before discogs_app / OAuth (cwd may differ e.g. IDE, shortcuts)
 try:
   from dotenv import load_dotenv  # type: ignore
 
-  load_dotenv(Path(__file__).resolve().parent / ".env")
+  load_dotenv(project_root() / ".env")
 except Exception:
   pass
 
@@ -59,7 +61,7 @@ DEFAULT_USER_AGENT = "Mozilla/5.0"
 
 
 POLL_SECONDS_DEFAULT = 300  # 5 minutes
-CONFIG_FILE = Path(__file__).parent / ".discogs_config.json"
+CONFIG_FILE = project_root() / ".discogs_config.json"
 # Simple key for obfuscation (not meant to be cryptographically secure, just prevents casual viewing)
 _OBFUSCATE_KEY = b"DiscogsVinylSorter2026"
 
@@ -136,7 +138,7 @@ def save_config(config: dict) -> None:
 
 
 # Collection cache file
-CACHE_FILE = Path(__file__).parent / ".discogs_collection_cache.json"
+CACHE_FILE = project_root() / ".discogs_collection_cache.json"
 PRICE_CACHE_MAX_AGE_SECONDS = 86400 * 7  # 7 days before prices are considered stale
 
 
@@ -299,7 +301,7 @@ class CollectionCache:
 
 
 # Manual order persistence file
-MANUAL_ORDER_FILE = Path(__file__).parent / ".discogs_manual_order.json"
+MANUAL_ORDER_FILE = project_root() / ".discogs_manual_order.json"
 
 
 class ManualOrderManager:
@@ -420,7 +422,7 @@ class ManualOrderManager:
 
 
 # Thumbnail cache directory
-THUMBNAIL_CACHE_DIR = Path(__file__).parent / ".discogs_thumbnails"
+THUMBNAIL_CACHE_DIR = project_root() / ".discogs_thumbnails"
 
 
 from typing import TYPE_CHECKING

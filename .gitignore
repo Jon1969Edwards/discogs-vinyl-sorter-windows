@@ -9,6 +9,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# PyInstaller
+build/
+dist/
+*.spec
+
 # Virtual env + secrets
 .venv/
 .env

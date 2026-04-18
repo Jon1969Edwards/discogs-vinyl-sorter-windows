@@ -13,11 +13,10 @@ import os
 import threading
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from pathlib import Path
 from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from core.paths import project_root
 
 
 def _ensure_dotenv_loaded() -> None:
@@ -25,7 +24,7 @@ def _ensure_dotenv_loaded() -> None:
     try:
         from dotenv import load_dotenv  # type: ignore
 
-        load_dotenv(_PROJECT_ROOT / ".env")
+        load_dotenv(project_root() / ".env")
     except Exception:
         pass
 
