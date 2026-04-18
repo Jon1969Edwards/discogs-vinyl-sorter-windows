@@ -2,7 +2,8 @@
 Discogs OAuth 1.0a flow for user sign-in.
 
 Runs the 3-legged OAuth flow with a local callback server.
-Consumer key/secret from DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET (env or .env).
+Consumer key/secret: DISCOGS_CONSUMER_KEY / DISCOGS_CONSUMER_SECRET (env or .env),
+or bundled defaults in core.discogs_oauth_app (optional, for end-user-friendly builds).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ CALLBACK_PATH = "/callback"
 
 
 def _get_consumer_credentials(config: Optional[dict] = None) -> Optional[Tuple[str, str]]:
-    """Get consumer key and secret from config or environment."""
+    """Get consumer key and secret from config, environment, or bundled app defaults."""
     key = None
     secret = None
     if config:
@@ -40,6 +41,18 @@ def _get_consumer_credentials(config: Optional[dict] = None) -> Optional[Tuple[s
         secret = os.environ.get("DISCOGS_CONSUMER_SECRET")
     if key and secret:
         return (key.strip(), secret.strip())
+    try:
+        from core.discogs_oauth_app import (
+            BUNDLED_DISCOGS_CONSUMER_KEY,
+            BUNDLED_DISCOGS_CONSUMER_SECRET,
+        )
+
+        bk = (BUNDLED_DISCOGS_CONSUMER_KEY or "").strip()
+        bs = (BUNDLED_DISCOGS_CONSUMER_SECRET or "").strip()
+        if bk and bs:
+            return (bk, bs)
+    except ImportError:
+        pass
     return None
 
 

@@ -25,10 +25,10 @@ There are two ways to authenticate with Discogs:
 | Method | Use case | Variables |
 |--------|----------|-----------|
 | **Personal Access Token (PAT)** | CLI, simple GUI, Auto-Sort GUI | `DISCOGS_TOKEN` |
-| **OAuth** | Auto-Sort GUI “Sign in” (browser flow) | `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET` |
+| **OAuth** | Auto-Sort GUI “Sign in” (browser flow) | `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET` (or bundled in `core/discogs_oauth_app.py`) |
 
 - **PAT**: Discogs → Settings → Developers → Personal Access Tokens → Generate. Set `DISCOGS_TOKEN` or pass `--token <your_token>` to the CLI.
-- **OAuth**: Create an app at Discogs → Settings → Developers → Create Application. Put the key/secret in `.env`; the Auto-Sort GUI uses them for the “Sign in with OAuth” flow.
+- **OAuth**: Create an app at Discogs → Settings → Developers → Create Application (callback `http://127.0.0.1:8765/callback`). Put the consumer key/secret in `.env`, **or** ship them in `core/discogs_oauth_app.py` so end users only click “Sign in” (see `OAUTH_SETUP.md`).
 - You can use one or both. Copy `.env.example` to `.env` and fill in your values.
 
 Provide your token either via environment variable or CLI flag:

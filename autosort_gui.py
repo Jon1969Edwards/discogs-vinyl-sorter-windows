@@ -2153,7 +2153,10 @@ class App:
       hover_color=self._colors["button_hover"],
     )
     self._signin_btn.pack(side="left", padx=(0, 8))
-    ToolTip(self._signin_btn, "Sign in via Discogs OAuth (opens browser). Requires consumer key/secret in .env")
+    ToolTip(
+      self._signin_btn,
+      "Opens Discogs in your browser. Approve access once—you won’t paste a token.",
+    )
     self._signout_btn = ctk.CTkButton(
       auth_btns,
       text="Sign out",
@@ -2183,7 +2186,10 @@ class App:
       command=self._toggle_token_section,
     )
     self._token_toggle_btn.grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
-    ToolTip(self._token_toggle_btn, "Alternative to OAuth. Paste a token from Discogs → Settings → Developers")
+    ToolTip(
+      self._token_toggle_btn,
+      "Optional: paste a Personal Access Token instead of browser sign-in (Discogs → Developers).",
+    )
     self._token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
     self._token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
     self._token_row.columnconfigure(0, weight=1)
@@ -3518,17 +3524,19 @@ class App:
     self._signout_btn.configure(state="normal" if signed_in else "disabled")
 
   def _do_oauth_signin(self) -> None:
-    """Run OAuth flow and save tokens. Requires DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in .env"""
+    """Run OAuth flow and save tokens. Uses bundled app credentials or DISCOGS_CONSUMER_* env."""
     from core.oauth_discogs import run_oauth_flow, _get_consumer_credentials
     creds = _get_consumer_credentials(None)
     if not creds:
       messagebox.showerror(
         "OAuth Setup",
-        "Sign-in requires consumer credentials.\n\n"
-        "Add to your .env file:\n"
-        "DISCOGS_CONSUMER_KEY=your_key\n"
-        "DISCOGS_CONSUMER_SECRET=your_secret\n\n"
-        "Get these from discogs.com/settings/developers after creating an app."
+        "Sign-in isn’t available in this build: no OAuth app is configured.\n\n"
+        "• Easiest: expand “Advanced” below and paste a Personal Access Token "
+        "(Discogs → Settings → Developers).\n\n"
+        "• If you ship this app: register one Discogs application and add the "
+        "Consumer Key and Secret to core/discogs_oauth_app.py, or set "
+        "DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in a .env file.\n\n"
+        "See OAUTH_SETUP.md (callback URL: http://127.0.0.1:8765/callback)."
       )
       return
     try:
