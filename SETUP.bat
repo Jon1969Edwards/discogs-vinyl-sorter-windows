@@ -30,11 +30,31 @@ echo Using Python: %PYTHON_BIN%
 %PYTHON_BIN% --version
 echo.
 
-REM Create virtual environment
+REM Create virtual environment (remove stale .venv first — fixes Errno 13 / Permission denied)
+if exist ".venv" (
+    echo Removing existing .venv folder ^(clean recreate^)...
+    rmdir /s /q ".venv" 2>nul
+    if exist ".venv" (
+        echo.
+        echo ERROR: Cannot delete .venv — something still has files open.
+        echo   1. Close this project in Cursor/VS Code, and any terminals running Python here.
+        echo   2. End Task Manager - any "python.exe" from this folder.
+        echo   3. If the project is under OneDrive, pause sync or move the folder out of Desktop.
+        echo   4. Manually delete the folder: %CD%\.venv
+        echo   5. Run SETUP.bat again.
+        echo.
+        pause
+        exit /b 1
+    )
+)
+
 echo Creating virtual environment...
 %PYTHON_BIN% -m venv .venv
 if %ERRORLEVEL% neq 0 (
-    echo ERROR: Failed to create virtual environment
+    echo.
+    echo ERROR: Failed to create virtual environment.
+    echo If you see permission errors: close all terminals/IDE using this folder, delete the
+    echo .venv folder yourself, temporarily pause antivirus for this folder, then retry.
     echo.
     pause
     exit /b 1
