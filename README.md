@@ -194,6 +194,7 @@ python discogs_app.py --per-page 50
 - `/oauth/identity` is used to infer your username from the token before paging folder `0`.
 - LP detection defaults to permissive: any Vinyl format with `LP` or `Album` counts (RPM optional). Use `--lp-strict` to require a `33 RPM` description.
 - Sorting removes leading articles (The/A/An plus extras you provide) and strips Discogs numeric suffixes like `(2)`.
+- For shelf order, **`Name and the …`** / **`Name & the …`** (e.g. Elvis Costello and the Attractions) is grouped with **solo `Name`**; release lines still show Discogs’ full artist credits.
 - `--debug-stats` helps diagnose filtering by showing how many releases passed each stage.
 - The app retries transient API errors (HTTP 429/5xx) a few times with short backoff and honors `Retry-After` when provided.
 - Be mindful of Discogs API rate limits; the script sleeps briefly when remaining calls are low.

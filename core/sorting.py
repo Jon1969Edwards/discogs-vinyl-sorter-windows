@@ -108,10 +108,28 @@ def is_cd_format(basic: Dict) -> bool:
 
 TRAILING_NUMERIC_RE = re.compile(r"\s*\((\d+)\)$")
 
+# "Elvis Costello and the Attractions" → sort with "Elvis Costello" (display unchanged).
+# Requires whitespace before "and"/"&", then "the", then the rest of the band name.
+_LEAD_AND_THE_BAND_RE = re.compile(
+  r"^(?P<lead>.+?)\s+(?:and|&)\s+the\s+.+$",
+  re.IGNORECASE,
+)
+
 
 def strip_discogs_numeric_suffix(name: str) -> str:
   # Remove trailing " (2)" etc.
   return TRAILING_NUMERIC_RE.sub("", name or "").strip()
+
+
+def consolidate_lead_artist_for_sort(artist_clean: str) -> str:
+  """Map 'Name and the …' / 'Name & the …' to leading Name for shelf order only."""
+  s = (artist_clean or "").strip()
+  if not s:
+    return s
+  m = _LEAD_AND_THE_BAND_RE.match(s)
+  if m:
+    return (m.group("lead") or "").strip()
+  return s
 
 
 def normalize_apostrophes(s: str) -> str:
@@ -197,7 +215,14 @@ def flip_three_word(tokens: list[str]) -> Optional[str]:
     return f"{last}, {first} {middle}".lower()
   return None
 
-def _last_name_first_key(artist_clean: str, allow_3: bool, exclude_set: Set[str], safe_bands: bool = False) -> Optional[str]:
+def _last_name_first_key(
+  artist_clean: str,
+  allow_3: bool,
+  exclude_set: Set[str],
+  safe_bands: bool = False,
+  *,
+  exclude_also_match: Optional[str] = None,
+) -> Optional[str]:
   """Last-name-first heuristic with options:
   - Only flips two-word personal names by default.
   - Optionally flips certain three-word names when middle token is an initial or known particle.
@@ -205,6 +230,8 @@ def _last_name_first_key(artist_clean: str, allow_3: bool, exclude_set: Set[str]
   """
   norm = _normalize_exclude_name(artist_clean)
   if norm in exclude_set:
+    return None
+  if exclude_also_match and _normalize_exclude_name(exclude_also_match) in exclude_set:
     return None
   # Split on '/' or ',' to handle multi-artist strings, use first artist for sorting
   first_artist = re.split(r"[/,]", artist_clean)[0].strip()
@@ -249,9 +276,16 @@ def make_sort_keys(
   # For sorting, use only the first artist (before '/' or ',')
   artist_first = artist_display.split('/')[0].split(',')[0].strip()
   artist_clean = strip_discogs_numeric_suffix(artist_first).strip()
-  sort_artist_base = strip_articles(artist_clean).lower()
+  artist_for_sort = consolidate_lead_artist_for_sort(artist_clean)
+  sort_artist_base = strip_articles(artist_for_sort).lower()
   if last_name_first:
-    flipped = _last_name_first_key(artist_clean, allow_3=lnf_allow_3, exclude_set=(lnf_exclude or set()), safe_bands=lnf_safe_bands)
+    flipped = _last_name_first_key(
+      artist_for_sort,
+      allow_3=lnf_allow_3,
+      exclude_set=(lnf_exclude or set()),
+      safe_bands=lnf_safe_bands,
+      exclude_also_match=artist_clean if artist_for_sort != artist_clean else None,
+    )
     if flipped:
       sort_artist_base = flipped
   return (sort_artist_base, strip_articles(title).lower())

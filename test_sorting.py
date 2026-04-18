@@ -74,7 +74,19 @@ def main():
     big_star_safe = sort_key("Big Star", lnf=True, safe=True)
     assert_eq(big_star_safe, "big star", "Band-safe: 'Big Star' should remain literal under safe-bands")
 
-    # 10) Various Artists policy: when policy is 'title', a Various item should sort by title
+    # 10) "Name and the Band" sorts with solo "Name" (e.g. Elvis Costello vs Elvis Costello and the Attractions)
+    elvis_solo = sort_key("Elvis Costello", lnf=False, safe=True)
+    elvis_band = sort_key("Elvis Costello and the Attractions", lnf=False, safe=True)
+    assert_eq(elvis_solo, elvis_band, "Solo artist should sort same as 'Name and the …' credit")
+    elvis_amp = sort_key("Elvis Costello & The Attractions", lnf=False, safe=True)
+    assert_eq(elvis_solo, elvis_amp, "& variant should match solo sort key")
+
+    # 10b) Same with last-name-first
+    elvis_solo_lnf = sort_key("Elvis Costello", lnf=True, safe=True)
+    elvis_band_lnf = sort_key("Elvis Costello and the Attractions", lnf=True, safe=True)
+    assert_eq(elvis_solo_lnf, elvis_band_lnf, "LNF: band credit should match solo credit")
+
+    # 12) Various Artists policy: when policy is 'title', a Various item should sort by title
     r1 = ReleaseRow(artist_display="Various Artists", title="Zebra Songs", year=2000, label="", catno="", country="", format_str="", discogs_url="", notes="", release_id=None)
     r1.sort_artist, r1.sort_title = app.make_sort_keys(r1.artist_display, r1.title, extra_articles=[], last_name_first=True, lnf_allow_3=False, lnf_exclude=set(), lnf_safe_bands=True)
     r2 = ReleaseRow(artist_display="Various Artists", title="Alpha Tunes", year=1999, label="", catno="", country="", format_str="", discogs_url="", notes="", release_id=None)
