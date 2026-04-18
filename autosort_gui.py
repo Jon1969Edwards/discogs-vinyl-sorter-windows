@@ -3533,9 +3533,9 @@ class App:
         "Sign-in isn’t available in this build: no OAuth app is configured.\n\n"
         "• Easiest: expand “Advanced” below and paste a Personal Access Token "
         "(Discogs → Settings → Developers).\n\n"
-        "• If you ship this app: register one Discogs application and add the "
-        "Consumer Key and Secret to core/discogs_oauth_secrets.py (see the .example file), or set "
-        "DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in a .env file.\n\n"
+        "• Add Consumer Key and Secret to core/discogs_oauth_secrets.py "
+        "(copy from discogs_oauth_secrets.example.py), or to core/discogs_oauth_app.py, "
+        "or set DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in a .env file.\n\n"
         "See OAUTH_SETUP.md (callback URL: http://127.0.0.1:8765/callback)."
       )
       return
