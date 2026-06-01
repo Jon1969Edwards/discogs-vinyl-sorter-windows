@@ -25,6 +25,8 @@ core/discogs_oauth_secrets.py
 # App config and cache (contains user token)
 .discogs_config.json
 .discogs_collection_cache.json
+# Downloaded album-art thumbnail cache (per-user, regenerated on demand)
+.discogs_thumbnails/
 
 # Generated outputs (Discogs sorter)
 vinyl_shelf_order.txt
