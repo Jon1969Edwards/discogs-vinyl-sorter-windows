@@ -213,6 +213,22 @@ def build_artist_display(basic: Dict) -> str:
 # Last-name-first heuristics
 # ============================================================================
 
+# Given names that justify flipping "First Last" → "last, first" under LNF.
+COMMON_FIRST_NAMES = {
+  "john", "james", "michael", "robert", "david", "william", "richard", "thomas", "charles", "joseph",
+  "christopher", "daniel", "paul", "mark", "donald", "george", "kenneth", "steven", "edward", "brian",
+  "ronald", "anthony", "kevin", "jason", "matthew", "gary", "timothy", "jose", "larry", "jeffrey",
+  "frank", "scott", "eric", "stephen", "andrew", "raymond", "gregory", "joshua", "jerry", "dennis",
+  "walter", "patrick", "peter", "harold", "douglas", "henry", "carl", "arthur", "ryan", "roger",
+  "joe", "juan", "jack", "albert", "jonathan", "justin", "terry", "gerald", "keith", "samuel", "willie",
+  "ralph", "lawrence", "nicholas", "roy", "benjamin", "bruce", "brandon", "adam", "harry", "fred", "wayne",
+  "billy", "steve", "louis", "jeremy", "aaron", "randy", "howard", "eugene", "carlos", "russell", "bobby",
+  "victor", "martin", "ernest", "phillip", "todd", "jesse", "craig", "alan", "shawn", "clarence", "sean",
+  "philip", "chris", "johnny", "earl", "jimmy", "antonio", "danny", "bryan", "tony", "luis", "miles",
+  "neil", "nick", "lou", "chuck", "ian", "alex", "noel", "leonard", "elvis", "thelonious", "jean-michel",
+}
+
+
 def is_band_like(first: str, last: str) -> bool:
   band_adjectives = {
     "big", "small", "little",
@@ -224,29 +240,21 @@ def is_band_like(first: str, last: str) -> bool:
   band_terms = {
     "band", "trio", "quartet", "quintet", "sextet", "septet", "octet", "nonet",
     "orchestra", "ensemble", "choir", "chorale", "collective", "project", "group",
-    "crew", "players", "brothers", "sisters", "family", "experience"
-  }
-  common_first_names = {
-    "john","james","michael","robert","david","william","richard","thomas","charles","joseph",
-    "christopher","daniel","paul","mark","donald","george","kenneth","steven","edward","brian",
-    "ronald","anthony","kevin","jason","matthew","gary","timothy","jose","larry","jeffrey",
-    "frank","scott","eric","stephen","andrew","raymond","gregory","joshua","jerry","dennis",
-    "walter","patrick","peter","harold","douglas","henry","carl","arthur","ryan","roger",
-    "joe","juan","jack","albert","jonathan","justin","terry","gerald","keith","samuel","willie",
-    "ralph","lawrence","nicholas","roy","benjamin","bruce","brandon","adam","harry","fred","wayne",
-    "billy","steve","louis","jeremy","aaron","randy","howard","eugene","carlos","russell","bobby",
-    "victor","martin","ernest","phillip","todd","jesse","craig","alan","shawn","clarence","sean",
-    "philip","chris","johnny","earl","jimmy","antonio","danny","bryan","tony","luis","miles","bruce",
-    "neil","nick","lou","chuck","ian","alex","noel","bobby","billy"
+    "crew", "players", "brothers", "sisters", "family", "experience", "front",
   }
   first_low, last_low = first.lower(), last.lower()
   if last_low in band_terms:
     return True
-  if last_low.endswith('s') and first_low not in common_first_names:
+  if last_low.endswith("s") and first_low not in COMMON_FIRST_NAMES:
     return True
-  if first_low in band_adjectives and last_low not in common_first_names:
+  if first_low in band_adjectives and last_low not in COMMON_FIRST_NAMES:
     return True
   return False
+
+
+def looks_like_personal_name_two_word(first: str, last: str) -> bool:
+  """True when a two-token artist is plausibly 'First Last' (solo), not a band name."""
+  return first.lower() in COMMON_FIRST_NAMES
 
 def is_valid_two_word(tokens: list[str]) -> bool:
   if not all(re.match(r"[A-Za-z'\-]+$", t) for t in tokens):
@@ -287,8 +295,12 @@ def _last_name_first_key(
   first_artist = re.split(r"[/,]", artist_clean)[0].strip()
   tokens = [t for t in re.split(r"\s+", first_artist) if t]
   if len(tokens) == 2:
-    if safe_bands and is_band_like(tokens[0], tokens[1]):
-      return None
+    if safe_bands:
+      if is_band_like(tokens[0], tokens[1]):
+        return None
+      # e.g. Agnostic Front, Arctic Monkeys — first token is not a given name
+      if not looks_like_personal_name_two_word(tokens[0], tokens[1]):
+        return None
     if not is_valid_two_word(tokens):
       return None
     return f"{tokens[1]}, {tokens[0]}".lower()

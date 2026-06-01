@@ -74,6 +74,10 @@ def main():
     big_star_safe = sort_key("Big Star", lnf=True, safe=True)
     assert_eq(big_star_safe, "big star", "Band-safe: 'Big Star' should remain literal under safe-bands")
 
+    # 9c) Two-word band with non-name first token: Agnostic Front stays under A
+    agnostic_safe = sort_key("Agnostic Front", lnf=True, safe=True)
+    assert_eq(agnostic_safe, "agnostic front", "Band-safe: 'Agnostic Front' should not flip to 'front, agnostic'")
+
     # 10) "Name and the Band" sorts with solo "Name" (e.g. Elvis Costello vs Elvis Costello and the Attractions)
     elvis_solo = sort_key("Elvis Costello", lnf=False, safe=True)
     elvis_band = sort_key("Elvis Costello and the Attractions", lnf=False, safe=True)
