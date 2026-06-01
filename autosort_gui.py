@@ -61,6 +61,21 @@ DEFAULT_USER_AGENT = "Mozilla/5.0"
 
 
 POLL_SECONDS_DEFAULT = 300  # 5 minutes
+
+# Format filter options shown as checkboxes. Keys map to ReleaseRow.format_categories
+# (except "everything", which means "no category restriction"). Order = display order.
+FORMAT_FILTERS = [
+  ("everything", "Everything"),
+  ("vinyl", "All Vinyl"),
+  ("lp", "Vinyl LP"),
+  ("vinyl45", "Vinyl 45s"),
+  ("cd", "CD"),
+  ("cassette", "Cassette"),
+  ("boxset", "Box Set"),
+]
+# Selected by default to preserve the previous LP-only view.
+DEFAULT_FORMAT_SELECTION = ["lp"]
+
 CONFIG_FILE = project_root() / ".discogs_config.json"
 # Simple key for obfuscation (not meant to be cryptographically secure, just prevents casual viewing)
 _OBFUSCATE_KEY = b"DiscogsVinylSorter2026"
@@ -1219,8 +1234,8 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
     try:
       rows = _collect_rows(cfg, headers, session, username)
       if not rows:
-        log("No matching LPs found.")
-        report("error", "No matching LPs found.")
+        log("No matching items found.")
+        report("error", "No matching items found.")
         return []
       return rows
     except Exception as e:
@@ -1295,21 +1310,17 @@ def _get_user_headers(cfg: AutoConfig, log: callable):
     return token, headers, None, username
 
 def _collect_rows(cfg: AutoConfig, headers: dict | None, session, username: str):
-    return core.collect_lp_rows(
+    return core.collect_all_rows(
         headers=headers,
         username=username,
         session=session,
         per_page=max(1, min(int(cfg.per_page), 100)),
         max_pages=None,
         extra_articles=[],
-        lp_strict=False,
-        lp_probable=False,
-        debug_stats=None,
         last_name_first=True,
         lnf_allow_3=False,
         lnf_exclude=set(),
         lnf_safe_bands=True,
-        collect_exclusions=False,
     )
 
 def _handle_prices(cfg, log, progress_callback, cache, headers, session, rows, main_progress_q=None):
@@ -1523,6 +1534,14 @@ class App:
     self.v_show_prices = BooleanVar(value=False)
     self.v_currency = StringVar(value=saved_cfg.get("currency", "USD"))
     self.v_sort_by = StringVar(value=saved_cfg.get("sort_by", "artist"))
+
+    # Format filter checkboxes. Restore saved selection or fall back to default.
+    saved_formats = saved_cfg.get("formats")
+    if not isinstance(saved_formats, list) or not saved_formats:
+      saved_formats = list(DEFAULT_FORMAT_SELECTION)
+    self.v_formats = {
+      key: BooleanVar(value=(key in saved_formats)) for key, _label in FORMAT_FILTERS
+    }
     
     # Initialize the collection cache
     self._collection_cache = CollectionCache()
@@ -1545,6 +1564,8 @@ class App:
     self.v_show_prices.trace_add("write", lambda *_: self._save_settings())
     self.v_currency.trace_add("write", lambda *_: self._save_settings())
     self.v_sort_by.trace_add("write", lambda *_: self._save_settings())
+    for _fvar in self.v_formats.values():
+      _fvar.trace_add("write", lambda *_: self._on_format_filter_change())
 
     self.v_search = StringVar(value="")
     self.v_match = StringVar(value="")
@@ -2073,7 +2094,19 @@ class App:
     self._settings_collapse_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
     ToolTip(self._settings_collapse_btn, "Hide settings panel")
 
-    self._build_settings_content(self._settings_frame)
+    # Scrollable container so all sections (incl. Formats) remain reachable
+    # even when the panel is taller than the window. Width must fit the section
+    # cards (entry 200 + Browse 100 + paddings) plus the scrollbar, otherwise
+    # CTkScrollableFrame clips the content horizontally instead of growing.
+    self._settings_frame.rowconfigure(1, weight=1)
+    self._settings_scroll = ctk.CTkScrollableFrame(
+      self._settings_frame,
+      fg_color="transparent",
+      width=420,
+    )
+    self._settings_scroll.grid(row=1, column=0, sticky="nsew", padx=0, pady=(0, 8))
+    self._settings_scroll.columnconfigure(0, weight=1)
+    self._build_settings_content(self._settings_scroll)
 
     # Slim expand tab (shown when sidebar is collapsed)
     self._settings_expand_tab = ctk.CTkFrame(
@@ -2112,6 +2145,9 @@ class App:
     SECTION_PADX = 20
     SECTION_PADY = 16
     ITEM_SPACING = 10
+    # Explicit row counter: settings may be a CTkScrollableFrame, whose
+    # grid_size() does not reflect child rows, so we can't rely on it.
+    _section_row = [0]
 
     def make_entry(parent, textvar, width=200, show=""):
       e = ctk.CTkEntry(
@@ -2134,7 +2170,8 @@ class App:
         border_width=1,
         border_color=self._colors.get("border", "#334155"),
       )
-      section.grid(row=settings.grid_size()[1], column=0, sticky="ew", padx=SECTION_PADX, pady=(0, SECTION_PADY))
+      section.grid(row=_section_row[0], column=0, sticky="ew", padx=SECTION_PADX, pady=(0, SECTION_PADY))
+      _section_row[0] += 1
       section.columnconfigure(0, weight=1)
       if not hasattr(self, "_settings_section_frames"):
         self._settings_section_frames = []
@@ -2285,6 +2322,33 @@ class App:
     self._sort_row = ctk.CTkFrame(sort_section, fg_color="transparent")
     self._sort_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
     self._build_sort_content(self._sort_row)
+
+    # === FORMATS ===
+    formats_section = make_section("Formats", "💿")
+    ctk.CTkLabel(
+      formats_section,
+      text="Show these formats in your collection",
+      font=(FONT_SEGOE_UI, FONT_SM),
+      text_color=self._colors["muted"],
+    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    formats_row = ctk.CTkFrame(formats_section, fg_color="transparent")
+    formats_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
+    self._format_checks = {}
+    for i, (key, label) in enumerate(FORMAT_FILTERS):
+      chk = ctk.CTkCheckBox(
+        formats_row,
+        text=label,
+        variable=self.v_formats[key],
+        corner_radius=6,
+        font=(FONT_SEGOE_UI, FONT_SM),
+      )
+      chk.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 16), pady=4)
+      self._format_checks[key] = chk
+    ToolTip(
+      self._format_checks["everything"],
+      "Show every item regardless of format (overrides the other checkboxes).",
+    )
+    self._update_format_checks_state()
 
   # Note: _build_options_content functionality moved into _build_settings_content for better organization
 
@@ -3503,6 +3567,7 @@ class App:
         "show_prices": self.v_show_prices.get(),
         "currency": self.v_currency.get().strip(),
         "sort_by": self.v_sort_by.get().strip(),
+        "formats": self._selected_formats(),
       }
       if getattr(self, "_oauth_access_token", None):
         config["oauth_access_token"] = self._oauth_access_token
@@ -3973,8 +4038,14 @@ class App:
       self._show_order_empty_state(True)
       return
 
-    self._show_order_empty_state(False)
     rows = self._apply_manual_order_if_enabled(result)
+    rows = self._filter_rows_by_format(rows)
+    if not rows:
+      self._tree_rows = []
+      self.v_match.set("0 items")
+      self._show_order_empty_state(True)
+      return
+    self._show_order_empty_state(False)
     self._tree_rows = list(rows)
     self._show_or_hide_price_column()
     placeholder = self._get_placeholder_image()
@@ -4136,7 +4207,7 @@ class App:
     self._update_total_value_section(result)
 
   def _update_collection_count(self, result: BuildResult) -> None:
-    count = len(result.rows_sorted)
+    count = len(self._filter_rows_by_format(result.rows_sorted))
     self.v_collection_count.set(f"{count} albums")
 
   def _update_last_sync(self) -> None:
@@ -4145,8 +4216,9 @@ class App:
     self.v_last_sync.set(f"Synced {now.strftime('%H:%M')}")
 
   def _update_total_value_section(self, result: BuildResult) -> None:
-    if self.v_show_prices.get() and result.rows_sorted:
-      total_value, priced_count, currency = self._calculate_total_value(result.rows_sorted)
+    filtered = self._filter_rows_by_format(result.rows_sorted)
+    if self.v_show_prices.get() and filtered:
+      total_value, priced_count, currency = self._calculate_total_value(filtered)
       if priced_count > 0:
         value_str = self._format_total_value(total_value, currency)
         self.v_total_value.set(f"~{value_str} ({priced_count} priced)")
@@ -4232,6 +4304,40 @@ class App:
 
   def _on_search_change(self) -> None:
     self._highlight_search()
+
+  def _selected_formats(self) -> list[str]:
+    """Return the list of format keys currently checked."""
+    return [key for key, var in self.v_formats.items() if var.get()]
+
+  def _filter_rows_by_format(self, rows):
+    """Filter rows to those matching the selected format checkboxes.
+
+    "Everything" (or no selection at all) returns all rows. Otherwise a row is
+    kept if its detected categories intersect the selected set (union semantics).
+    """
+    selected = set(self._selected_formats())
+    if not selected or "everything" in selected:
+      return list(rows)
+    return [r for r in rows if getattr(r, "format_categories", frozenset()) & selected]
+
+  def _update_format_checks_state(self) -> None:
+    """Disable the other format checkboxes while 'Everything' is selected."""
+    if not hasattr(self, "_format_checks"):
+      return
+    everything_on = self.v_formats["everything"].get()
+    for key, chk in self._format_checks.items():
+      if key == "everything":
+        continue
+      chk.configure(state="disabled" if everything_on else "normal")
+
+  def _on_format_filter_change(self) -> None:
+    """Persist selection and re-render the current result without re-fetching."""
+    self._update_format_checks_state()
+    self._save_settings()
+    if getattr(self, "_last_result", None) is not None:
+      self._render_order(self._last_result)
+      self._update_collection_count(self._last_result)
+      self._update_total_value_section(self._last_result)
 
   def _get_cfg(self) -> AutoConfig:
     return AutoConfig(

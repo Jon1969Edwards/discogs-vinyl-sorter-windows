@@ -45,6 +45,7 @@ from core.sorting import (
     collect_lp_rows,
     collect_45_rows,
     collect_cd_rows,
+    collect_all_rows,
     sort_rows,
     build_artist_display,
 )

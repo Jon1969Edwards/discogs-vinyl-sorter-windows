@@ -102,6 +102,56 @@ def is_cd_format(basic: Dict) -> bool:
   return False
 
 
+def is_vinyl_any(basic: Dict) -> bool:
+  """Detect any Vinyl format (any size or speed)."""
+  for f in (basic.get("formats") or []):
+    if (f.get("name") or "").strip().lower() == "vinyl":
+      return True
+  return False
+
+
+def is_cassette(basic: Dict) -> bool:
+  """Detect Cassette formats."""
+  for f in (basic.get("formats") or []):
+    if (f.get("name") or "").strip().lower() == "cassette":
+      return True
+  return False
+
+
+def is_box_set(basic: Dict) -> bool:
+  """Detect Box Set releases (by format name or a 'Box Set' description)."""
+  for f in (basic.get("formats") or []):
+    if (f.get("name") or "").strip().lower() == "box set":
+      return True
+    for d in (f.get("descriptions") or []):
+      if (d or "").strip().lower() == "box set":
+        return True
+  return False
+
+
+def detect_format_categories(basic: Dict) -> frozenset:
+  """Return the set of format category keys a release matches.
+
+  Keys: vinyl, lp, vinyl45, cd, cassette, boxset. Categories can overlap
+  (e.g. a vinyl box set matches both 'vinyl' and 'boxset'). 'Everything' is
+  handled at the filter layer as "no category restriction".
+  """
+  cats = set()
+  if is_vinyl_any(basic):
+    cats.add("vinyl")
+  if is_lp_33(basic):
+    cats.add("lp")
+  if is_vinyl_45(basic):
+    cats.add("vinyl45")
+  if is_cd_format(basic):
+    cats.add("cd")
+  if is_cassette(basic):
+    cats.add("cassette")
+  if is_box_set(basic):
+    cats.add("boxset")
+  return frozenset(cats)
+
+
 # ============================================================================
 # String normalization and artist/title processing
 # ============================================================================
@@ -614,6 +664,45 @@ def collect_cd_rows(
           lnf_safe_bands=lnf_safe_bands,
         )
       )
+  return rows
+
+
+def collect_all_rows(
+  headers: Optional[Dict[str, str]] = None,
+  username: str = "",
+  per_page: int = 100,
+  max_pages: Optional[int] = None,
+  extra_articles: Optional[List[str]] = None,
+  last_name_first: bool = False,
+  lnf_allow_3: bool = False,
+  lnf_exclude: Optional[Set[str]] = None,
+  lnf_safe_bands: bool = False,
+  session: Optional[Any] = None,
+) -> List[ReleaseRow]:
+  """Collect every release in the collection in a single API pass.
+
+  Each row is tagged with its detected format categories (see
+  detect_format_categories) so the caller can filter by any combination of
+  formats without re-fetching from Discogs.
+  """
+  if extra_articles is None:
+    extra_articles = []
+  rows: List[ReleaseRow] = []
+  for item in iterate_collection(headers=headers, username=username, per_page=per_page, max_pages=max_pages, session=session):
+    basic = item.get("basic_information") or {}
+    if not basic:
+      continue
+    row = build_release_row(
+      basic,
+      item,
+      extra_articles,
+      last_name_first=last_name_first,
+      lnf_allow_3=lnf_allow_3,
+      lnf_exclude=lnf_exclude,
+      lnf_safe_bands=lnf_safe_bands,
+    )
+    row.format_categories = detect_format_categories(basic)
+    rows.append(row)
   return rows
 
 

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 @dataclass
@@ -22,6 +22,7 @@ class ReleaseRow:
     price_currency: str = ""
     thumb_url: str = ""
     cover_image_url: str = ""
+    format_categories: frozenset = field(default_factory=frozenset)
 
 @dataclass
 class BuildResult:
