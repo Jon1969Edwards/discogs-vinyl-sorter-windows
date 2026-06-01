@@ -212,6 +212,38 @@ def fetch_prices_for_rows(
         row.price_currency = actual_currency  # Use actual currency from API
 
 
+def fetch_discogs_wantlist(token: Optional[str] = None, per_page: int = 100,
+                           session: Optional[Any] = None,
+                           user_agent: str = "VinylSorter/1.0") -> List[Dict]:
+    """Fetch the user's wantlist (wishlist) from Discogs. Use token or session for auth."""
+    if session is None and not token:
+        raise ValueError("Either token or session required")
+    headers = None if session is not None else discogs_headers(token, user_agent)
+    username = get_identity(headers=headers, session=session)["username"]
+    wantlist: List[Dict] = []
+    page = 1
+    while True:
+        url = f"{API_BASE}/users/{username}/wants"
+        data = api_get(
+            url, headers=headers, session=session,
+            params={"page": str(page), "per_page": str(per_page)},
+        ).json()
+        for item in data.get("wants", []):
+            basic = item.get("basic_information", {})
+            wantlist.append({
+                "artist": ", ".join(a["name"] for a in basic.get("artists", [])),
+                "title": basic.get("title", ""),
+                "year": basic.get("year"),
+                "discogs_url": basic.get("resource_url", ""),
+                "thumb": basic.get("thumb", ""),
+            })
+        pagination = data.get("pagination", {})
+        if pagination.get("page", page) >= pagination.get("pages", page):
+            break
+        page += 1
+    return wantlist
+
+
 def iterate_collection(headers: Optional[Dict[str, str]] = None, username: str = "",
                        per_page: int = 100, max_pages: Optional[int] = None,
                        session: Optional[Any] = None) -> Iterable[Dict]:

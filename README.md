@@ -46,16 +46,6 @@ Outputs:
 - `vinyl_shelf_order.txt` — printable shelf order
 - `vinyl_shelf_order.csv` — spreadsheet-friendly
 
-### Optional: legacy Tkinter GUI
-
-A simpler one-shot Tk window is still available (standard Tkinter, no CustomTkinter):
-
-```bash
-./.venv/bin/python gui_app.py
-```
-
-Prefer the Auto-Sort GUI below unless you want that minimal flow.
-
 ### Auto-Sort GUI (Recommended)
 
 The Auto-Sort GUI is the main graphical interface. It monitors your Discogs collection and regenerates the shelf order when it changes:

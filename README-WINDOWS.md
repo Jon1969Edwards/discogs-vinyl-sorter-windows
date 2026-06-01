@@ -103,7 +103,6 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 ## Files Included
 
 - `discogs_app.py` - Main CLI application
-- `gui_app.py` - Optional legacy Tkinter GUI (run with `python gui_app.py` if needed)
 - `autosort_gui.py` - Auto-Sort GUI (recommended)
 - `demo_sort_preview.py` - Preview sorting behavior
 - `test_sorting.py` - Unit tests
