@@ -76,7 +76,8 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 - `--include-cds`: Include CDs
 
 ### Output Options
-- `--dividers`: Add alphabetical dividers in output
+- `--dividers`: Add alphabetical dividers in TXT (`=== A ===`)
+- `--abc-dividers`: Add A/B/C shelf section dividers (A: A–H, B: I–P, C: Q–Z)
 - `--txt-align`: Align columns in text output
 - `--show-country`: Include country in output
 - `--json`: Also generate JSON output

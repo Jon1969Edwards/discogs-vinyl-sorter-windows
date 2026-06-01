@@ -9,20 +9,67 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from core.models import ReleaseRow
 
+DividerMode = Literal["none", "letter", "abc"]
 
-def get_divider_line(r: ReleaseRow, current: Optional[str], dividers: bool) -> Tuple[Optional[str], Optional[str]]:
-    if not dividers:
-        return current, None
+SHELF_A_RANGE = "A–H"
+SHELF_B_RANGE = "I–P"
+SHELF_C_RANGE = "Q–Z"
+
+SHELF_DIVIDER_TITLES = {
+    "A": f"SHELF A ({SHELF_A_RANGE})",
+    "B": f"SHELF B ({SHELF_B_RANGE})",
+    "C": f"SHELF C ({SHELF_C_RANGE})",
+}
+
+
+def resolve_divider_mode(dividers: bool = False, divider_mode: Optional[str] = None) -> DividerMode:
+    """Resolve divider mode from legacy bool and/or explicit mode string."""
+    if divider_mode in ("none", "letter", "abc"):
+        return divider_mode  # type: ignore[return-value]
+    return "letter" if dividers else "none"
+
+
+def sort_letter_from_row(r: ReleaseRow) -> str:
     sa = r.sort_artist.strip()
     first = sa[0].upper() if sa else "#"
     if not first.isalpha():
         first = "#"
-    if current != first:
-        return first, f"=== {first} ==="
+    return first
+
+
+def sort_letter_to_shelf(letter: str) -> str:
+    """Map first sort letter to physical shelf A, B, or C (for printed dividers)."""
+    ch = (letter or "#")[0].upper()
+    if not ch.isalpha():
+        ch = "#"
+    if ch == "#" or ch <= "H":
+        return "A"
+    if ch <= "P":
+        return "B"
+    return "C"
+
+
+def get_divider_line(
+    r: ReleaseRow,
+    current: Optional[str],
+    mode: DividerMode,
+) -> Tuple[Optional[str], Optional[str]]:
+    if mode == "none":
+        return current, None
+    if mode == "letter":
+        first = sort_letter_from_row(r)
+        if current != first:
+            return first, f"=== {first} ==="
+        return current, None
+    # abc: one divider per physical shelf section
+    letter = sort_letter_from_row(r)
+    shelf = sort_letter_to_shelf(letter)
+    if current != shelf:
+        return shelf, f"=== {SHELF_DIVIDER_TITLES[shelf]} ==="
     return current, None
 
 def get_year_str(r: ReleaseRow) -> str:
@@ -60,30 +107,47 @@ def format_txt_line(
 def generate_txt_lines(
     rows: List[ReleaseRow],
     dividers: bool = False,
+    divider_mode: Optional[str] = None,
     align: bool = False,
     show_country: bool = False,
-    show_price: bool = False
+    show_price: bool = False,
 ) -> List[str]:
     """Return the lines that would appear in the TXT output.
 
     Used by both CLI writer and GUI preview to avoid duplication.
+    divider_mode: none | letter (=== A ===) | abc (=== SHELF A (A–H) ===).
     """
+    mode = resolve_divider_mode(dividers, divider_mode)
     artist_width = max((len(r.artist_display) for r in rows), default=0) if align else 0
     title_width = max((len(r.title) for r in rows), default=0) if align else 0
 
     lines: List[str] = []
     current_div: Optional[str] = None
     for r in rows:
-        current_div, div_line = get_divider_line(r, current_div, dividers)
+        current_div, div_line = get_divider_line(r, current_div, mode)
         if div_line:
             lines.append(div_line)
         lines.append(format_txt_line(r, artist_width, title_width, align, show_country, show_price))
     return lines
 
 
-def write_txt(rows: List[ReleaseRow], out_path: Path, dividers: bool = False,
-              align: bool = False, show_country: bool = False) -> None:
-    lines = generate_txt_lines(rows, dividers=dividers, align=align, show_country=show_country)
+def write_txt(
+    rows: List[ReleaseRow],
+    out_path: Path,
+    dividers: bool = False,
+    divider_mode: Optional[str] = None,
+    align: bool = False,
+    show_country: bool = False,
+    show_price: bool = False,
+) -> None:
+    lines = generate_txt_lines(
+        rows,
+        dividers=dividers,
+        divider_mode=divider_mode,
+        align=align,
+        show_country=show_country,
+        show_price=show_price,
+    )
     with out_path.open("w", encoding="utf-8") as f:
         for line in lines:
             f.write(line + "\n")

@@ -114,6 +114,12 @@ def parse_args() -> argparse.Namespace:
     help="Insert letter dividers (=== A ===) in the TXT output.",
   )
   parser.add_argument(
+    "--abc-dividers",
+    action="store_true",
+    help="Insert A/B/C shelf section dividers in TXT (=== SHELF A (A–H) ===, etc.). "
+    "Use instead of --dividers for physical shelf units.",
+  )
+  parser.add_argument(
     "--json",
     action="store_true",
     help="Also write a JSON export (vinyl_shelf_order.json).",
@@ -260,10 +266,23 @@ def fetch_and_report_lp_rows(args, headers, username, extra_articles):
             print(f"Probable exclusions (explicit 45/78): {len(excl)}")
     return rows, dbg
 
+def _divider_mode_from_args(args) -> Optional[str]:
+    if getattr(args, "abc_dividers", False):
+        return "abc"
+    return None
+
+
 def write_main_outputs(args, out_dir, rows_sorted):
     txt_path = out_dir / "vinyl_shelf_order.txt"
     csv_path = out_dir / "vinyl_shelf_order.csv"
-    write_txt(rows_sorted, txt_path, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
+    write_txt(
+        rows_sorted,
+        txt_path,
+        dividers=bool(args.dividers),
+        divider_mode=_divider_mode_from_args(args),
+        align=bool(args.txt_align),
+        show_country=bool(args.show_country),
+    )
     write_csv(rows_sorted, csv_path)
     if args.json:
         json_path = out_dir / "vinyl_shelf_order.json"
@@ -291,7 +310,14 @@ def handle_optional_45s(args, headers, username, extra_articles, out_dir):
         rows45_sorted = sort_rows(rows45, args.various_policy)
         txt45 = out_dir / "vinyl45_shelf_order.txt"
         csv45 = out_dir / "vinyl45_shelf_order.csv"
-        write_txt(rows45_sorted, txt45, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
+        write_txt(
+            rows45_sorted,
+            txt45,
+            dividers=bool(args.dividers),
+            divider_mode=_divider_mode_from_args(args),
+            align=bool(args.txt_align),
+            show_country=bool(args.show_country),
+        )
         write_csv(rows45_sorted, csv45)
         if args.json:
             json45 = out_dir / "vinyl45_shelf_order.json"
@@ -320,7 +346,14 @@ def handle_optional_cds(args, headers, username, extra_articles, out_dir):
         rows_cd_sorted = sort_rows(rows_cd, args.various_policy)
         txtcd = out_dir / "cd_shelf_order.txt"
         csvcd = out_dir / "cd_shelf_order.csv"
-        write_txt(rows_cd_sorted, txtcd, dividers=bool(args.dividers), align=bool(args.txt_align), show_country=bool(args.show_country))
+        write_txt(
+            rows_cd_sorted,
+            txtcd,
+            dividers=bool(args.dividers),
+            divider_mode=_divider_mode_from_args(args),
+            align=bool(args.txt_align),
+            show_country=bool(args.show_country),
+        )
         write_csv(rows_cd_sorted, csvcd)
         if args.json:
             jsoncd = out_dir / "cd_shelf_order.json"

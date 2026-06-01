@@ -96,10 +96,16 @@ python discogs_app.py --debug-stats
 python discogs_app.py --lp-strict
 ```
 
-Insert letter dividers in TXT output:
+Insert letter dividers in TXT output (`=== A ===` between artists):
 ```bash
 python discogs_app.py --dividers
 ```
+
+Insert **A/B/C shelf** dividers for physical shelf units (`=== SHELF A (A–H) ===`, etc.):
+```bash
+python discogs_app.py --abc-dividers
+```
+Shelf ranges: **A** = A–H (and non-alpha), **B** = I–P, **C** = Q–Z. The Auto-Sort GUI offers the same options under Settings → **TXT shelf dividers**.
 
 Also write JSON alongside TXT/CSV:
 ```bash
@@ -181,6 +187,5 @@ python discogs_app.py --per-page 50
 
 ## Future Ideas
 
-- A/B/C shelf divider output.
 - Export JSON for downstream tooling.
 - Optional exclusion of specific countries or labels.

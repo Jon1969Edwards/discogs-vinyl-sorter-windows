@@ -17,7 +17,7 @@ Work through one item at a time. Product backlog below; refactor/tech items are 
 
 | # | Task | Scope | Status |
 |---|------|-------|--------|
-| 3 | **A/B/C shelf dividers** | Extend `--dividers` logic | Pending |
+| 3 | **A/B/C shelf dividers** | `--abc-dividers`, GUI setting, print/export | Done |
 | 4 | **Country/label exclusion** | `--exclude-countries`, `--exclude-labels` | Pending |
 
 ---
@@ -65,3 +65,4 @@ Work through one item at a time. Product backlog below; refactor/tech items are 
 - **2026:** Incremental refactor — `format_filter`, `settings_panel`, `build_service`, format tests.
 - **2026:** Technical follow-ups — collector wrappers, GUI module splits, cleaner imports.
 - **2026:** Band-safe LNF fix (e.g. Agnostic Front); first-run auth prompt on launch.
+- **2026:** A/B/C shelf dividers in export, print, CLI (`--abc-dividers`), and GUI settings.

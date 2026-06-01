@@ -54,7 +54,7 @@ from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 TTKBOOTSTRAP_AVAILABLE = False
 
 from core.api import discogs_headers
-from core.export import write_csv, write_json, write_txt
+from core.export import generate_txt_lines, write_csv, write_json, write_txt
 from core.models import ReleaseRow, BuildResult
 from gui.thumbnails import ImagePreviewPopup, ThumbnailCache
 from core.build_service import (
@@ -74,6 +74,13 @@ DEFAULT_USER_AGENT = "Mozilla/5.0"
 
 
 POLL_SECONDS_DEFAULT = 300  # 5 minutes
+
+DIVIDER_MODE_LABELS = {
+  "none": "Off",
+  "letter": "By letter (A–Z)",
+  "abc": "By shelf (A/B/C)",
+}
+DIVIDER_MODE_BY_LABEL = {v: k for k, v in DIVIDER_MODE_LABELS.items()}
 
 CONFIG_FILE = project_root() / ".discogs_config.json"
 # Simple key for obfuscation (not meant to be cryptographically secure, just prevents casual viewing)
@@ -725,6 +732,10 @@ class App:
     self.v_output_dir = StringVar(value=saved_cfg.get("output_dir", str(Path.cwd())))
     self.v_per_page = IntVar(value=saved_cfg.get("per_page", 100))
     self.v_json = BooleanVar(value=saved_cfg.get("write_json", False))
+    _divider_mode = saved_cfg.get("divider_mode", "none")
+    if _divider_mode not in DIVIDER_MODE_LABELS:
+      _divider_mode = "none"
+    self.v_divider_mode = StringVar(value=DIVIDER_MODE_LABELS[_divider_mode])
     self.v_poll = IntVar(value=saved_cfg.get("poll_seconds", POLL_SECONDS_DEFAULT))
     # Always start with prices OFF - user must enable during session
     self.v_show_prices = BooleanVar(value=False)
@@ -754,6 +765,7 @@ class App:
     self.v_user_agent.trace_add("write", lambda *_: self._save_settings())
     self.v_output_dir.trace_add("write", lambda *_: self._save_settings())
     self.v_json.trace_add("write", lambda *_: self._save_settings())
+    self.v_divider_mode.trace_add("write", lambda *_: self._save_settings())
     self.v_poll.trace_add("write", lambda *_: self._save_settings())
     self.v_show_prices.trace_add("write", lambda *_: self._save_settings())
     self.v_currency.trace_add("write", lambda *_: self._save_settings())
@@ -2121,6 +2133,7 @@ class App:
         "currency": self.v_currency.get().strip(),
         "sort_by": self.v_sort_by.get().strip(),
         "formats": self._selected_formats(),
+        "divider_mode": self._divider_mode_value(),
       }
       if getattr(self, "_oauth_access_token", None):
         config["oauth_access_token"] = self._oauth_access_token
@@ -2894,6 +2907,9 @@ class App:
       self._stop.set()
       self.root.after(200, self.root.destroy)
 
+  def _divider_mode_value(self) -> str:
+    return DIVIDER_MODE_BY_LABEL.get(self.v_divider_mode.get(), "none")
+
   def _export_files(self) -> None:
     result = self._last_result
     if not result or not result.rows_sorted:
@@ -2909,7 +2925,14 @@ class App:
 
     txt_path = out_dir / "vinyl_shelf_order.txt"
     csv_path = out_dir / "vinyl_shelf_order.csv"
-    write_txt(rows_to_export, txt_path, dividers=False, align=False, show_country=False)
+    write_txt(
+      rows_to_export,
+      txt_path,
+      divider_mode=self._divider_mode_value(),
+      align=False,
+      show_country=False,
+      show_price=bool(self.v_show_prices.get()),
+    )
     write_csv(rows_to_export, csv_path)
     self._log(f"Exported: {txt_path.name}")
     self._log(f"Exported: {csv_path.name}")
@@ -2934,13 +2957,11 @@ class App:
     if not messagebox.askyesno("Print", "Send the current shelf order to your default printer?"):
       return
     
-    # Generate printable text from current order
-    lines = []
-    for i, row in enumerate(self._tree_rows):
-      line = f"{i+1:3d}. {row.artist_display} — {row.title}"
-      if row.year:
-        line += f" ({row.year})"
-      lines.append(line)
+    lines = generate_txt_lines(
+      self._tree_rows,
+      divider_mode=self._divider_mode_value(),
+      show_price=bool(self.v_show_prices.get()),
+    )
 
     # Try Windows printing first, fall back to lpr
     tmp_path = None

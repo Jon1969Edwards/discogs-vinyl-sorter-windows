@@ -278,7 +278,36 @@ class SettingsPanel:
       corner_radius=6,
       font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
     )
-    a._json_check.grid(row=6, column=0, sticky="w", padx=16, pady=(8, 14))
+    a._json_check.grid(row=6, column=0, sticky="w", padx=16, pady=(8, 4))
+
+    ctk.CTkLabel(
+      output_section,
+      text="TXT shelf dividers",
+      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
+      text_color=a._colors["muted"],
+    ).grid(row=7, column=0, sticky="w", padx=16, pady=(8, 4))
+    divider_row = ctk.CTkFrame(output_section, fg_color="transparent")
+    divider_row.grid(row=8, column=0, sticky="w", padx=16, pady=(0, 4))
+    a._divider_mode_combo = ctk.CTkOptionMenu(
+      divider_row,
+      variable=a.v_divider_mode,
+      values=list(ui.DIVIDER_MODE_BY_LABEL.keys()),
+      width=220,
+      corner_radius=8,
+    )
+    a._divider_mode_combo.grid(row=0, column=0, sticky="w")
+    ui.ToolTip(
+      a._divider_mode_combo,
+      "Insert divider lines in exported/printed TXT. "
+      "By shelf: A (A–H), B (I–P), C (Q–Z) for physical shelf units.",
+    )
+    ctk.CTkLabel(
+      output_section,
+      text="Shelf A: A–H  •  Shelf B: I–P  •  Shelf C: Q–Z (non-alpha → A)",
+      font=(ui.FONT_SEGOE_UI, ui.FONT_XS),
+      text_color=a._colors["muted"],
+      justify="left",
+    ).grid(row=9, column=0, sticky="w", padx=16, pady=(0, 14))
 
     price_section = make_section("Price Settings", "💰")
     a._prices_check = ctk.CTkCheckBox(
