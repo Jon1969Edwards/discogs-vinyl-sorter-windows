@@ -105,7 +105,8 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 - `discogs_app.py` - Main CLI application
 - `autosort_gui.py` - Auto-Sort GUI (recommended)
 - `demo_sort_preview.py` - Preview sorting behavior
-- `test_sorting.py` - Unit tests
+- `test_sorting.py` - Sorting unit tests (`python test_sorting.py`)
+- `test_format_filter.py` - Format detection/filter tests (`python test_format_filter.py`)
 - `requirements.txt` - Python dependencies
 - `LaunchAutoSortGUI.bat` - Windows launcher for the Auto-Sort GUI
 - `BUILD_WINDOWS_EXE.bat` - Optional: build `DiscogsVinylSorter.exe` (PyInstaller)

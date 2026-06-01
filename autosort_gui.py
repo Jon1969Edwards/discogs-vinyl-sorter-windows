@@ -62,25 +62,16 @@ from core.build_service import (
   get_collection_count,
   _get_user_headers,
 )
+from core.format_filter import (
+  FORMAT_FILTERS,
+  filter_rows_by_format,
+  parse_saved_formats,
+)
 
 DEFAULT_USER_AGENT = "Mozilla/5.0"
 
 
 POLL_SECONDS_DEFAULT = 300  # 5 minutes
-
-# Format filter options shown as checkboxes. Keys map to ReleaseRow.format_categories
-# (except "everything", which means "no category restriction"). Order = display order.
-FORMAT_FILTERS = [
-  ("everything", "Everything"),
-  ("vinyl", "All Vinyl"),
-  ("lp", "Vinyl LP"),
-  ("vinyl45", "Vinyl 45s"),
-  ("cd", "CD"),
-  ("cassette", "Cassette"),
-  ("boxset", "Box Set"),
-]
-# Selected by default to preserve the previous LP-only view.
-DEFAULT_FORMAT_SELECTION = ["lp"]
 
 CONFIG_FILE = project_root() / ".discogs_config.json"
 # Simple key for obfuscation (not meant to be cryptographically secure, just prevents casual viewing)
@@ -1029,6 +1020,9 @@ class ToolTip:
     self.text = new_text
 
 
+from gui.settings_panel import SettingsPanel
+
+
 class App:
   # Track hover state for wishlist
   _wishlist_hover_release_id: int | None = None
@@ -1173,9 +1167,7 @@ class App:
     self.v_sort_by = StringVar(value=saved_cfg.get("sort_by", "artist"))
 
     # Format filter checkboxes. Restore saved selection or fall back to default.
-    saved_formats = saved_cfg.get("formats")
-    if not isinstance(saved_formats, list) or not saved_formats:
-      saved_formats = list(DEFAULT_FORMAT_SELECTION)
+    saved_formats = parse_saved_formats(saved_cfg.get("formats"))
     self.v_formats = {
       key: BooleanVar(value=(key in saved_formats)) for key, _label in FORMAT_FILTERS
     }
@@ -1691,319 +1683,8 @@ class App:
     # Value section not packed initially; _show_value_section() shows when prices available
 
   def _build_settings_panel(self, frm, row):
-    self._settings_collapsed = True  # Start with settings panel closed
-
-    # Modern card-style settings panel with pronounced elevation
-    self._settings_frame = ctk.CTkFrame(
-      frm,
-      corner_radius=12,
-      fg_color=self._colors["panel"],
-      border_width=2,
-      border_color=self._colors.get("card_border", self._colors["border"]),
-    )
-    self._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(20, 10), pady=(16, 12))
-    self._settings_frame.columnconfigure(0, weight=1)
-
-    # Settings header row: title + collapse button
-    settings_header = ctk.CTkFrame(self._settings_frame, fg_color="transparent")
-    settings_header.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 4))
-    settings_header.columnconfigure(0, weight=1)
-
-    settings_label = ctk.CTkLabel(
-      settings_header,
-      text="⚙️ Settings",
-      font=(FONT_SEGOE_UI_SEMIBOLD, FONT_XL),
-      text_color=self._colors["text"],
-    )
-    settings_label.grid(row=0, column=0, sticky="w")
-
-    self._settings_collapse_btn = ctk.CTkButton(
-      settings_header,
-      text="◀",
-      width=36,
-      height=32,
-      corner_radius=6,
-      fg_color=self._colors["accent"],
-      hover_color=self._colors["button_hover"],
-      font=(FONT_SEGOE_UI, FONT_SM),
-      command=self._toggle_settings_sidebar,
-    )
-    self._settings_collapse_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
-    ToolTip(self._settings_collapse_btn, "Hide settings panel")
-
-    # Scrollable container so all sections (incl. Formats) remain reachable
-    # even when the panel is taller than the window. Width must fit the section
-    # cards (entry 200 + Browse 100 + paddings) plus the scrollbar, otherwise
-    # CTkScrollableFrame clips the content horizontally instead of growing.
-    self._settings_frame.rowconfigure(1, weight=1)
-    self._settings_scroll = ctk.CTkScrollableFrame(
-      self._settings_frame,
-      fg_color="transparent",
-      width=420,
-    )
-    self._settings_scroll.grid(row=1, column=0, sticky="nsew", padx=0, pady=(0, 8))
-    self._settings_scroll.columnconfigure(0, weight=1)
-    self._build_settings_content(self._settings_scroll)
-
-    # Slim expand tab (shown when sidebar is collapsed)
-    self._settings_expand_tab = ctk.CTkFrame(
-      frm,
-      width=28,
-      fg_color=self._colors["panel"],
-      border_width=1,
-      border_color=self._colors.get("card_border", self._colors["border"]),
-      corner_radius=8,
-    )
-    self._settings_expand_tab.pack_propagate(False)
-    self._settings_expand_btn = ctk.CTkButton(
-      self._settings_expand_tab,
-      text="⚙️ ▶",
-      width=26,
-      height=80,
-      corner_radius=6,
-      fg_color=self._colors["accent"],
-      hover_color=self._colors["button_hover"],
-      font=(FONT_SEGOE_UI, FONT_SM),
-      command=self._toggle_settings_sidebar,
-    )
-    self._settings_expand_btn.pack(expand=True, fill="y", padx=2, pady=8)
-    ToolTip(self._settings_expand_btn, "Show settings panel")
-    self._settings_row = row  # Store for toggle
-
-    # If starting collapsed, hide settings and show expand tab
-    if self._settings_collapsed:
-      self._settings_frame.grid_remove()
-      self._settings_expand_tab.grid(row=row, column=0, sticky="ns", padx=(20, 10), pady=(16, 12))
-      self._settings_collapse_btn.configure(text="▶")
-
-  def _build_settings_content(self, settings):
-    import tkinter as tk
-    settings.columnconfigure(0, weight=1)
-    SECTION_PADX = 20
-    SECTION_PADY = 16
-    ITEM_SPACING = 10
-    # Explicit row counter: settings may be a CTkScrollableFrame, whose
-    # grid_size() does not reflect child rows, so we can't rely on it.
-    _section_row = [0]
-
-    def make_entry(parent, textvar, width=200, show=""):
-      e = ctk.CTkEntry(
-        parent,
-        textvariable=textvar,
-        width=width,
-        height=38,
-        show=show,
-        font=(FONT_SEGOE_UI, FONT_MD),
-        corner_radius=8,
-      )
-      return e
-
-    def make_section(title, icon=""):
-      """Create a visually separated section card."""
-      section = ctk.CTkFrame(
-        settings,
-        fg_color=self._colors.get("panel2", self._colors["panel"]),
-        corner_radius=10,
-        border_width=1,
-        border_color=self._colors.get("border", "#334155"),
-      )
-      section.grid(row=_section_row[0], column=0, sticky="ew", padx=SECTION_PADX, pady=(0, SECTION_PADY))
-      _section_row[0] += 1
-      section.columnconfigure(0, weight=1)
-      if not hasattr(self, "_settings_section_frames"):
-        self._settings_section_frames = []
-      self._settings_section_frames.append(section)
-      section_header = ctk.CTkLabel(
-        section,
-        text=f"{icon}  {title}" if icon else title,
-        font=(FONT_SEGOE_UI_SEMIBOLD, FONT_LG),
-        text_color=self._colors["accent"],
-      )
-      section_header.grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
-      return section
-
-    # === AUTHENTICATION ===
-    auth_section = make_section("Authentication", "🔐")
-    auth_btns = ctk.CTkFrame(auth_section, fg_color="transparent")
-    auth_btns.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
-    self._signin_btn = ctk.CTkButton(
-      auth_btns,
-      text="🔐 Sign in with Discogs",
-      command=self._do_oauth_signin,
-      width=180,
-      height=38,
-      corner_radius=8,
-      fg_color=self._colors["accent"],
-      hover_color=self._colors["button_hover"],
-    )
-    self._signin_btn.pack(side="left", padx=(0, 8))
-    ToolTip(
-      self._signin_btn,
-      "Opens Discogs in your browser. Approve access once—you won’t paste a token.",
-    )
-    self._signout_btn = ctk.CTkButton(
-      auth_btns,
-      text="Sign out",
-      command=self._do_oauth_signout,
-      width=80,
-      height=38,
-      corner_radius=8,
-      fg_color="#4a5568",
-      hover_color="#2d3748",
-    )
-    self._signout_btn.pack(side="left")
-    ToolTip(self._signout_btn, "Clear saved sign-in and use token instead")
-    self._update_auth_buttons_state()
-
-    # Collapsible "Advanced: use Personal Access Token" section
-    self._token_section_collapsed = True  # Start collapsed; OAuth is primary
-    self._token_toggle_btn = ctk.CTkButton(
-      auth_section,
-      text="Advanced: use Personal Access Token  ▶",
-      font=(FONT_SEGOE_UI, FONT_SM),
-      fg_color="transparent",
-      hover_color=self._colors.get("panel2", self._colors["border"]),
-      text_color=self._colors["muted"],
-      anchor="w",
-      height=28,
-      corner_radius=6,
-      command=self._toggle_token_section,
-    )
-    self._token_toggle_btn.grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
-    ToolTip(
-      self._token_toggle_btn,
-      "Optional: paste a Personal Access Token instead of browser sign-in (Discogs → Developers).",
-    )
-    self._token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
-    self._token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
-    self._token_row.columnconfigure(0, weight=1)
-    self.token_entry = make_entry(self._token_row, self.v_token, width=200, show="•")
-    self.token_entry.grid(row=0, column=0, sticky="ew")
-    ctk.CTkCheckBox(self._token_row, text="Show", variable=self.v_show_token, command=self._toggle_token_visibility, width=80, corner_radius=6).grid(row=0, column=1, sticky="w", padx=(12, 0))
-    self._token_row.grid_remove()  # Start collapsed
-
-    # === OUTPUT SETTINGS ===
-    output_section = make_section("Output Settings", "📁")
-    ctk.CTkLabel(output_section, text="Output directory", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
-    self._out_row = ctk.CTkFrame(output_section, fg_color="transparent")
-    self._out_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, ITEM_SPACING))
-    self._out_row.columnconfigure(0, weight=1)
-    self._output_entry = make_entry(self._out_row, self.v_output_dir, width=200)
-    self._output_entry.grid(row=0, column=0, sticky="ew")
-    self._browse_btn = ctk.CTkButton(self._out_row, text="📂 Browse", command=self._choose_dir, width=100, corner_radius=8, height=38, fg_color=self._colors["accent"], hover_color=self._colors["button_hover"])
-    self._browse_btn.grid(row=0, column=1, sticky="e", padx=(12, 0))
-    self._open_btn = None
-
-    ctk.CTkLabel(output_section, text="Auto-refresh interval (seconds)", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=3, column=0, sticky="w", padx=16, pady=(8, 4))
-    poll_row = ctk.CTkFrame(output_section, fg_color="transparent")
-    poll_row.grid(row=4, column=0, sticky="w", padx=16, pady=(0, ITEM_SPACING))
-    self._poll_spin = tk.Spinbox(
-      poll_row, from_=15, to=3600, textvariable=self.v_poll, width=8,
-      font=(FONT_SEGOE_UI, FONT_SM),
-      bg=self._colors["order_bg"],
-      fg=self._colors["order_fg"],
-      buttonbackground=self._colors["border"],
-      insertbackground=self._colors["order_fg"],
-      relief="solid",
-      bd=1,
-      highlightthickness=1,
-      highlightbackground=self._colors["border"],
-      highlightcolor=self._colors["accent"],
-    )
-    self._poll_spin.grid(row=0, column=0, ipady=4, ipadx=6)
-    ctk.CTkLabel(output_section, text="How often to check Discogs for collection updates", font=(FONT_SEGOE_UI, FONT_XS), text_color=self._colors["muted"]).grid(row=5, column=0, sticky="w", padx=16, pady=(0, 4))
-
-    self._json_check = ctk.CTkCheckBox(output_section, text="Also export JSON files", variable=self.v_json, corner_radius=6, font=(FONT_SEGOE_UI, FONT_SM))
-    self._json_check.grid(row=6, column=0, sticky="w", padx=16, pady=(8, 14))
-
-    # === PRICE SETTINGS ===
-    price_section = make_section("Price Settings", "💰")
-    self._prices_check = ctk.CTkCheckBox(price_section, text="Show prices in shelf order", variable=self.v_show_prices, corner_radius=6, font=(FONT_SEGOE_UI, FONT_SM))
-    self._prices_check.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
-
-    ctk.CTkLabel(price_section, text="Currency", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=2, column=0, sticky="w", padx=16, pady=(0, 4))
-    price_row = ctk.CTkFrame(price_section, fg_color="transparent")
-    price_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 8))
-    price_row.columnconfigure(0, weight=1)
-    self._currency_combo = ctk.CTkOptionMenu(
-      price_row,
-      variable=self.v_currency,
-      values=["USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY"],
-      width=100,
-      corner_radius=8,
-    )
-    self._currency_combo.grid(row=0, column=0, sticky="w")
-    self._refresh_prices_btn = ctk.CTkButton(
-      price_row,
-      text="🔄 Refresh Prices",
-      command=self._refresh_prices,
-      corner_radius=8,
-      height=38,
-      fg_color=self._colors["accent"],
-      hover_color=self._colors["button_hover"],
-      font=(FONT_SEGOE_UI, FONT_SM),
-    )
-    self._refresh_prices_btn.grid(row=0, column=1, sticky="w", padx=(12, 0))
-
-    ctk.CTkLabel(
-      price_section,
-      text="Prices show lowest listed for your specific pressing",
-      font=(FONT_SEGOE_UI, FONT_XS),
-      text_color=self._colors["muted"],
-      justify="left",
-    ).grid(row=4, column=0, sticky="w", padx=16, pady=(4, 14))
-
-    # === SORTING ===
-    sort_section = make_section("Sorting", "🔤")
-    ctk.CTkLabel(sort_section, text="Default sort order", font=(FONT_SEGOE_UI, FONT_SM), text_color=self._colors["muted"]).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
-    self._sort_row = ctk.CTkFrame(sort_section, fg_color="transparent")
-    self._sort_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
-    self._build_sort_content(self._sort_row)
-
-    # === FORMATS ===
-    formats_section = make_section("Formats", "💿")
-    ctk.CTkLabel(
-      formats_section,
-      text="Show these formats in your collection",
-      font=(FONT_SEGOE_UI, FONT_SM),
-      text_color=self._colors["muted"],
-    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
-    formats_row = ctk.CTkFrame(formats_section, fg_color="transparent")
-    formats_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
-    self._format_checks = {}
-    for i, (key, label) in enumerate(FORMAT_FILTERS):
-      chk = ctk.CTkCheckBox(
-        formats_row,
-        text=label,
-        variable=self.v_formats[key],
-        corner_radius=6,
-        font=(FONT_SEGOE_UI, FONT_SM),
-      )
-      chk.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 16), pady=4)
-      self._format_checks[key] = chk
-    ToolTip(
-      self._format_checks["everything"],
-      "Show every item regardless of format (overrides the other checkboxes).",
-    )
-    self._update_format_checks_state()
-
-  # Note: _build_options_content functionality moved into _build_settings_content for better organization
-
-  def _build_sort_content(self, sort_row):
-    sort_row.columnconfigure(0, weight=1)
-    sort_options = ["artist", "title", "year", "price_asc", "price_desc"]
-    self._sort_combo = ctk.CTkOptionMenu(
-      sort_row,
-      variable=self.v_sort_by,
-      values=sort_options,
-      width=160,
-      corner_radius=8,
-      fg_color=self._colors.get("panel2", self._colors["panel"]),
-      button_color=self._colors["accent"],
-      button_hover_color=self._colors["button_hover"],
-      font=(FONT_SEGOE_UI, FONT_SM),
-    )
-    self._sort_combo.grid(row=0, column=0, sticky="ew")
+    self._settings = SettingsPanel(self)
+    self._settings.build(frm, row)
 
   def _build_main_content(self, frm, row):
     import tkinter as tk
@@ -3576,17 +3257,8 @@ class App:
       pass
 
   def _update_settings_frames(self):
-    try:
-      if hasattr(self, "_settings_section_frames"):
-        panel2 = self._colors.get("panel2", self._colors["panel"])
-        border = self._colors.get("border", "#334155")
-        for section in self._settings_section_frames:
-          try:
-            section.configure(fg_color=panel2, border_color=border)
-          except Exception:
-            pass
-    except Exception:
-      pass
+    if getattr(self, "_settings", None) is not None:
+      self._settings.update_section_theme()
 
   def _update_log_widget(self):
     try:
@@ -3947,29 +3619,13 @@ class App:
     return [key for key, var in self.v_formats.items() if var.get()]
 
   def _filter_rows_by_format(self, rows):
-    """Filter rows to those matching the selected format checkboxes.
-
-    "Everything" (or no selection at all) returns all rows. Otherwise a row is
-    kept if its detected categories intersect the selected set (union semantics).
-    """
-    selected = set(self._selected_formats())
-    if not selected or "everything" in selected:
-      return list(rows)
-    return [r for r in rows if getattr(r, "format_categories", frozenset()) & selected]
-
-  def _update_format_checks_state(self) -> None:
-    """Disable the other format checkboxes while 'Everything' is selected."""
-    if not hasattr(self, "_format_checks"):
-      return
-    everything_on = self.v_formats["everything"].get()
-    for key, chk in self._format_checks.items():
-      if key == "everything":
-        continue
-      chk.configure(state="disabled" if everything_on else "normal")
+    """Filter rows to those matching the selected format checkboxes."""
+    return filter_rows_by_format(rows, set(self._selected_formats()))
 
   def _on_format_filter_change(self) -> None:
     """Persist selection and re-render the current result without re-fetching."""
-    self._update_format_checks_state()
+    if getattr(self, "_settings", None) is not None:
+      self._settings.update_format_checks_state()
     self._save_settings()
     if getattr(self, "_last_result", None) is not None:
       self._render_order(self._last_result)
