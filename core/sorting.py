@@ -570,6 +570,21 @@ def collect_lp_rows(
     """Collects LP rows from a Discogs collection. Use headers or session for auth."""
     if extra_articles is None:
         extra_articles = []
+    # Default path: one API pass, filter by detected "lp" category (same as is_lp_33 defaults).
+    if not lp_strict and not lp_probable and debug_stats is None and not collect_exclusions:
+        all_rows = collect_all_rows(
+            headers=headers,
+            username=username,
+            per_page=per_page,
+            max_pages=max_pages,
+            extra_articles=extra_articles,
+            last_name_first=last_name_first,
+            lnf_allow_3=lnf_allow_3,
+            lnf_exclude=lnf_exclude,
+            lnf_safe_bands=lnf_safe_bands,
+            session=session,
+        )
+        return _filter_rows_by_category(all_rows, "lp")
     rows: List[ReleaseRow] = []
     stats = {"scanned": 0, "vinyl": 0, "vinyl_lp": 0, "vinyl_lp_33": 0}
     excluded_probable: List[Dict] = []
@@ -599,6 +614,13 @@ def collect_lp_rows(
     return rows
 
 
+def _filter_rows_by_category(
+  rows: List[ReleaseRow],
+  category: str,
+) -> List[ReleaseRow]:
+  return [r for r in rows if category in r.format_categories]
+
+
 def collect_45_rows(
   headers: Optional[Dict[str, str]] = None,
   username: str = "",
@@ -611,26 +633,20 @@ def collect_45_rows(
   lnf_safe_bands: bool = False,
   session: Optional[Any] = None,
 ) -> List[ReleaseRow]:
-  if extra_articles is None:
-    extra_articles = []
-  rows: List[ReleaseRow] = []
-  for item in iterate_collection(headers=headers, username=username, per_page=per_page, max_pages=max_pages, session=session):
-    basic = item.get("basic_information") or {}
-    if not basic:
-      continue
-    if is_vinyl_45(basic):
-      rows.append(
-        build_release_row(
-          basic,
-          item,
-          extra_articles,
-          last_name_first=last_name_first,
-          lnf_allow_3=lnf_allow_3,
-          lnf_exclude=lnf_exclude,
-          lnf_safe_bands=lnf_safe_bands,
-        )
-      )
-  return rows
+  """Single API pass via collect_all_rows, then vinyl 45 filter."""
+  all_rows = collect_all_rows(
+    headers=headers,
+    username=username,
+    per_page=per_page,
+    max_pages=max_pages,
+    extra_articles=extra_articles,
+    last_name_first=last_name_first,
+    lnf_allow_3=lnf_allow_3,
+    lnf_exclude=lnf_exclude,
+    lnf_safe_bands=lnf_safe_bands,
+    session=session,
+  )
+  return _filter_rows_by_category(all_rows, "vinyl45")
 
 
 def collect_cd_rows(
@@ -645,26 +661,20 @@ def collect_cd_rows(
   lnf_safe_bands: bool = False,
   session: Optional[Any] = None,
 ) -> List[ReleaseRow]:
-  if extra_articles is None:
-    extra_articles = []
-  rows: List[ReleaseRow] = []
-  for item in iterate_collection(headers=headers, username=username, per_page=per_page, max_pages=max_pages, session=session):
-    basic = item.get("basic_information") or {}
-    if not basic:
-      continue
-    if is_cd_format(basic):
-      rows.append(
-        build_release_row(
-          basic,
-          item,
-          extra_articles,
-          last_name_first=last_name_first,
-          lnf_allow_3=lnf_allow_3,
-          lnf_exclude=lnf_exclude,
-          lnf_safe_bands=lnf_safe_bands,
-        )
-      )
-  return rows
+  """Single API pass via collect_all_rows, then CD filter."""
+  all_rows = collect_all_rows(
+    headers=headers,
+    username=username,
+    per_page=per_page,
+    max_pages=max_pages,
+    extra_articles=extra_articles,
+    last_name_first=last_name_first,
+    lnf_allow_3=lnf_allow_3,
+    lnf_exclude=lnf_exclude,
+    lnf_safe_bands=lnf_safe_bands,
+    session=session,
+  )
+  return _filter_rows_by_category(all_rows, "cd")
 
 
 def collect_all_rows(

@@ -6,11 +6,11 @@ A fresh, minimal GUI that:
 - Regenerates shelf order automatically when it changes.
 - Provides a "Refresh Now" button to force an immediate re-check + rebuild.
 
-It reuses the core logic in discogs_app.py for fetching, sorting, and writing outputs.
+It reuses core modules (api, sorting, export, build_service) for fetching, sorting, and writing outputs.
 Token discovery order:
 - GUI Token field (if provided)
 - DISCOGS_TOKEN env var
-- .env (python-dotenv), via discogs_app.get_token
+- .env (python-dotenv), via core.api.get_token
 
 Outputs (default):
 - vinyl_shelf_order.txt
@@ -53,8 +53,10 @@ from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 # No longer using ttkbootstrap
 TTKBOOTSTRAP_AVAILABLE = False
 
-import discogs_app as core
+from core.api import discogs_headers
+from core.export import write_csv, write_json, write_txt
 from core.models import ReleaseRow, BuildResult
+from gui.thumbnails import ImagePreviewPopup, ThumbnailCache
 from core.build_service import (
   AutoConfig,
   CollectionCache,
@@ -269,445 +271,6 @@ class ManualOrderManager:
     """Explicitly save to disk."""
     self._save()
 
-
-# Thumbnail cache directory
-THUMBNAIL_CACHE_DIR = project_root() / ".discogs_thumbnails"
-
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from PIL import ImageTk
-
-
-def _is_low_quality_discogs_url(url: str) -> bool:
-  """Check if a Discogs image URL is low quality (small size or low quality setting)."""
-  if not url:
-    return True
-  # Low quality indicators: q:40 (quality 40%) or h:150/w:150 (small size)
-  return '/q:40/' in url or '/h:150/' in url or '/w:150/' in url
-
-
-def _fetch_hires_image_url(release_id: int, headers: dict) -> str | None:
-  """Fetch the high-resolution primary image URL for a release from the Discogs API."""
-  import requests
-  try:
-    url = f"https://api.discogs.com/releases/{release_id}"
-    resp = requests.get(url, headers=headers, timeout=10)
-    if resp.status_code == 200:
-      data = resp.json()
-      images = data.get("images", [])
-      if images:
-        # Get the primary image (first one is usually the cover)
-        return images[0].get("uri") or images[0].get("resource_url")
-  except Exception:
-    pass
-  return None
-
-
-class ThumbnailCache:
-  """Cache for album artwork thumbnails."""
-  
-  THUMB_SIZE = (40, 40)  # Size for display in Treeview
-  PREVIEW_SIZE = (200, 200)  # Size for hover preview
-  POPUP_SIZE = (300, 300)  # Size for popup dialog
-  
-  def __init__(self):
-    """Initialize thumbnail cache."""
-    self.cache_dir = THUMBNAIL_CACHE_DIR
-    self.cache_dir.mkdir(exist_ok=True)
-    self._photo_cache: dict[int, "ImageTk.PhotoImage"] = {}  # In-memory cache of PhotoImage objects
-    self._preview_cache: dict[int, "ImageTk.PhotoImage"] = {}  # Cache for larger preview images
-    self._popup_cache: dict[int, "ImageTk.PhotoImage"] = {}  # Cache for popup images
-    self._placeholder: "ImageTk.PhotoImage | None" = None
-    self._pil_available = False
-    self._check_pil()
-  
-  def _check_pil(self) -> None:
-    """Check if PIL/Pillow is available."""
-    try:
-      from PIL import Image, ImageTk
-      self._pil_available = True
-    except ImportError:
-      self._pil_available = False
-  
-  def is_available(self) -> bool:
-    """Check if thumbnail support is available (PIL installed)."""
-    return self._pil_available
-  
-  def _get_cache_path(self, release_id: int, preview: bool = False) -> Path:
-    """Get the cache file path for a release."""
-    suffix = "_preview" if preview else ""
-    return self.cache_dir / f"{release_id}{suffix}.png"
-  
-  def has_cached(self, release_id: int) -> bool:
-    """Check if we have a cached thumbnail for this release."""
-    return self._get_cache_path(release_id).exists()
-  
-  def get_photo(self, release_id: int) -> "ImageTk.PhotoImage | None":
-    """Get a PhotoImage for a release (from memory cache)."""
-    return self._photo_cache.get(release_id)
-  
-  def get_placeholder(self) -> "ImageTk.PhotoImage | None":
-    """Get a placeholder image for releases without artwork."""
-    if not self._pil_available:
-      return None
-    
-    if self._placeholder is not None:
-      return self._placeholder
-    
-    try:
-      from PIL import Image, ImageTk, ImageDraw
-      
-      # Create a simple placeholder (gray square with vinyl icon)
-      img = Image.new("RGBA", self.THUMB_SIZE, (60, 60, 80, 255))
-      draw = ImageDraw.Draw(img)
-      
-      # Draw a simple vinyl record icon
-      cx, cy = self.THUMB_SIZE[0] // 2, self.THUMB_SIZE[1] // 2
-      r = min(cx, cy) - 4
-      draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(100, 100, 120), width=2)
-      draw.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill=(100, 100, 120))
-      
-      self._placeholder = ImageTk.PhotoImage(img)
-      return self._placeholder
-    except Exception:
-      return None
-  
-  def download_thumbnail(self, release_id: int, thumb_url: str, headers: dict[str, str]) -> bool:
-    """Download and cache a thumbnail. Returns True on success."""
-    if not self._pil_available or not thumb_url:
-      return False
-    
-    cache_path = self._get_cache_path(release_id)
-    if cache_path.exists():
-      return True  # Already cached
-    
-    try:
-      import requests
-      from PIL import Image
-      from io import BytesIO
-      
-      # Download the image
-      resp = requests.get(thumb_url, headers=headers, timeout=10)
-      if resp.status_code != 200:
-        return False
-      
-      # Open and resize
-      img = Image.open(BytesIO(resp.content))
-      img = img.convert("RGBA")
-      img.thumbnail(self.THUMB_SIZE, Image.Resampling.LANCZOS)
-      
-      # Create a square canvas and center the image
-      square = Image.new("RGBA", self.THUMB_SIZE, (30, 30, 50, 255))
-      offset = ((self.THUMB_SIZE[0] - img.width) // 2, (self.THUMB_SIZE[1] - img.height) // 2)
-      square.paste(img, offset)
-      
-      # Save to cache
-      square.save(cache_path, "PNG")
-      return True
-    except Exception:
-      return False
-  
-  def load_photo(self, release_id: int) -> "ImageTk.PhotoImage | None":
-    """Load a cached thumbnail as a PhotoImage."""
-    if not self._pil_available:
-      return None
-    
-    # Check memory cache first
-    if release_id in self._photo_cache:
-      return self._photo_cache[release_id]
-    
-    cache_path = self._get_cache_path(release_id)
-    if not cache_path.exists():
-      return None
-    
-    try:
-      from PIL import Image, ImageTk
-      
-      img = Image.open(cache_path)
-      photo = ImageTk.PhotoImage(img)
-      self._photo_cache[release_id] = photo
-      return photo
-    except Exception:
-      return None
-  
-  def clear_memory_cache(self) -> None:
-    """Clear the in-memory PhotoImage cache."""
-    self._photo_cache.clear()
-    self._preview_cache.clear()
-    self._popup_cache.clear()
-    self._placeholder = None
-  
-  def _get_popup_cache_path(self, release_id: int) -> Path:
-    """Get the cache path for popup-sized images."""
-    return self.cache_dir / f"{release_id}_popup.png"
-  
-  def load_popup_image(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
-    """Load a high-quality image for popup display (larger than preview)."""
-    if not self._pil_available:
-      return None
-
-    # 1. Try memory cache
-    cached = self._popup_cache.get(release_id)
-    if cached:
-      return cached
-
-    # 2. Try disk cache
-    popup_path = self._get_popup_cache_path(release_id)
-    photo = self._load_image_from_path(popup_path, release_id, cache_type="_popup_cache")
-    if photo:
-      return photo
-
-    # 3. Try to download and cache
-    photo = self._download_and_cache_popup_image(release_id, cover_url, headers, popup_path)
-    if photo:
-      return photo
-
-    # 4. Fallback to preview size
-    preview_img = self.load_preview(release_id, cover_url, headers)
-    if preview_img:
-      return preview_img
-
-    return None
-
-  def _load_image_from_path(self, path: Path, release_id: int, cache_type: str) -> "ImageTk.PhotoImage | None":
-    """Helper to load image from disk and cache in memory."""
-    if path.exists():
-      try:
-        from PIL import Image, ImageTk
-        img = Image.open(path)
-        photo = ImageTk.PhotoImage(img)
-        getattr(self, cache_type)[release_id] = photo
-        return photo
-      except Exception:
-        return None
-    return None
-
-  def _download_and_cache_popup_image(self, release_id: int, cover_url: str, headers: dict, popup_path: Path) -> "ImageTk.PhotoImage | None":
-    """Helper to download, process, cache, and return popup image."""
-    if not headers or not release_id:
-      return None
-    try:
-      import requests
-      from PIL import Image, ImageTk
-      from io import BytesIO
-
-      image_url = cover_url
-      if _is_low_quality_discogs_url(cover_url):
-        hires_url = _fetch_hires_image_url(release_id, headers)
-        if hires_url:
-          image_url = hires_url
-
-      if image_url:
-        resp = requests.get(image_url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-          img = Image.open(BytesIO(resp.content))
-          img = img.convert("RGBA")
-          img.thumbnail(self.POPUP_SIZE, Image.Resampling.LANCZOS)
-          square = Image.new("RGBA", self.POPUP_SIZE, (30, 30, 50, 255))
-          offset = ((self.POPUP_SIZE[0] - img.width) // 2, (self.POPUP_SIZE[1] - img.height) // 2)
-          square.paste(img, offset)
-          square.save(popup_path, "PNG")
-          photo = ImageTk.PhotoImage(square)
-          self._popup_cache[release_id] = photo
-          return photo
-    except Exception:
-      return None
-    return None
-
-  def load_preview(self, release_id: int, cover_url: str = None, headers: dict = None) -> "ImageTk.PhotoImage | None":
-    """Load a larger preview image for hover display."""
-    if not self._pil_available:
-      return None
-
-    # 1. Try memory cache
-    cached = self._preview_cache.get(release_id)
-    if cached:
-      return cached
-
-    # 2. Try disk cache
-    preview_path = self._get_cache_path(release_id, preview=True)
-    photo = self._load_preview_from_disk(preview_path, release_id)
-    if photo:
-      return photo
-
-    # 3. Try to download and cache
-    photo = self._download_and_cache_preview(release_id, cover_url, headers, preview_path)
-    if photo:
-      return photo
-
-    # 4. Fallback to upscaling the small thumbnail
-    small_path = self._get_cache_path(release_id, preview=False)
-    photo = self._upscale_small_thumbnail(small_path, release_id)
-    if photo:
-      return photo
-
-    return None
-
-  def _load_preview_from_disk(self, preview_path: Path, release_id: int) -> "ImageTk.PhotoImage | None":
-    if preview_path.exists():
-      try:
-        from PIL import Image, ImageTk
-        img = Image.open(preview_path)
-        photo = ImageTk.PhotoImage(img)
-        self._preview_cache[release_id] = photo
-        return photo
-      except Exception:
-        return None
-    return None
-
-  def _download_and_cache_preview(self, release_id: int, cover_url: str, headers: dict, preview_path: Path) -> "ImageTk.PhotoImage | None":
-    if not headers or not release_id:
-      return None
-    try:
-      import requests
-      from PIL import Image, ImageTk
-      from io import BytesIO
-
-      image_url = cover_url
-      if _is_low_quality_discogs_url(cover_url):
-        hires_url = _fetch_hires_image_url(release_id, headers)
-        if hires_url:
-          image_url = hires_url
-
-      if image_url:
-        resp = requests.get(image_url, headers=headers, timeout=5)
-        if resp.status_code == 200:
-          img = Image.open(BytesIO(resp.content))
-          img = img.convert("RGBA")
-          img.thumbnail(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
-          square = Image.new("RGBA", self.PREVIEW_SIZE, (30, 30, 50, 255))
-          offset = ((self.PREVIEW_SIZE[0] - img.width) // 2, (self.PREVIEW_SIZE[1] - img.height) // 2)
-          square.paste(img, offset)
-          square.save(preview_path, "PNG")
-          photo = ImageTk.PhotoImage(square)
-          self._preview_cache[release_id] = photo
-          return photo
-    except Exception:
-      return None
-    return None
-
-  def _upscale_small_thumbnail(self, small_path: Path, release_id: int) -> "ImageTk.PhotoImage | None":
-    if small_path.exists():
-      try:
-        from PIL import Image, ImageTk
-        img = Image.open(small_path)
-        img = img.resize(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
-        photo = ImageTk.PhotoImage(img)
-        self._preview_cache[release_id] = photo
-        return photo
-      except Exception:
-        return None
-    return None
-
-
-class ImagePreviewPopup:
-  """Popup window for showing enlarged album artwork on hover."""
-  
-  def __init__(self, parent, thumbnail_cache: ThumbnailCache):
-    self.parent = parent
-    self.cache = thumbnail_cache
-    self.popup: tk.Toplevel | None = None
-    self.label: tk.Label | None = None
-    self.current_release_id: int | None = None
-    self._hide_job: str | None = None
-  
-  def show(self, release_id: int, thumb_url: str, headers: dict, x: int, y: int) -> None:
-    """Show the preview popup at the specified position."""
-    if not self.cache.is_available():
-      return
-    
-    # Cancel any pending hide
-    if self._hide_job:
-      self.parent.after_cancel(self._hide_job)
-      self._hide_job = None
-    
-    # If already showing this release, just reposition
-    if self.popup and self.current_release_id == release_id:
-      self._position_popup(x, y)
-      return
-    
-    # Get the preview image
-    photo = self.cache.load_preview(release_id, thumb_url, headers)
-    if not photo:
-      return
-    
-    self.current_release_id = release_id
-    
-    # Create or update the popup window
-    if not self.popup:
-      self.popup = tk.Toplevel(self.parent)
-      self.popup.wm_overrideredirect(True)  # No window decorations
-      self.popup.wm_attributes("-topmost", True)
-      
-      # Create frame with border
-      frame = tk.Frame(self.popup, bg="#1a1a2e", bd=2, relief="solid")
-      frame.pack(fill="both", expand=True)
-      
-      self.label = tk.Label(frame, bg="#1a1a2e")
-      self.label.pack(padx=2, pady=2)
-    
-    # Update the image
-    self.label.config(image=photo)
-    self.label.image = photo  # Keep reference
-    
-    # Position the popup
-    self._position_popup(x, y)
-    
-    self.popup.deiconify()
-  
-  def _position_popup(self, x: int, y: int) -> None:
-    """Position the popup near the cursor but ensure it stays on screen."""
-    if not self.popup:
-      return
-    
-    # Offset from cursor
-    offset_x = 20
-    offset_y = -100
-    
-    # Get screen dimensions
-    screen_w = self.parent.winfo_screenwidth()
-    screen_h = self.parent.winfo_screenheight()
-    
-    # Calculate position
-    popup_w = self.cache.PREVIEW_SIZE[0] + 8
-    popup_h = self.cache.PREVIEW_SIZE[1] + 8
-    
-    pos_x = x + offset_x
-    pos_y = y + offset_y
-    
-    # Keep on screen
-    if pos_x + popup_w > screen_w:
-      pos_x = x - popup_w - 10
-    if pos_y + popup_h > screen_h:
-      pos_y = screen_h - popup_h - 10
-    if pos_y < 0:
-      pos_y = 10
-    
-    self.popup.wm_geometry(f"+{pos_x}+{pos_y}")
-  
-  def hide(self, delay: int = 100) -> None:
-    """Hide the popup with optional delay."""
-    if self._hide_job:
-      self.parent.after_cancel(self._hide_job)
-    
-    def do_hide():
-      if self.popup:
-        self.popup.withdraw()
-      self.current_release_id = None
-      self._hide_job = None
-    
-    if delay > 0:
-      self._hide_job = self.parent.after(delay, do_hide)
-    else:
-      do_hide()
-  
-  def destroy(self) -> None:
-    """Destroy the popup window."""
-    if self.popup:
-      self.popup.destroy()
-      self.popup = None
-      self.label = None
 
 
 class ProgressDialog:
@@ -1020,7 +583,9 @@ class ToolTip:
     self.text = new_text
 
 
+from gui.order_panel import OrderPanel
 from gui.settings_panel import SettingsPanel
+from gui.wishlist_panel import WishlistPanel
 
 
 class App:
@@ -1062,7 +627,7 @@ class App:
       self._wishlist_hover_release_id = row.release_id
 
       try:
-        headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
+        headers = discogs_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
         headers = {"User-Agent": DEFAULT_USER_AGENT}
 
@@ -1825,346 +1390,11 @@ class App:
     self._switch_tab("📋 Shelf Order")
 
   def _build_order_tab(self, parent):
-    self._order_tab = ctk.CTkFrame(parent, fg_color="transparent")
-    self._order_tab.rowconfigure(1, weight=1)
-    self._order_tab.columnconfigure(0, weight=1)
-    self._build_order_toolbar(self._order_tab)
-    self._build_order_tree(self._order_tab)
-
-  def _build_order_toolbar(self, order_fr):
-    order_toolbar = ctk.CTkFrame(order_fr, fg_color="transparent")
-    order_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
-    self._manual_order_check = ctk.CTkCheckBox(
-      order_toolbar,
-      text="✋ Manual Order Mode",
-      variable=self.v_manual_order_enabled,
-      command=self._toggle_manual_order,
-      corner_radius=6,
-      font=(FONT_SEGOE_UI, FONT_MD),
-      fg_color=self._colors["accent"],
-      hover_color=self._colors["button_hover"],
-    )
-    self._manual_order_check.grid(row=0, column=0, sticky="w", padx=(0, 16))
-    self._manual_order_hint = ctk.CTkLabel(
-      order_toolbar,
-      text="(Drag rows to reorder)",
-      font=(FONT_SEGOE_UI, FONT_SM),
-      text_color=self._colors["muted"]
-    )
-    self._manual_order_hint.grid(row=0, column=1, sticky="w", padx=(0, 16))
-    self._reset_order_btn = ctk.CTkButton(
-      order_toolbar,
-      text="↺ Reset to Auto Sort",
-      command=self._reset_manual_order,
-      corner_radius=8,
-      height=42,
-      fg_color="#f59e0b",
-      hover_color="#d97706",
-      font=(FONT_SEGOE_UI, FONT_MD),
-    )
-    self._reset_order_btn.grid(row=0, column=2, sticky="e", padx=(0, 8))
-    self._move_up_btn = ctk.CTkButton(
-      order_toolbar,
-      text="▲ Up",
-      command=self._move_item_up,
-      corner_radius=8,
-      height=42,
-      width=80,
-      fg_color="#4a5568",
-      hover_color="#2d3748",
-      font=(FONT_SEGOE_UI, FONT_MD),
-    )
-    self._move_up_btn.grid(row=0, column=3, sticky="e", padx=(8, 4))
-
-    self._move_down_btn = ctk.CTkButton(
-      order_toolbar,
-      text="▼ Down",
-      command=self._move_item_down,
-      corner_radius=8,
-      height=42,
-      width=80,
-      fg_color="#4a5568",
-      hover_color="#2d3748",
-      font=(FONT_SEGOE_UI, FONT_MD),
-    )
-    self._move_down_btn.grid(row=0, column=4, sticky="e", padx=(0, 8))
-    order_toolbar.columnconfigure(1, weight=1)
-
-  def _build_order_tree(self, order_fr):
-    # Rounded card for the table
-    order_wrap = ctk.CTkFrame(
-      order_fr,
-      corner_radius=12,
-      fg_color=self._colors["panel"],
-      border_width=2,
-      border_color=self._colors.get("card_border", self._colors["border"]),
-    )
-    order_wrap.grid(row=1, column=0, sticky="nsew", padx=(12, 12), pady=(0, 12))
-    order_wrap.rowconfigure(0, weight=1)
-    order_wrap.columnconfigure(0, weight=1)
-    order_scroll = ttk.Scrollbar(order_wrap, orient="vertical")
-    order_scroll.grid(row=0, column=1, sticky="ns", pady=3, padx=(0, 3))
-    columns = ("#", "Artist", "Title", "Year", "Label", "Price")
-    tree_style = "Dark.Treeview" if self.v_dark_mode.get() else "Light.Treeview"
-    self.order_tree = ttk.Treeview(
-      order_wrap,
-      columns=columns,
-      show="tree headings",
-      yscrollcommand=order_scroll.set,
-      selectmode="browse",
-      style=tree_style,
-    )
-    self.order_tree.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
-    order_scroll.config(command=self.order_tree.yview)
-
-    # Empty-state overlay (hidden by default)
-    self._order_empty_label = ctk.CTkLabel(
-      order_wrap,
-      text="No albums yet. Add items to your Discogs collection\nor check your token and refresh.",
-      font=(FONT_SEGOE_UI, FONT_LG),
-      text_color=self._colors["muted"],
-      justify="center",
-    )
-    self._order_empty_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
-    self._order_empty_label.grid_remove()
-
-    # Loading-state overlay (shown until first build completes)
-    self._order_loading_label = ctk.CTkLabel(
-      order_wrap,
-      text="Loading your collection…",
-      font=(FONT_SEGOE_UI, FONT_LG),
-      text_color=self._colors["muted"],
-      justify="center",
-    )
-    self._order_loading_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
-    if self._last_result is None:
-      self._order_loading_label.grid()  # Show until first result
-    else:
-      self._order_loading_label.grid_remove()
-    self.order_tree.heading("#0", text="", anchor="center")
-    self.order_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
-    self.order_tree.heading("#", text="#", anchor="center")
-    self.order_tree.heading("Artist", text="Artist", anchor="w")
-    self.order_tree.heading("Title", text="Title", anchor="w")
-    self.order_tree.heading("Year", text="Year", anchor="center")
-    self.order_tree.heading("Label", text="Label / Cat#", anchor="w")
-    self.order_tree.heading("Price", text="Price", anchor="e")
-    self.order_tree.column("#", width=35, minwidth=30, stretch=False, anchor="center")
-    self.order_tree.column("Artist", width=200, minwidth=100, stretch=True, anchor="w")
-    self.order_tree.column("Title", width=260, minwidth=120, stretch=True, anchor="w")
-    self.order_tree.column("Year", width=50, minwidth=45, stretch=False, anchor="center")
-    self.order_tree.column("Label", width=280, minwidth=100, stretch=True, anchor="w")
-    self.order_tree.column("Price", width=80, minwidth=70, stretch=False, anchor="e")
-    if not self.v_show_prices.get():
-      self.order_tree.column("Price", width=0, minwidth=0, stretch=False)
-    self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
-    self.order_tree.tag_configure("row_odd", background="#1a2d4d" if self.v_dark_mode.get() else "#f0f4f8", foreground=self._colors["order_fg"])
-    self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
-    self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
-    self._configure_treeview_style()
-    self.order_tree.bind("<ButtonPress-1>", self._on_drag_start)
-    self.order_tree.bind("<B1-Motion>", self._on_drag_motion)
-    self.order_tree.bind("<ButtonRelease-1>", self._on_drag_end)
-    self.order_tree.bind("<Motion>", self._on_tree_motion)
-    self.order_tree.bind("<Leave>", self._on_tree_leave)
-    self.order_tree.bind("<Double-1>", self._on_album_double_click)
-    self._image_preview = ImagePreviewPopup(self.root, self._thumbnail_cache)
-    self._hover_release_id: int | None = None
-    self.order_text = tk.Text(order_wrap, height=1, width=1)
-    self._tree_rows: list[ReleaseRow] = []
+    OrderPanel(self).build_tab(parent)
 
   def _build_wishlist_tab(self, parent):
-    self._wishlist_tab = ctk.CTkFrame(parent, fg_color="transparent")
-    self._wishlist_tab.rowconfigure(1, weight=1)
-    self._wishlist_tab.columnconfigure(0, weight=1)
+    WishlistPanel(self).build_tab(parent)
 
-    # Top toolbar with action buttons
-    toolbar_fr = ctk.CTkFrame(self._wishlist_tab, fg_color="transparent")
-    toolbar_fr.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
-    
-    # Check Availability button
-    self._wishlist_check_btn = ctk.CTkButton(
-      toolbar_fr,
-      text="🔍 Check Availability",
-      command=self._check_wishlist_availability,
-      corner_radius=8,
-      height=42,
-      fg_color=self._colors["accent"],
-      hover_color=self._colors["button_hover"],
-      font=(FONT_SEGOE_UI, FONT_MD),
-    )
-    self._wishlist_check_btn.pack(side="left", padx=(0, 8))
-    ToolTip(self._wishlist_check_btn, "Check Discogs Marketplace for available copies of wishlist items")
-
-    # Status label for availability check
-    self._wishlist_status_var = StringVar(value="")
-    wishlist_status_lbl = ctk.CTkLabel(
-      toolbar_fr,
-      textvariable=self._wishlist_status_var,
-      font=(FONT_SEGOE_UI, FONT_SM),
-      text_color=self._colors["muted"]
-    )
-    wishlist_status_lbl.pack(side="left", padx=8)
-
-    self._build_wishlist_tree(self._wishlist_tab, grid_row=1)
-
-  def _build_wishlist_tree(self, wishlist_fr, grid_row=0):
-    # Rounded card for the wishlist table
-    wishlist_wrap = ctk.CTkFrame(
-      wishlist_fr,
-      corner_radius=12,
-      fg_color=self._colors["panel"],
-      border_width=2,
-      border_color=self._colors.get("card_border", self._colors["border"]),
-    )
-    wishlist_wrap.grid(row=grid_row, column=0, sticky="nsew", padx=(12, 12), pady=(0, 12))
-    wishlist_wrap.rowconfigure(0, weight=1)
-    wishlist_wrap.columnconfigure(0, weight=1)
-
-    wishlist_scroll = ttk.Scrollbar(wishlist_wrap, orient="vertical")
-    wishlist_scroll.grid(row=0, column=1, sticky="ns", pady=3, padx=(0, 3))
-
-    wishlist_columns = ("Artist", "Title", "For Sale", "Lowest Price")
-    self.wishlist_tree = ttk.Treeview(
-      wishlist_wrap,
-      columns=wishlist_columns,
-      show="tree headings",
-      selectmode="browse",
-      yscrollcommand=wishlist_scroll.set
-    )
-    wishlist_scroll.config(command=self.wishlist_tree.yview)
-    self.wishlist_tree.config(columns=wishlist_columns, show="tree headings")
-    self.wishlist_tree.heading("#0", text="", anchor="center")
-    self.wishlist_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
-    self.wishlist_tree.heading("Artist", text="Artist", anchor="w")
-    self.wishlist_tree.heading("Title", text="Title", anchor="w")
-    self.wishlist_tree.heading("For Sale", text="For Sale", anchor="center")
-    self.wishlist_tree.heading("Lowest Price", text="Lowest Price", anchor="e")
-    self.wishlist_tree.column("Artist", width=180, minwidth=80, stretch=True, anchor="w")
-    self.wishlist_tree.column("Title", width=220, minwidth=100, stretch=True, anchor="w")
-    self.wishlist_tree.column("For Sale", width=80, minwidth=60, stretch=False, anchor="center")
-    self.wishlist_tree.column("Lowest Price", width=100, minwidth=80, stretch=False, anchor="e")
-    self.wishlist_tree.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
-    self._wishlist_rows = []
-
-    # Empty-state overlay for wishlist (hidden by default)
-    self._wishlist_empty_label = ctk.CTkLabel(
-      wishlist_wrap,
-      text="Add items to your Discogs wantlist to see them here",
-      font=(FONT_SEGOE_UI, FONT_LG),
-      text_color=self._colors["muted"],
-      justify="center",
-    )
-    self._wishlist_empty_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
-    self._wishlist_empty_label.grid_remove()
-
-    self._setup_wishlist_tree_events()
-
-  def _setup_wishlist_tree_events(self):
-    from core.wishlist import load_wishlist, remove_from_wishlist
-
-    def refresh_wishlist_tree():
-      self.wishlist_tree.delete(*self.wishlist_tree.get_children())
-      self._wishlist_rows = []
-      wishlist_data = list(load_wishlist())
-      if not wishlist_data:
-        if hasattr(self, "_wishlist_empty_label"):
-          self._wishlist_empty_label.grid()
-        return
-      if hasattr(self, "_wishlist_empty_label"):
-        self._wishlist_empty_label.grid_remove()
-      for i, entry in enumerate(wishlist_data):
-        row = self._make_wishlist_row(entry)
-        self._wishlist_rows.append(row)
-        placeholder = self._get_placeholder_image()
-        img = self._get_row_image(row, placeholder)
-        
-        # Format availability info
-        num_for_sale = getattr(row, "num_for_sale", None)
-        lowest_price = getattr(row, "lowest_price", None)
-        price_currency = getattr(row, "price_currency", "") or self.v_currency.get()
-        
-        if num_for_sale is not None and num_for_sale > 0:
-          for_sale_text = f"✓ {num_for_sale}"
-          if lowest_price is not None:
-            price_text = f"{price_currency} {lowest_price:.2f}"
-          else:
-            price_text = "—"
-        else:
-          for_sale_text = "—"
-          price_text = "—"
-        
-        values = (
-          str(getattr(row, "artist_display", "")),
-          str(getattr(row, "title", "")),
-          for_sale_text,
-          price_text
-        )
-        
-        # Color rows with available copies differently
-        if num_for_sale is not None and num_for_sale > 0:
-          tag = "row_available" if i % 2 == 0 else "row_available_odd"
-        else:
-          tag = "row_odd" if i % 2 == 1 else "row_even"
-        
-        if img:
-          self.wishlist_tree.insert("", "end", image=img, values=values, tags=(tag,))
-        else:
-          self.wishlist_tree.insert("", "end", values=values, tags=(tag,))
-      
-      # Configure tag colors for available items
-      self.wishlist_tree.tag_configure("row_available", background="#1e3a2f")
-      self.wishlist_tree.tag_configure("row_available_odd", background="#163028")
-      
-      if hasattr(self, '_thumbnails_enabled') and self._thumbnails_enabled:
-        self._download_missing_thumbnails(self._wishlist_rows)
-
-    self.refresh_wishlist_tree = refresh_wishlist_tree
-    self.refresh_wishlist_tree()
-    self.wishlist_tree.bind("<Double-1>", self._on_wishlist_double_click)
-    self.wishlist_tree.bind("<Button-3>", self._on_wishlist_right_click)
-    self.wishlist_tree.bind("<Motion>", self._on_wishlist_tree_motion)
-    self.wishlist_tree.bind("<Leave>", self._on_wishlist_tree_leave)
-    # Bind click on "For Sale" column to open marketplace
-    self.wishlist_tree.bind("<Button-1>", self._on_wishlist_click)
-
-  def _make_wishlist_row(self, entry):
-    from types import SimpleNamespace
-    import re
-    release_id = entry.get("release_id")
-    if not release_id:
-      url = entry.get("discogs_url", entry.get("url", ""))
-      match = re.search(r'/releases?/(\d+)', url)
-      if match:
-        release_id = int(match.group(1))
-    return SimpleNamespace(
-      artist_display=entry.get("artist", ""),
-      title=entry.get("title", ""),
-      year=entry.get("year", ""),
-      label=entry.get("label", ""),
-      catno=entry.get("catno", ""),
-      country=entry.get("country", ""),
-      format_str=entry.get("format", ""),
-      discogs_url=entry.get("discogs_url", entry.get("url", "")),
-      notes=entry.get("notes", ""),
-      release_id=release_id,
-      master_id=entry.get("master_id"),
-      sort_artist=entry.get("artist", ""),
-      sort_title=entry.get("title", ""),
-      median_price=entry.get("median_price"),
-      lowest_price=entry.get("lowest_price"),
-      num_for_sale=entry.get("num_for_sale"),
-      price_currency=entry.get("price_currency", ""),
-      thumb_url=entry.get("thumb", ""),
-      cover_image_url=entry.get("cover_image_url", ""),
-      genres=entry.get("genres", ""),
-      styles=entry.get("styles", ""),
-      companies=entry.get("companies", ""),
-      contributors=entry.get("contributors", ""),
-      barcode=entry.get("barcode", ""),
-      tracklist=entry.get("tracklist", ""),
-      extra=entry.get("extra", "")
-    )
 
   def _on_wishlist_double_click(self, event):
     item = self.wishlist_tree.selection()
@@ -2379,7 +1609,7 @@ class App:
     cover_img = None
     # Get headers for downloading high-quality image
     try:
-      headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
+      headers = discogs_headers(self.v_token.get(), self.v_user_agent.get())
     except Exception:
       headers = {"User-Agent": "Mozilla/5.0"}
     
@@ -2693,7 +1923,7 @@ class App:
       self._hover_release_id = row.release_id
 
       try:
-        headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
+        headers = discogs_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
         headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -3463,7 +2693,7 @@ class App:
     
     # Get current headers
     try:
-      headers = core.discogs_headers(self.v_token.get(), self.v_user_agent.get())
+      headers = discogs_headers(self.v_token.get(), self.v_user_agent.get())
     except Exception:
       headers = {"User-Agent": "Mozilla/5.0"}
     
@@ -3674,14 +2904,14 @@ class App:
 
     txt_path = out_dir / "vinyl_shelf_order.txt"
     csv_path = out_dir / "vinyl_shelf_order.csv"
-    core.write_txt(rows_to_export, txt_path, dividers=False, align=False, show_country=False)
-    core.write_csv(rows_to_export, csv_path)
+    write_txt(rows_to_export, txt_path, dividers=False, align=False, show_country=False)
+    write_csv(rows_to_export, csv_path)
     self._log(f"Exported: {txt_path.name}")
     self._log(f"Exported: {csv_path.name}")
 
     if cfg.write_json:
       json_path = out_dir / "vinyl_shelf_order.json"
-      core.write_json(rows_to_export, json_path)
+      write_json(rows_to_export, json_path)
       self._log(f"Exported: {json_path.name}")
     
     # Note if manual order was used
