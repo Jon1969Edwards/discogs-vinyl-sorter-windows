@@ -791,9 +791,14 @@ class App:
     self._drag_start_index: int | None = None
     self._drag_item_id: str | None = None
 
+    self._auth_prompt_shown = False
+
     self._build_ui(root)
     self._setup_keyboard_shortcuts()
     self._pump_queues()
+
+    # First-run: guide user to sign in before the watcher logs a cryptic error
+    self.root.after(500, self._prompt_first_run_auth)
 
     # Start watching immediately
     threading.Thread(target=self._watch_loop, daemon=True).start()
@@ -3005,6 +3010,44 @@ class App:
       cfg.token or os.environ.get("DISCOGS_TOKEN", "") or
       (cfg.oauth_access_token and cfg.oauth_access_secret)
     )
+
+  def _oauth_signin_available(self) -> bool:
+    from core.oauth_discogs import _get_consumer_credentials
+
+    return _get_consumer_credentials(None) is not None
+
+  def _ensure_settings_visible(self) -> None:
+    """Expand the settings sidebar if it is collapsed."""
+    if getattr(self, "_settings_collapsed", False):
+      self._toggle_settings_sidebar()
+
+  def _prompt_first_run_auth(self) -> None:
+    """On launch, prompt once per session when no Discogs auth is configured."""
+    if self._auth_prompt_shown:
+      return
+    cfg = self._get_cfg()
+    if self._has_valid_token(cfg):
+      return
+    self._auth_prompt_shown = True
+    self._ensure_settings_visible()
+    if self._oauth_signin_available():
+      messagebox.showinfo(
+        "Connect to Discogs",
+        "Discogs Auto-Sort needs access to your collection.\n\n"
+        "In Settings (left), click «Sign in with Discogs» and approve access in your browser.\n\n"
+        "Or expand «Advanced: use Personal Access Token» and paste a token from "
+        "Discogs → Settings → Developers.",
+      )
+    else:
+      messagebox.showinfo(
+        "Connect to Discogs",
+        "Discogs Auto-Sort needs a Personal Access Token.\n\n"
+        "In Settings (left), expand «Advanced: use Personal Access Token» and paste your token "
+        "(Discogs → Settings → Developers).\n\n"
+        "One-click sign-in is not configured in this build. "
+        "See OAUTH_SETUP.md if you want to enable it.",
+      )
+    self._log("No Discogs authentication configured — use Settings to sign in or add a token.")
 
   def _handle_missing_token(self, cfg):
     self._log("Error: No Discogs authentication. Sign in or enter your token in Settings.")

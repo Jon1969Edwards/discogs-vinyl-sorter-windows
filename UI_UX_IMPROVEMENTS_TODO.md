@@ -26,7 +26,7 @@ Work through one item at a time. Product backlog below; refactor/tech items are 
 
 | # | Task | Scope | Status |
 |---|------|-------|--------|
-| 5 | **First-run auth check** | Prompt when no token/OAuth on launch | Pending |
+| 5 | **First-run auth check** | Prompt when no token/OAuth on launch | Done |
 | 6 | **Install/shortcut improvements** | SETUP.bat, CREATE-SHORTCUTS.bat | Pending |
 | 6b | **Multi-format collection filter** | Settings checkboxes; `core/format_filter.py` | Done |
 | 6c | **Scrollable settings panel** | Full-width formats section (`CTkScrollableFrame`) | Done |
@@ -64,3 +64,4 @@ Work through one item at a time. Product backlog below; refactor/tech items are 
 - **2026:** OAuth sign-in, multi-format filter, settings scroll fix, PyInstaller build script.
 - **2026:** Incremental refactor — `format_filter`, `settings_panel`, `build_service`, format tests.
 - **2026:** Technical follow-ups — collector wrappers, GUI module splits, cleaner imports.
+- **2026:** Band-safe LNF fix (e.g. Agnostic Front); first-run auth prompt on launch.
