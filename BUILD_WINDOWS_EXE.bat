@@ -14,9 +14,19 @@ if not exist "%PY%" (
 echo Installing PyInstaller if needed...
 "%PY%" -m pip install pyinstaller --quiet
 
+REM Bundled OAuth credentials live in core\discogs_oauth_secrets.py (gitignored).
+REM It is loaded dynamically at runtime, so PyInstaller can't auto-detect it:
+REM include it (and the fallback module) explicitly so "Sign in with Discogs" works.
+if not exist "core\discogs_oauth_secrets.py" (
+  echo WARNING: core\discogs_oauth_secrets.py not found.
+  echo          The build will NOT have one-click "Sign in with Discogs".
+  echo          Copy core\discogs_oauth_secrets.example.py and add your keys first.
+  echo.
+)
+
 echo.
 echo Building... (one-time; may take a few minutes)
-"%PY%" -m PyInstaller --noconfirm --windowed --onedir --name "DiscogsVinylSorter" --collect-all customtkinter autosort_gui.py
+"%PY%" -m PyInstaller --noconfirm --windowed --onedir --name "DiscogsVinylSorter" --collect-all customtkinter --hidden-import core.discogs_oauth_secrets --hidden-import core.discogs_oauth_app --hidden-import requests_oauthlib --hidden-import dotenv autosort_gui.py
 
 if %ERRORLEVEL% neq 0 (
   echo.
