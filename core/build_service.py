@@ -218,12 +218,12 @@ def get_collection_count(headers: dict | None = None, username: str = "", sessio
 def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = None, cache: CollectionCache = None, main_progress_q=None) -> BuildResult:
   """Build the shelf order once, with granular progress updates."""
 
-  def report(action, message):
+  def report(action, message, fraction=None):
     if main_progress_q:
-      main_progress_q.put((action, message))
+      main_progress_q.put((action, message, fraction))
 
   def get_headers_and_username():
-    report("update", "Fetching collection from Discogs...")
+    report("update", "Connecting to Discogs…", 0.03)
     try:
       _, headers, session, username = _get_user_headers(cfg, log)
       if cache:
@@ -234,9 +234,18 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
       raise
 
   def collect_rows(headers, session, username):
-    report("update", "Collecting rows from Discogs...")
+    report("update", "Starting collection download…", 0.05)
+
+    def on_page(page: int, total_pages: int, items_so_far: int) -> None:
+      fraction = 0.08 + (0.72 * page / max(total_pages, 1))
+      report(
+        "update",
+        f"Fetching collection… page {page} of {total_pages} ({items_so_far} items)",
+        fraction,
+      )
+
     try:
-      rows = _collect_rows(cfg, headers, session, username)
+      rows = _collect_rows(cfg, headers, session, username, on_page=on_page)
       if not rows:
         log("No matching items found.")
         report("error", "No matching items found.")
@@ -248,9 +257,9 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
 
   def handle_prices_if_needed(headers, session, rows):
     need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
-    report("update", "Checking if price data is needed...")
+    report("update", "Checking if price data is needed…", 0.82)
     if need_prices:
-      report("update", "Fetching album prices from Discogs Marketplace...")
+      report("update", "Fetching album prices from Discogs Marketplace…", 0.84)
       try:
         _handle_prices(cfg, log, progress_callback, cache, headers, session, rows, main_progress_q)
       except Exception as e:
@@ -260,11 +269,11 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
 
   def sort_and_generate_output(rows, need_prices, username):
     try:
-      report("update", "Sorting collection...")
+      report("update", f"Sorting {len(rows)} releases…", 0.9)
       rows_sorted = sort_rows(rows, "normal", sort_by=cfg.sort_by)
-      report("update", "Generating output files...")
+      report("update", "Preparing shelf order…", 0.96)
       lines = generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=need_prices)
-      report("done", "Done!")
+      report("done", "Done!", 1.0)
       return BuildResult(username=username, rows_sorted=rows_sorted, lines=lines)
     except Exception as e:
       report("error", f"Build failed: {e}")
@@ -312,7 +321,7 @@ def _get_user_headers(cfg: AutoConfig, log: callable):
     return token, headers, None, username
 
 
-def _collect_rows(cfg: AutoConfig, headers: dict | None, session, username: str):
+def _collect_rows(cfg: AutoConfig, headers: dict | None, session, username: str, on_page=None):
     return collect_all_rows(
         headers=headers,
         username=username,
@@ -324,6 +333,7 @@ def _collect_rows(cfg: AutoConfig, headers: dict | None, session, username: str)
         lnf_allow_3=False,
         lnf_exclude=set(),
         lnf_safe_bands=True,
+        on_page=on_page,
     )
 
 
@@ -362,11 +372,11 @@ def _populate_prices_from_cache(cfg, cache, rows):
 
 
 def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, session, releases_needing_fetch, cached_count, main_progress_q=None):
-    def _report_progress(action, message):
+    def _report_progress(action, message, fraction=None):
         if progress_callback:
-            progress_callback(action, message)
+            progress_callback(action, message, fraction)
         if main_progress_q:
-            main_progress_q.put((action, message))
+            main_progress_q.put((action, message, fraction))
 
     def _update_cache(cache, releases, currency):
         for row in releases:

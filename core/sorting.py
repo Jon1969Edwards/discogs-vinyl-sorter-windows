@@ -700,6 +700,7 @@ def collect_all_rows(
   lnf_exclude: Optional[Set[str]] = None,
   lnf_safe_bands: bool = False,
   session: Optional[Any] = None,
+  on_page: Optional[Any] = None,
 ) -> List[ReleaseRow]:
   """Collect every release in the collection in a single API pass.
 
@@ -710,7 +711,14 @@ def collect_all_rows(
   if extra_articles is None:
     extra_articles = []
   rows: List[ReleaseRow] = []
-  for item in iterate_collection(headers=headers, username=username, per_page=per_page, max_pages=max_pages, session=session):
+  for item in iterate_collection(
+    headers=headers,
+    username=username,
+    per_page=per_page,
+    max_pages=max_pages,
+    session=session,
+    on_page=on_page,
+  ):
     basic = item.get("basic_information") or {}
     if not basic:
       continue

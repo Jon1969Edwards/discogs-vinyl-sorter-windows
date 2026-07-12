@@ -555,7 +555,7 @@ class App:
     self.log_q: queue.Queue[str] = queue.Queue()
     
     # Progress dialog control - messages from background thread
-    self.progress_q: queue.Queue[tuple[str, str | None]] = queue.Queue()  # (action, message)
+    self.progress_q: queue.Queue[tuple] = queue.Queue()
     self._progress_dialog: ProgressDialog | None = None
     
     # Drag-and-drop state
@@ -2255,6 +2255,13 @@ class App:
         self._order_empty_label.configure(text_color=self._colors["muted"])
       if hasattr(self, "_order_loading_label"):
         self._order_loading_label.configure(text_color=self._colors["muted"])
+      if hasattr(self, "_order_loading_detail"):
+        self._order_loading_detail.configure(text_color=self._colors["muted"])
+      if hasattr(self, "_order_loading_progress"):
+        self._order_loading_progress.configure(
+          progress_color=self._colors["accent"],
+          fg_color=self._colors.get("panel2", self._colors["border"]),
+        )
       if hasattr(self, "_order_loading_spinner"):
         self._order_loading_spinner.set_colors(
           bg=self._colors["panel"],
@@ -2369,28 +2376,78 @@ class App:
   def _handle_progress_queue(self) -> None:
     try:
       while True:
-        action, message = self.progress_q.get_nowait()
-        self._process_progress_action(action, message)
+        item = self.progress_q.get_nowait()
+        action = item[0]
+        message = item[1] if len(item) > 1 else None
+        fraction = item[2] if len(item) > 2 else None
+        self._process_progress_action(action, message, fraction)
     except queue.Empty:
       pass
 
-  def _process_progress_action(self, action: str, message: str | None) -> None:
+  def _is_loading_overlay_visible(self) -> bool:
+    overlay = getattr(self, "_order_loading_overlay", None)
+    if overlay is None:
+      return False
+    try:
+      return bool(overlay.winfo_ismapped())
+    except Exception:
+      return False
+
+  def _update_loading_progress(self, message: str, fraction: float | None = None, *, error: bool = False) -> None:
+    if hasattr(self, "_order_loading_detail"):
+      display = message
+      if fraction is not None and not error:
+        display = f"{message} ({int(fraction * 100)}%)"
+      self._order_loading_detail.configure(
+        text=display,
+        text_color=self._colors["accent3"] if error else self._colors["muted"],
+      )
+    if hasattr(self, "_order_loading_label") and error:
+      self._order_loading_label.configure(text="Could not load collection")
+    bar = getattr(self, "_order_loading_progress", None)
+    if bar is None:
+      return
+    try:
+      if error:
+        bar.stop()
+        bar.set(0)
+      elif fraction is not None:
+        bar.stop()
+        bar.set(max(0.0, min(float(fraction), 1.0)))
+      else:
+        bar.set(0)
+        bar.start()
+    except Exception:
+      pass
+
+  def _process_progress_action(self, action: str, message: str | None, fraction: float | None = None) -> None:
     if action == "show":
       self._set_action_buttons_state("disabled")
       if self._progress_dialog is None:
         self._progress_dialog = ProgressDialog(self.root, "Working...", message or "Please wait...")
-    elif action == "update" and self._progress_dialog is not None:
-      self._progress_dialog.update_progress(message or "")
+      if self._is_loading_overlay_visible():
+        self._update_loading_progress(message or "Working…", fraction)
+    elif action == "update":
+      if self._progress_dialog is not None:
+        self._progress_dialog.update_progress(message or "")
+      if self._is_loading_overlay_visible():
+        self._update_loading_progress(message or "Loading…", fraction)
     elif action == "message" and self._progress_dialog is not None:
       self._progress_dialog.update_message(message or "")
-    elif action == "error" and self._progress_dialog is not None:
-      self._progress_dialog.set_error(message or "An error occurred.")
-      self._progress_dialog.top.after(1600, self._progress_dialog.close)
-      self._progress_dialog = None
+    elif action == "error":
+      if self._is_loading_overlay_visible():
+        self._update_loading_progress(message or "An error occurred.", None, error=True)
+      if self._progress_dialog is not None:
+        self._progress_dialog.set_error(message or "An error occurred.")
+        self._progress_dialog.top.after(1600, self._progress_dialog.close)
+        self._progress_dialog = None
       self._set_action_buttons_state("normal")
-    elif action == "done" and self._progress_dialog is not None:
-      self._progress_dialog.set_done(message or self._progress_dialog.DONE_MESSAGE)
-      self._progress_dialog = None
+    elif action == "done":
+      if self._is_loading_overlay_visible():
+        self._update_loading_progress(message or "Done!", 1.0)
+      if self._progress_dialog is not None:
+        self._progress_dialog.set_done(message or self._progress_dialog.DONE_MESSAGE)
+        self._progress_dialog = None
       self._set_action_buttons_state("normal")
     elif action == "close" and self._progress_dialog is not None:
       self._progress_dialog.close()
@@ -2431,9 +2488,17 @@ class App:
         self._order_loading_overlay.grid()
         if hasattr(self, "_order_loading_spinner"):
           self._order_loading_spinner.start()
+        self._update_loading_progress("Connecting to Discogs…", 0.0)
+        if hasattr(self, "_order_loading_label"):
+          self._order_loading_label.configure(text="Loading your collection…")
       else:
         if hasattr(self, "_order_loading_spinner"):
           self._order_loading_spinner.stop()
+        if hasattr(self, "_order_loading_progress"):
+          try:
+            self._order_loading_progress.stop()
+          except Exception:
+            pass
         self._order_loading_overlay.grid_remove()
     elif hasattr(self, "_order_loading_label"):
       if show:
@@ -2819,8 +2884,8 @@ class App:
     self._log("Watcher started.")
     self.v_status.set("Watching for changes…")
 
-    def progress_callback(action: str, message: str | None):
-      self.progress_q.put((action, message))
+    def progress_callback(action: str, message: str | None, fraction: float | None = None):
+      self.progress_q.put((action, message, fraction))
 
     while not self._stop.is_set():
       cfg = self._get_cfg()
@@ -2955,7 +3020,7 @@ class App:
     self._log(f"Error: {e}")
     self._log(traceback.format_exc())
     self.v_status.set("Error (see Log tab).")
-    self.progress_q.put(("close", None))
+    self.progress_q.put(("error", str(e), None))
 
 
 def main() -> None:

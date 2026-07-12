@@ -246,10 +246,12 @@ def fetch_discogs_wantlist(token: Optional[str] = None, per_page: int = 100,
 
 def iterate_collection(headers: Optional[Dict[str, str]] = None, username: str = "",
                        per_page: int = 100, max_pages: Optional[int] = None,
-                       session: Optional[Any] = None) -> Iterable[Dict]:
+                       session: Optional[Any] = None,
+                       on_page: Optional[Any] = None) -> Iterable[Dict]:
     """Iterate through all releases in a user's collection. Use headers or session."""
     page = 1
     total_pages: Optional[int] = None
+    items_so_far = 0
     while True:
         url = f"{API_BASE}/users/{username}/collection/folders/0/releases"
         params = {
@@ -261,7 +263,11 @@ def iterate_collection(headers: Optional[Dict[str, str]] = None, username: str =
         data = api_get(url, headers=headers, session=session, params=params).json()
         if total_pages is None:
             total_pages = int(data.get("pagination", {}).get("pages", 1))
-        for item in data.get("releases", []):
+        releases = data.get("releases", [])
+        items_so_far += len(releases)
+        if on_page:
+            on_page(page, total_pages, items_so_far)
+        for item in releases:
             yield item
         page += 1
         if max_pages and page > max_pages:

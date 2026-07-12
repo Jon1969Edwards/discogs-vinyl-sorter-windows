@@ -157,6 +157,27 @@ class OrderPanel:
     )
     a._order_loading_label.pack()
 
+    a._order_loading_detail = ctk.CTkLabel(
+      loading_content,
+      text="Connecting to Discogs…",
+      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
+      text_color=a._colors["muted"],
+      justify="center",
+    )
+    a._order_loading_detail.pack(pady=(8, 10))
+
+    a._order_loading_progress = ctk.CTkProgressBar(
+      loading_content,
+      width=280,
+      height=14,
+      corner_radius=7,
+      progress_color=a._colors["accent"],
+      fg_color=a._colors.get("panel2", a._colors["border"]),
+    )
+    a._order_loading_progress.pack()
+    a._order_loading_progress.set(0)
+    a._order_loading_progress.start()
+
     if a._last_result is None:
       a._show_order_loading_state(True)
     else:
