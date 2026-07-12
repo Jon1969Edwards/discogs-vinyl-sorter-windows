@@ -12,6 +12,7 @@ and tested independently of the GUI.
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,7 +23,6 @@ from core.api import (
     discogs_headers,
     fetch_prices_for_rows,
     get_identity,
-    get_token,
 )
 from core.export import generate_txt_lines
 from core.models import BuildResult
@@ -296,22 +296,32 @@ def _get_user_headers(cfg: AutoConfig, log: callable):
     """Return (token, headers, session, username). Use OAuth if available, else token."""
     if cfg.oauth_access_token and cfg.oauth_access_secret:
         creds = _get_consumer_credentials(None)
-        if creds:
-            consumer_key, consumer_secret = creds
-            try:
-                session = get_oauth_session(
-                    consumer_key, consumer_secret,
-                    cfg.oauth_access_token, cfg.oauth_access_secret,
-                    cfg.user_agent,
-                )
-                ident = get_identity(session=session)
-                username = ident.get("username")
-                if username:
-                    log(f"User: {username} (signed in)")
-                    return None, None, session, username
-            except Exception as e:
-                log(f"OAuth session failed: {e}. Falling back to token.")
-    token = get_token(cfg.token or None)
+        if not creds:
+            raise RuntimeError(
+                "Discogs sign-in is saved but this app build is missing OAuth setup. "
+                "Run SETUP_OAUTH.bat once in the app folder, then sign in again."
+            )
+        consumer_key, consumer_secret = creds
+        try:
+            session = get_oauth_session(
+                consumer_key, consumer_secret,
+                cfg.oauth_access_token, cfg.oauth_access_secret,
+                cfg.user_agent,
+            )
+            ident = get_identity(session=session)
+            username = ident.get("username")
+            if username:
+                log(f"User: {username} (signed in)")
+                return None, None, session, username
+            raise RuntimeError("Discogs did not return a username for this sign-in.")
+        except Exception as e:
+            raise RuntimeError(f"Discogs sign-in failed: {e}") from e
+    token = (cfg.token or "").strip() or os.getenv("DISCOGS_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError(
+            "Could not connect to Discogs. Sign in again with Discogs in Settings, "
+            "or set a personal access token."
+        )
     headers = discogs_headers(token, cfg.user_agent)
     ident = get_identity(headers=headers)
     username = ident.get("username")

@@ -2348,6 +2348,22 @@ class App:
     ts = time.strftime("%H:%M:%S")
     self.log_q.put(f"[{ts}] {msg}\n")
 
+  def _set_status_async(self, text: str) -> None:
+    """Update the status bar from a background thread."""
+    try:
+      self.root.after(0, lambda: self.v_status.set(text))
+    except Exception:
+      pass
+
+  def _report_build_progress(
+    self,
+    action: str,
+    message: str | None = None,
+    fraction: float | None = None,
+  ) -> None:
+    """Thread-safe progress for the loading overlay (processed on the main thread)."""
+    self.progress_q.put((action, message, fraction))
+
   def _pump_queues(self) -> None:
     self._handle_log_queue()
     self._handle_result_queue()
@@ -2428,6 +2444,8 @@ class App:
       if self._is_loading_overlay_visible():
         self._update_loading_progress(message or "Working…", fraction)
     elif action == "update":
+      if self._last_result is None and not self._is_loading_overlay_visible():
+        self._show_order_loading_state(True)
       if self._progress_dialog is not None:
         self._progress_dialog.update_progress(message or "")
       if self._is_loading_overlay_visible():
@@ -2785,8 +2803,7 @@ class App:
     # Wake the watcher and force immediate check
     self._log("Manual refresh requested.")
     self.v_status.set("Refresh requested…")
-    if self._last_result is None:
-      self._show_order_loading_state(True)
+    self._show_order_loading_state(True)
     self._force_rebuild = True
     self._wake.set()
 
@@ -2882,10 +2899,10 @@ class App:
   def _watch_loop(self) -> None:
     """Background thread: poll collection count; rebuild on change or manual refresh."""
     self._log("Watcher started.")
-    self.v_status.set("Watching for changes…")
+    self._set_status_async("Watching for changes…")
 
     def progress_callback(action: str, message: str | None, fraction: float | None = None):
-      self.progress_q.put((action, message, fraction))
+      self._report_build_progress(action, message, fraction)
 
     while not self._stop.is_set():
       cfg = self._get_cfg()
@@ -2894,9 +2911,13 @@ class App:
           self._handle_missing_token(cfg)
           continue
 
-        _, headers, session, username = self._get_user_info(cfg)
-        count = get_collection_count(headers=headers, session=session, username=username)
         force = self._force_rebuild
+        if force or self._last_count is None:
+          self._report_build_progress("update", "Connecting to Discogs…", 0.0)
+
+        _, headers, session, username = self._get_user_info(cfg)
+        self._report_build_progress("update", "Checking collection size…", 0.01)
+        count = get_collection_count(headers=headers, session=session, username=username)
         self._force_rebuild = False
 
         if self._should_build_initial(force):
@@ -2904,7 +2925,7 @@ class App:
         elif count != self._last_count:
           self._handle_collection_changed(cfg, count, progress_callback)
         else:
-          self.v_status.set(f"No changes. Polling every {cfg.poll_seconds}s")
+          self._set_status_async(f"No changes. Polling every {cfg.poll_seconds}s")
 
       except Exception as e:
         self._handle_watch_exception(e)
@@ -2956,9 +2977,42 @@ class App:
 
   def _handle_missing_token(self, cfg):
     self._log("Error: Not signed in to Discogs. Click Sign in with Discogs in Settings.")
-    self.v_status.set("Error: Sign in required (see Settings)")
+    self._set_status_async("Error: Sign in required (see Settings)")
+    self._report_build_progress(
+      "error",
+      "Not signed in. Use Sign in with Discogs in Settings.",
+      None,
+    )
     self._wake.clear()
     self._wake.wait(timeout=cfg.poll_seconds)
+
+  def _update_wishlist_background(self, cfg) -> None:
+    """Refresh wishlist after the shelf order build so collection load is not blocked."""
+    def work() -> None:
+      try:
+        from core.wishlist import save_wishlist
+        from core.api import fetch_discogs_wantlist
+
+        _, headers, session, _ = self._get_user_info(cfg)
+        if not session and not (cfg.token or "").strip():
+          return
+        self._log("Updating wishlist from Discogs…")
+        wantlist = fetch_discogs_wantlist(
+          token=(cfg.token or "").strip() or None,
+          session=session,
+          user_agent=cfg.user_agent,
+        )
+        save_wishlist(wantlist)
+        self._log(f"Wishlist updated from Discogs. {len(wantlist)} items.")
+        try:
+          if hasattr(self, "refresh_wishlist_tree"):
+            self.root.after(0, self.refresh_wishlist_tree)
+        except Exception:
+          pass
+      except Exception as e:
+        self._log(f"Failed to update wishlist from Discogs: {e}")
+
+    threading.Thread(target=work, daemon=True, name="wishlist-sync").start()
 
   def _get_user_info(self, cfg):
     """Return (token, headers, session, username). Uses OAuth if available."""
@@ -2977,50 +3031,33 @@ class App:
       self._log(f"Initial collection count: {count}")
     else:
       self._log(f"Forced refresh. Collection count: {count}")
-    # --- Update wishlist from Discogs ---
-    try:
-      from core.wishlist import save_wishlist
-      from core.api import fetch_discogs_wantlist
-      _, headers, session, _ = self._get_user_info(cfg)
-      if session or self.v_token.get().strip():
-        self._log("Updating wishlist from Discogs…")
-        wantlist = fetch_discogs_wantlist(token=self.v_token.get().strip() or None, session=session)
-        save_wishlist(wantlist)
-        self._log(f"Wishlist updated from Discogs. {len(wantlist)} items.")
-        # Refresh wishlist tab if function is available
-        try:
-          if hasattr(self, "refresh_wishlist_tree"):
-            self.refresh_wishlist_tree()
-        except Exception:
-          pass
-    except Exception as e:
-      self._log(f"Failed to update wishlist from Discogs: {e}")
-    # ---
-    self._show_order_loading_state(True)
+    self._report_build_progress("update", f"Found {count} items — starting download…", 0.02)
     self._log("Building shelf order…")
-    self.v_status.set("Building…")
+    self._set_status_async("Building…")
     result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
     self.result_q.put(result)
     self._last_built_at = time.time()
     self._log(f"Build complete. Items: {len(result.rows_sorted)}")
-    self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+    self._set_status_async(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+    self._update_wishlist_background(cfg)
 
   def _handle_collection_changed(self, cfg, count, progress_callback):
     self._log(f"Collection changed: {self._last_count} → {count}")
     self._last_count = count
     self._log("Rebuilding shelf order…")
-    self.v_status.set("Rebuilding…")
+    self._set_status_async("Rebuilding…")
+    self._report_build_progress("update", f"Collection changed — rebuilding {count} items…", 0.02)
     result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
     self.result_q.put(result)
     self._last_built_at = time.time()
     self._log(f"Build complete. Items: {len(result.rows_sorted)}")
-    self.v_status.set(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+    self._set_status_async(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
 
   def _handle_watch_exception(self, e):
     self._log(f"Error: {e}")
     self._log(traceback.format_exc())
-    self.v_status.set("Error (see Log tab).")
-    self.progress_q.put(("error", str(e), None))
+    self._set_status_async("Error (see Log tab).")
+    self._report_build_progress("error", str(e), None)
 
 
 def main() -> None:
