@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import customtkinter as ctk
 
 from core.format_filter import FORMAT_FILTERS
+from gui import constants as ui
+from gui.tooltip import ToolTip
 
 if TYPE_CHECKING:
   from autosort_gui import App
@@ -24,8 +26,6 @@ class SettingsPanel:
 
   def build(self, frm, row: int) -> None:
     """Create settings frame, scroll area, and all section cards."""
-    import autosort_gui as ui
-
     a = self._a
     a._settings_collapsed = True
 
@@ -62,7 +62,7 @@ class SettingsPanel:
       command=a._toggle_settings_sidebar,
     )
     a._settings_collapse_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
-    ui.ToolTip(a._settings_collapse_btn, "Hide settings panel")
+    ToolTip(a._settings_collapse_btn, "Hide settings panel")
 
     a._settings_frame.rowconfigure(1, weight=1)
     a._settings_scroll = ctk.CTkScrollableFrame(
@@ -95,7 +95,7 @@ class SettingsPanel:
       command=a._toggle_settings_sidebar,
     )
     a._settings_expand_btn.pack(expand=True, fill="y", padx=2, pady=8)
-    ui.ToolTip(a._settings_expand_btn, "Show settings panel")
+    ToolTip(a._settings_expand_btn, "Show settings panel")
     a._settings_row = row
 
     if a._settings_collapsed:
@@ -105,8 +105,6 @@ class SettingsPanel:
 
   def _build_content(self, settings) -> None:
     import tkinter as tk
-
-    import autosort_gui as ui
 
     a = self._a
     settings.columnconfigure(0, weight=1)
@@ -172,7 +170,7 @@ class SettingsPanel:
       font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_MD),
     )
     a._signin_btn.pack(side="left", padx=(0, 8))
-    ui.ToolTip(
+    ToolTip(
       a._signin_btn,
       "Opens Discogs in your browser. Click Approve — no password or token to copy.",
     )
@@ -187,7 +185,7 @@ class SettingsPanel:
       hover_color="#2d3748",
     )
     a._signout_btn.pack(side="left")
-    ui.ToolTip(a._signout_btn, "Sign out of Discogs on this computer")
+    ToolTip(a._signout_btn, "Sign out of Discogs on this computer")
     a._auth_status_label = ctk.CTkLabel(
       auth_section,
       text="Not signed in",
@@ -195,7 +193,6 @@ class SettingsPanel:
       text_color=a._colors["muted"],
     )
     a._auth_status_label.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 14))
-    a.token_entry = None
     a._update_auth_buttons_state()
 
     output_section = make_section("Output Settings", "📁")
@@ -281,7 +278,7 @@ class SettingsPanel:
       corner_radius=8,
     )
     a._divider_mode_combo.grid(row=0, column=0, sticky="w")
-    ui.ToolTip(
+    ToolTip(
       a._divider_mode_combo,
       "Insert divider lines in exported/printed TXT. "
       "By shelf: A (A–H), B (I–P), C (Q–Z) for physical shelf units.",
@@ -372,15 +369,13 @@ class SettingsPanel:
       )
       chk.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 16), pady=4)
       a._format_checks[key] = chk
-    ui.ToolTip(
+    ToolTip(
       a._format_checks["everything"],
       "Show every item regardless of format (overrides the other checkboxes).",
     )
     self.update_format_checks_state()
 
   def _build_sort_content(self, sort_row) -> None:
-    import autosort_gui as ui
-
     a = self._a
     sort_row.columnconfigure(0, weight=1)
     a._sort_combo = ctk.CTkOptionMenu(

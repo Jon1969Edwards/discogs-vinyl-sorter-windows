@@ -8,6 +8,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk
 
+from gui import constants as ui
 from gui.thumbnails import ImagePreviewPopup
 
 if TYPE_CHECKING:
@@ -25,8 +26,6 @@ class OrderPanel:
     return self.app
 
   def build_tab(self, parent) -> None:
-    import autosort_gui as ui
-
     a = self._a
     a._order_tab = ctk.CTkFrame(parent, fg_color="transparent")
     a._order_tab.rowconfigure(1, weight=1)
@@ -122,7 +121,7 @@ class OrderPanel:
 
     a._order_empty_label = ctk.CTkLabel(
       order_wrap,
-      text="No albums yet. Add items to your Discogs collection\nor check your token and refresh.",
+      text="No albums yet. Sign in with Discogs and click Refresh to load your collection.",
       font=(ui.FONT_SEGOE_UI, ui.FONT_LG),
       text_color=a._colors["muted"],
       justify="center",

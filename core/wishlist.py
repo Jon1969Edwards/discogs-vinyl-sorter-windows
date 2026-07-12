@@ -1,9 +1,11 @@
 # wishlist.py
 # Simple wishlist management for Discogs Vinyl Sorter
 import json
-from pathlib import Path
 
-WISHLIST_FILE = Path("wishlist.json")
+from core.paths import project_root
+
+WISHLIST_FILE = project_root() / "wishlist.json"
+
 
 def load_wishlist():
     if WISHLIST_FILE.exists():
@@ -11,9 +13,11 @@ def load_wishlist():
             return json.load(f)
     return []
 
+
 def save_wishlist(wishlist):
     with open(WISHLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(wishlist, f, indent=2, ensure_ascii=False)
+
 
 def add_to_wishlist(artist, title, discogs_url=None, year=None, thumb=None, cover_image_url=None, release_id=None, **kwargs):
     wishlist = load_wishlist()
@@ -37,10 +41,12 @@ def add_to_wishlist(artist, title, discogs_url=None, year=None, thumb=None, cove
     save_wishlist(wishlist)
     return True
 
+
 def remove_from_wishlist(artist, title):
     wishlist = load_wishlist()
     wishlist = [w for w in wishlist if not (w["artist"] == artist and w["title"] == title)]
     save_wishlist(wishlist)
+
 
 def is_in_wishlist(artist, title):
     wishlist = load_wishlist()

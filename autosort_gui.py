@@ -1,29 +1,11 @@
-#!/usr/bin/env python3
 """Discogs Auto-Sort GUI
 
-A fresh, minimal GUI that:
-- Watches your Discogs collection for changes (polls item count).
-- Regenerates shelf order automatically when it changes.
-- Provides a "Refresh Now" button to force an immediate re-check + rebuild.
-
-It reuses core modules (api, sorting, export, build_service) for fetching, sorting, and writing outputs.
-Token discovery order:
-- GUI Token field (if provided)
-- DISCOGS_TOKEN env var
-- .env (python-dotenv), via core.api.get_token
-
-Outputs (default):
-- vinyl_shelf_order.txt
-- vinyl_shelf_order.csv
-- optional JSON if enabled
-
-Note: This is a polling-based approach because Discogs doesn’t provide push webhooks for
-personal collections.
+Watches your Discogs collection, regenerates shelf order on changes, and exports
+printable lists. Sign in with Discogs via OAuth in Settings.
 """
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import queue
@@ -51,13 +33,11 @@ from tkinter import StringVar, BooleanVar, IntVar, filedialog, messagebox, Tk
 import tkinter as tk
 from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 
-# No longer using ttkbootstrap
-TTKBOOTSTRAP_AVAILABLE = False
-
 from core.api import discogs_headers
 from core.export import generate_txt_lines, write_csv, write_json, write_txt
 from core.models import ReleaseRow, BuildResult
 from gui.thumbnails import ImagePreviewPopup, ThumbnailCache
+from gui.tooltip import ToolTip
 from core.build_service import (
   AutoConfig,
   CollectionCache,
@@ -65,102 +45,30 @@ from core.build_service import (
   get_collection_count,
   _get_user_headers,
 )
+from core.config_store import MANUAL_ORDER_FILE, load_config, save_config
 from core.format_filter import (
   FORMAT_FILTERS,
   filter_rows_by_format,
   parse_saved_formats,
 )
+from gui.constants import (
+  DIVIDER_MODE_BY_LABEL,
+  DIVIDER_MODE_LABELS,
+  FONT_2XL,
+  FONT_LG,
+  FONT_MD,
+  FONT_SEGOE_UI,
+  FONT_SEGOE_UI_SEMIBOLD,
+  FONT_SM,
+  FONT_XL,
+  FONT_XS,
+  POLL_SECONDS_DEFAULT,
+)
 
 DEFAULT_USER_AGENT = "Mozilla/5.0"
 
-
-POLL_SECONDS_DEFAULT = 300  # 5 minutes
-
-DIVIDER_MODE_LABELS = {
-  "none": "Off",
-  "letter": "By letter (A–Z)",
-  "abc": "By shelf (A/B/C)",
-}
-DIVIDER_MODE_BY_LABEL = {v: k for k, v in DIVIDER_MODE_LABELS.items()}
-
-CONFIG_FILE = project_root() / ".discogs_config.json"
-# Simple key for obfuscation (not meant to be cryptographically secure, just prevents casual viewing)
-_OBFUSCATE_KEY = b"DiscogsVinylSorter2026"
-
-# UI font constants (avoid duplicated literals for linters and consistency)
-FONT_SEGOE_UI = "Segoe UI"
-FONT_SEGOE_UI_SEMIBOLD = "Segoe UI Semibold"
-# Font sizes – tuned for readability (bump these if text still feels small)
-FONT_XS = 12   # tiny labels, combobox
-FONT_SM = 14   # secondary text, muted labels
-FONT_MD = 15   # body text, buttons, entries
-FONT_LG = 16   # section headers
-FONT_XL = 20   # panel titles
-FONT_2XL = 26  # main header
-
 # Button style constants
 SECONDARY_TBUTTON_STYLE = "Secondary.TButton"
-
-
-def _obfuscate(text: str) -> str:
-  """Obfuscate a string to prevent casual viewing."""
-  if not text:
-    return ""
-  data = text.encode("utf-8")
-  key = _OBFUSCATE_KEY
-  result = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
-  return base64.b64encode(result).decode("ascii")
-
-
-def _deobfuscate(encoded: str) -> str:
-  """Reverse the obfuscation."""
-  if not encoded:
-    return ""
-  try:
-    data = base64.b64decode(encoded.encode("ascii"))
-    key = _OBFUSCATE_KEY
-    result = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
-    return result.decode("utf-8")
-  except Exception:
-    return ""
-
-
-def load_config() -> dict:
-  """Load saved configuration from file."""
-  try:
-    if CONFIG_FILE.exists():
-      with CONFIG_FILE.open("r", encoding="utf-8") as f:
-        config = json.load(f)
-        if "token_encrypted" in config:
-          config["token"] = _deobfuscate(config.pop("token_encrypted"))
-        if "oauth_access_token_encrypted" in config:
-          config["oauth_access_token"] = _deobfuscate(config.pop("oauth_access_token_encrypted"))
-        if "oauth_access_secret_encrypted" in config:
-          config["oauth_access_secret"] = _deobfuscate(config.pop("oauth_access_secret_encrypted"))
-        return config
-  except Exception:
-    pass
-  return {}
-
-
-def save_config(config: dict) -> None:
-  """Save configuration to file."""
-  try:
-    save_data = config.copy()
-    if "token" in save_data:
-      save_data["token_encrypted"] = _obfuscate(save_data.pop("token"))
-    if "oauth_access_token" in save_data:
-      save_data["oauth_access_token_encrypted"] = _obfuscate(save_data.pop("oauth_access_token"))
-    if "oauth_access_secret" in save_data:
-      save_data["oauth_access_secret_encrypted"] = _obfuscate(save_data.pop("oauth_access_secret"))
-    with CONFIG_FILE.open("w", encoding="utf-8") as f:
-      json.dump(save_data, f, indent=2)
-  except Exception:
-    pass
-
-
-# Manual order persistence file
-MANUAL_ORDER_FILE = project_root() / ".discogs_manual_order.json"
 
 
 class ManualOrderManager:
@@ -519,76 +427,6 @@ class ProgressDialog:
       pass
 
 
-class ToolTip:
-  """Modern tooltip that appears on hover with a slight delay."""
-
-  EVENT_LEAVE = "<Leave>"
-
-  def __init__(self, widget, text: str, delay: int = 400, wraplength: int = 280):
-    self.widget = widget
-    self.text = text
-    self.delay = delay
-    self.wraplength = wraplength
-    self.tip_window = None
-    self.id_after = None
-
-    widget.bind("<Enter>", self._on_enter)
-    widget.bind(self.EVENT_LEAVE, self._on_leave)
-    widget.bind("<ButtonPress>", self._on_leave)
-  
-  def _on_enter(self, event=None):
-    self._cancel()
-    self.id_after = self.widget.after(self.delay, self._show_tip)
-
-  def _on_leave(self, event=None):
-    self._cancel()
-    self._hide_tip()
-  
-  def _cancel(self):
-    if self.id_after:
-      self.widget.after_cancel(self.id_after)
-      self.id_after = None
-
-  def _show_tip(self):
-    if self.tip_window:
-      return
-
-    import tkinter as tk
-
-    x = self.widget.winfo_rootx() + 20
-    y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
-
-    self.tip_window = tw = tk.Toplevel(self.widget)
-    tw.wm_overrideredirect(True)
-    tw.wm_geometry(f"+{x}+{y}")
-
-    # Modern dark tooltip style
-    tw.configure(bg="#1a1a2e")
-
-    frame = tk.Frame(tw, bg="#1a1a2e", bd=1, relief="solid", highlightbackground="#6c63ff", highlightthickness=1)
-    frame.pack()
-
-    label = tk.Label(
-      frame,
-      text=self.text,
-      justify="left",
-      background="#1a1a2e",
-      foreground="#eaeaea",
-      font=(FONT_SEGOE_UI, FONT_XS),
-      wraplength=self.wraplength,
-      padx=10,
-      pady=6,
-    )
-    label.pack()
-
-  def _hide_tip(self):
-    if self.tip_window:
-      self.tip_window.destroy()
-      self.tip_window = None
-
-  def update_text(self, new_text: str):
-    """Update tooltip text dynamically."""
-    self.text = new_text
 
 
 from gui.order_panel import OrderPanel
@@ -728,7 +566,6 @@ class App:
     self.v_token = StringVar(value=saved_cfg.get("token", ""))
     self._oauth_access_token = saved_cfg.get("oauth_access_token") or ""
     self._oauth_access_secret = saved_cfg.get("oauth_access_secret") or ""
-    self.v_show_token = BooleanVar(value=False)
     self.v_user_agent = StringVar(value=saved_cfg.get("user_agent", "VinylSorter/1.0 (+contact)"))
     self.v_output_dir = StringVar(value=saved_cfg.get("output_dir", str(Path.cwd())))
     self.v_per_page = IntVar(value=saved_cfg.get("per_page", 100))
@@ -823,13 +660,8 @@ class App:
     
     # Always configure Treeview style (needed for shelf order list)
     self._configure_treeview_style()
-    
-    # If using ttkbootstrap, only do minimal overrides for critical widgets
-    if TTKBOOTSTRAP_AVAILABLE:
-      # Treeview needs explicit styling even with ttkbootstrap
-      return
-    
-    # Fallback: standard ttk styling (no rounded corners)
+
+    # Standard ttk styling
     try:
       if "clam" in self.style.theme_names():
         self.style.theme_use("clam")
@@ -1861,9 +1693,6 @@ class App:
 
   def _setup_tooltips(self) -> None:
     """Set up tooltips for all interactive widgets."""
-    # Settings tooltips
-    if getattr(self, "token_entry", None) is not None:
-      ToolTip(self.token_entry, "Your Discogs personal access token.\nGet one at discogs.com/settings/developers")
     ToolTip(self._output_entry, "Directory where sorted lists will be saved (TXT, CSV, JSON)")
     ToolTip(self._browse_btn, "Browse for an output folder")
     ToolTip(self._poll_spin, "How often to check for collection changes (seconds)")
@@ -2360,7 +2189,6 @@ class App:
     self._update_toolbar_widgets()
     self._update_status_bar_widgets()
     self._update_treeview_widget()
-    self._update_search_entry()
     self._update_settings_entries()
     self._update_settings_frames()
     self._update_log_widget()
@@ -2475,12 +2303,6 @@ class App:
           fg_color="#4a5568" if self.v_dark_mode.get() else "#64748b",
           hover_color="#2d3748" if self.v_dark_mode.get() else "#475569"
         )
-      # Token section toggle (auth)
-      if hasattr(self, '_token_toggle_btn'):
-        self._token_toggle_btn.configure(
-          text_color=self._colors["muted"],
-          hover_color=self._colors.get("panel2", self._colors["border"]),
-        )
       # Wishlist toolbar widgets
       if hasattr(self, '_wishlist_check_btn'):
         self._wishlist_check_btn.configure(
@@ -2529,14 +2351,6 @@ class App:
     except Exception:
       pass
 
-  def _update_search_entry(self):
-    # Update CustomTkinter search entry
-    try:
-      # CTkEntry doesn't need color updates - it follows the theme automatically
-      pass
-    except Exception:
-      pass
-
   def _update_settings_entries(self):
     try:
       entry_config = {
@@ -2546,11 +2360,9 @@ class App:
         "highlightbackground": self._colors["border"],
         "highlightcolor": self._colors["accent"],
       }
-      for widget in [self.token_entry, self._useragent_entry, self._output_entry]:
-        if widget is None:
-          continue
+      if getattr(self, "_output_entry", None) is not None:
         try:
-          widget.config(**entry_config)
+          self._output_entry.config(**entry_config)
         except Exception:
           pass
       self._poll_spin.config(

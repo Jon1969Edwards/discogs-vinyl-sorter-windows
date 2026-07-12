@@ -12,21 +12,20 @@ This will:
 ✓ Install required packages
 ✓ Prepare the app for use
 
-STEP 2: GET YOUR DISCOGS TOKEN
--------------------------------
-1. Go to: https://www.discogs.com
-2. Log in to your account
-3. Go to: Settings → Developers
-4. Click "Generate new token"
-5. Copy the token
+STEP 2: ENABLE SIGN-IN (One Time)
+----------------------------------
+Double-click: SETUP_OAUTH.bat
+
+Follow the prompts to register the app with Discogs.
+Callback URL: http://127.0.0.1:8765/callback
 
 STEP 3: RUN THE APP
 -------------------
 
   → Double-click: LaunchAutoSortGUI.bat
 
-  The Auto-Sort GUI can sign in with Discogs (OAuth) or use a token,
-  refresh your shelf order, and optionally watch your collection for changes.
+  Click "Sign in with Discogs" and approve in your browser.
+  The app refreshes your shelf order and can watch for collection changes.
 
 OUTPUT FILES
 ------------
@@ -44,6 +43,9 @@ Solution: Install Python from python.org
 Problem: GUI won't start
 Solution: Use the official python.org installer
           (includes Tkinter GUI support)
+
+Problem: Sign-in not available
+Solution: Run SETUP_OAUTH.bat once, then restart the app
 
 Problem: Setup fails
 Solution: 1. Delete the .venv folder

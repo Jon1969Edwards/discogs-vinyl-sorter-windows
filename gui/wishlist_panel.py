@@ -10,6 +10,8 @@ import customtkinter as ctk
 from tkinter import StringVar, ttk
 
 from core.wishlist import load_wishlist
+from gui import constants as ui
+from gui.tooltip import ToolTip
 
 if TYPE_CHECKING:
   from autosort_gui import App
@@ -26,8 +28,6 @@ class WishlistPanel:
     return self.app
 
   def build_tab(self, parent) -> None:
-    import autosort_gui as ui
-
     a = self._a
     a._wishlist_tab = ctk.CTkFrame(parent, fg_color="transparent")
     a._wishlist_tab.rowconfigure(1, weight=1)
@@ -47,7 +47,7 @@ class WishlistPanel:
       font=(ui.FONT_SEGOE_UI, ui.FONT_MD),
     )
     a._wishlist_check_btn.pack(side="left", padx=(0, 8))
-    ui.ToolTip(a._wishlist_check_btn, "Check Discogs Marketplace for available copies of wishlist items")
+    ToolTip(a._wishlist_check_btn, "Check Discogs Marketplace for available copies of wishlist items")
 
     a._wishlist_status_var = StringVar(value="")
     wishlist_status_lbl = ctk.CTkLabel(

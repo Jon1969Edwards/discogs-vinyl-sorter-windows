@@ -11,11 +11,17 @@ Double-click **SETUP.bat** to:
 - Install all required dependencies
 - Prepare the app for use
 
-### 2. Run the GUI
+### 2. Enable sign-in (one-time)
+
+Double-click **SETUP_OAUTH.bat** to register the app with Discogs (callback `http://127.0.0.1:8765/callback`). You only do this once per install/build.
+
+### 3. Run the GUI
 
 Double-click **LaunchAutoSortGUI.bat** to open the Auto-Sort GUI (recommended). It can watch your collection, use browser sign-in (OAuth), and export shelf order. You can also run `.venv\Scripts\python autosort_gui.py`.
 
 For a one-shot fetch without the Auto-Sort window, use the command line (see below) or run `python discogs_app.py` with your token.
+
+**Desktop shortcut:** Right-click `LaunchAutoSortGUI.bat` → Send to → Desktop (create shortcut).
 
 ### Optional: build a real Windows app (`.exe`)
 
@@ -105,7 +111,7 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 
 - `discogs_app.py` - Main CLI application
 - `autosort_gui.py` - Auto-Sort GUI (recommended)
-- `demo_sort_preview.py` - Preview sorting behavior
+- `setup_oauth.py` / `SETUP_OAUTH.bat` - One-time OAuth setup for browser sign-in
 - `test_sorting.py` - Sorting unit tests (`python test_sorting.py`)
 - `test_format_filter.py` - Format detection/filter tests (`python test_format_filter.py`)
 - `requirements.txt` - Python dependencies
