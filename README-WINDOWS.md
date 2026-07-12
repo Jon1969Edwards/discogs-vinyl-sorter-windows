@@ -31,6 +31,8 @@ To get a normal program you can pin to the taskbar or Start menu (no `.bat`):
 2. Double-click **BUILD_WINDOWS_EXE.bat** (installs PyInstaller if needed, then builds).
 3. Run **`dist\DiscogsVinylSorter\DiscogsVinylSorter.exe`**.
 
+**Build failed with "Access is denied" on `dist\DiscogsVinylSorter`?** Close any running copy of `DiscogsVinylSorter.exe`, close File Explorer windows inside `dist\`, then run **BUILD_WINDOWS_EXE.bat** again. The script now stops the app and retries cleanup automatically.
+
 Put your **`.env`** file in **the same folder as** `DiscogsVinylSorter.exe` if you use one (OAuth consumer key/secret, token, etc.). Config and cache files from the app are stored next to that `.exe` as well.
 
 ### 3. Command Line Usage

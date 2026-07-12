@@ -25,6 +25,14 @@ if not exist "core\discogs_oauth_secrets.py" (
 )
 
 echo.
+echo Preparing build folder...
+"%PY%" scripts\prebuild_cleanup.py
+if %ERRORLEVEL% neq 0 (
+  pause
+  exit /b 1
+)
+
+echo.
 echo Building... (one-time; may take a few minutes)
 "%PY%" -m PyInstaller --noconfirm --windowed --onedir --name "DiscogsVinylSorter" --collect-all customtkinter --hidden-import core.discogs_oauth_secrets --hidden-import core.discogs_oauth_app --hidden-import core.config_store --hidden-import core.format_filter --hidden-import core.build_service --hidden-import gui.settings_panel --hidden-import gui.oauth_setup_dialog --hidden-import gui.tooltip --hidden-import gui.spinning_record --hidden-import gui.thumbnails --hidden-import gui.order_panel --hidden-import gui.wishlist_panel --hidden-import requests_oauthlib --hidden-import dotenv autosort_gui.py
 
