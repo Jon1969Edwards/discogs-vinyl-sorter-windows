@@ -564,6 +564,12 @@ class App:
 
     self._auth_prompt_shown = False
 
+    self._worker_cfg_lock = threading.Lock()
+    self._worker_cfg: AutoConfig | None = None
+    self._loading_elapsed_job: str | None = None
+    self._loading_base_message = ""
+    self._loading_last_fraction: float | None = None
+
     self._build_ui(root)
     self._setup_keyboard_shortcuts()
     self._pump_queues()
@@ -571,6 +577,9 @@ class App:
 
     # First-run: guide user to sign in before the watcher logs a cryptic error
     self.root.after(500, self._prompt_first_run_auth)
+
+    # Snapshot settings before the watcher reads them (StringVar is main-thread only).
+    self._refresh_worker_cfg()
 
     # Start watching immediately
     threading.Thread(target=self._watch_loop, daemon=True).start()
@@ -1961,6 +1970,7 @@ class App:
       if getattr(self, "_oauth_access_secret", None):
         config["oauth_access_secret"] = self._oauth_access_secret
       save_config(config)
+      self._refresh_worker_cfg()
     except Exception:
       pass
 
@@ -2410,6 +2420,8 @@ class App:
       return False
 
   def _update_loading_progress(self, message: str, fraction: float | None = None, *, error: bool = False) -> None:
+    self._loading_base_message = message
+    self._loading_last_fraction = fraction
     if hasattr(self, "_order_loading_detail"):
       display = message
       if fraction is not None and not error:
@@ -2506,10 +2518,13 @@ class App:
         self._order_loading_overlay.grid()
         if hasattr(self, "_order_loading_spinner"):
           self._order_loading_spinner.start()
+        self._loading_started_at = time.time()
+        self._start_loading_elapsed_timer()
         self._update_loading_progress("Connecting to Discogs…", 0.0)
         if hasattr(self, "_order_loading_label"):
           self._order_loading_label.configure(text="Loading your collection…")
       else:
+        self._stop_loading_elapsed_timer()
         if hasattr(self, "_order_loading_spinner"):
           self._order_loading_spinner.stop()
         if hasattr(self, "_order_loading_progress"):
@@ -2523,6 +2538,37 @@ class App:
         self._order_loading_label.grid()
       else:
         self._order_loading_label.grid_remove()
+
+  def _start_loading_elapsed_timer(self) -> None:
+    self._stop_loading_elapsed_timer()
+    self._tick_loading_elapsed()
+
+  def _stop_loading_elapsed_timer(self) -> None:
+    job = getattr(self, "_loading_elapsed_job", None)
+    if job is not None:
+      try:
+        self.root.after_cancel(job)
+      except Exception:
+        pass
+      self._loading_elapsed_job = None
+
+  def _tick_loading_elapsed(self) -> None:
+    if not self._is_loading_overlay_visible():
+      self._loading_elapsed_job = None
+      return
+    elapsed = int(time.time() - getattr(self, "_loading_started_at", time.time()))
+    if elapsed >= 5 and hasattr(self, "_order_loading_detail"):
+      base = self._loading_base_message or "Working…"
+      fraction = self._loading_last_fraction
+      if fraction is not None:
+        text = f"{base} ({int(fraction * 100)}%) — {elapsed}s elapsed"
+      else:
+        text = f"{base} — {elapsed}s elapsed"
+      try:
+        self._order_loading_detail.configure(text=text)
+      except Exception:
+        pass
+    self._loading_elapsed_job = self.root.after(1000, self._tick_loading_elapsed)
 
   def _show_order_empty_state(self, show: bool) -> None:
     """Show or hide the empty shelf placeholder message."""
@@ -2799,8 +2845,22 @@ class App:
       oauth_access_secret=(self._oauth_access_secret or "").strip() or None,
     )
 
+  def _refresh_worker_cfg(self) -> None:
+    """Capture settings for background threads. Call from the main thread only."""
+    cfg = self._get_cfg()
+    with self._worker_cfg_lock:
+      self._worker_cfg = cfg
+
+  def _get_worker_cfg(self) -> AutoConfig:
+    """Thread-safe read of the last settings snapshot."""
+    with self._worker_cfg_lock:
+      if self._worker_cfg is None:
+        raise RuntimeError("Worker config not initialized")
+      return self._worker_cfg
+
   def _refresh_now(self) -> None:
     # Wake the watcher and force immediate check
+    self._refresh_worker_cfg()
     self._log("Manual refresh requested.")
     self.v_status.set("Refresh requested…")
     self._show_order_loading_state(True)
@@ -2905,7 +2965,7 @@ class App:
       self._report_build_progress(action, message, fraction)
 
     while not self._stop.is_set():
-      cfg = self._get_cfg()
+      cfg = self._get_worker_cfg()
       try:
         if not self._has_valid_token(cfg):
           self._handle_missing_token(cfg)
@@ -2913,11 +2973,14 @@ class App:
 
         force = self._force_rebuild
         if force or self._last_count is None:
+          self._log("Connecting to Discogs…")
           self._report_build_progress("update", "Connecting to Discogs…", 0.0)
 
         _, headers, session, username = self._get_user_info(cfg)
+        self._log(f"Signed in as {username}. Checking collection size…")
         self._report_build_progress("update", "Checking collection size…", 0.01)
         count = get_collection_count(headers=headers, session=session, username=username)
+        self._log(f"Discogs reports {count} items in collection.")
         self._force_rebuild = False
 
         if self._should_build_initial(force):
