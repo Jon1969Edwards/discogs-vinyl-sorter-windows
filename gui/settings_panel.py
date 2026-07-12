@@ -149,69 +149,54 @@ class SettingsPanel:
       return section
 
     auth_section = make_section("Authentication", "🔐")
+    ctk.CTkLabel(
+      auth_section,
+      text="Sign in with your Discogs account. Your browser opens once to approve access.",
+      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
+      text_color=a._colors["muted"],
+      wraplength=360,
+      justify="left",
+    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 10))
+
     auth_btns = ctk.CTkFrame(auth_section, fg_color="transparent")
-    auth_btns.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
+    auth_btns.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 8))
     a._signin_btn = ctk.CTkButton(
       auth_btns,
       text="🔐 Sign in with Discogs",
       command=a._do_oauth_signin,
-      width=180,
-      height=38,
+      width=220,
+      height=42,
       corner_radius=8,
       fg_color=a._colors["accent"],
       hover_color=a._colors["button_hover"],
+      font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_MD),
     )
     a._signin_btn.pack(side="left", padx=(0, 8))
     ui.ToolTip(
       a._signin_btn,
-      "Opens Discogs in your browser. Approve access once—you won’t paste a token.",
+      "Opens Discogs in your browser. Click Approve — no password or token to copy.",
     )
     a._signout_btn = ctk.CTkButton(
       auth_btns,
       text="Sign out",
       command=a._do_oauth_signout,
       width=80,
-      height=38,
+      height=42,
       corner_radius=8,
       fg_color="#4a5568",
       hover_color="#2d3748",
     )
     a._signout_btn.pack(side="left")
-    ui.ToolTip(a._signout_btn, "Clear saved sign-in and use token instead")
-    a._update_auth_buttons_state()
-
-    a._token_section_collapsed = True
-    a._token_toggle_btn = ctk.CTkButton(
+    ui.ToolTip(a._signout_btn, "Sign out of Discogs on this computer")
+    a._auth_status_label = ctk.CTkLabel(
       auth_section,
-      text="Advanced: use Personal Access Token  ▶",
+      text="Not signed in",
       font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      fg_color="transparent",
-      hover_color=a._colors.get("panel2", a._colors["border"]),
       text_color=a._colors["muted"],
-      anchor="w",
-      height=28,
-      corner_radius=6,
-      command=a._toggle_token_section,
     )
-    a._token_toggle_btn.grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
-    ui.ToolTip(
-      a._token_toggle_btn,
-      "Optional: paste a Personal Access Token instead of browser sign-in (Discogs → Developers).",
-    )
-    a._token_row = ctk.CTkFrame(auth_section, fg_color="transparent")
-    a._token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
-    a._token_row.columnconfigure(0, weight=1)
-    a.token_entry = make_entry(a._token_row, a.v_token, width=200, show="•")
-    a.token_entry.grid(row=0, column=0, sticky="ew")
-    ctk.CTkCheckBox(
-      a._token_row,
-      text="Show",
-      variable=a.v_show_token,
-      command=a._toggle_token_visibility,
-      width=80,
-      corner_radius=6,
-    ).grid(row=0, column=1, sticky="w", padx=(12, 0))
-    a._token_row.grid_remove()
+    a._auth_status_label.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 14))
+    a.token_entry = None
+    a._update_auth_buttons_state()
 
     output_section = make_section("Output Settings", "📁")
     ctk.CTkLabel(

@@ -1862,7 +1862,8 @@ class App:
   def _setup_tooltips(self) -> None:
     """Set up tooltips for all interactive widgets."""
     # Settings tooltips
-    ToolTip(self.token_entry, "Your Discogs personal access token.\nGet one at discogs.com/settings/developers")
+    if getattr(self, "token_entry", None) is not None:
+      ToolTip(self.token_entry, "Your Discogs personal access token.\nGet one at discogs.com/settings/developers")
     ToolTip(self._output_entry, "Directory where sorted lists will be saved (TXT, CSV, JSON)")
     ToolTip(self._browse_btn, "Browse for an output folder")
     ToolTip(self._poll_spin, "How often to check for collection changes (seconds)")
@@ -2233,22 +2234,37 @@ class App:
     signed_in = bool((self._oauth_access_token or "").strip())
     self._signin_btn.configure(state="disabled" if signed_in else "normal")
     self._signout_btn.configure(state="normal" if signed_in else "disabled")
+    if hasattr(self, "_auth_status_label"):
+      self._auth_status_label.configure(
+        text="Signed in to Discogs" if signed_in else "Not signed in",
+        text_color=self._colors["success"] if signed_in else self._colors["muted"],
+      )
+
+  def _ensure_oauth_configured(self) -> tuple[str, str] | None:
+    """Return consumer credentials, prompting for one-time setup if missing."""
+    from core.oauth_discogs import _get_consumer_credentials, oauth_is_configured
+    from gui.oauth_setup_dialog import OAuthSetupDialog
+
+    creds = _get_consumer_credentials(None)
+    if creds:
+      return creds
+    if not oauth_is_configured():
+      messagebox.showinfo(
+        "One-time setup",
+        "Before anyone can sign in, this app needs a Discogs developer application "
+        "registered once.\n\n"
+        "Run SETUP_OAUTH.bat in the app folder, or continue here to paste the "
+        "Consumer Key and Secret from Discogs → Settings → Developers.",
+      )
+    dialog = OAuthSetupDialog(self.root)
+    return dialog.result
 
   def _do_oauth_signin(self) -> None:
-    """Run OAuth flow and save tokens. Uses bundled app credentials or DISCOGS_CONSUMER_* env."""
-    from core.oauth_discogs import run_oauth_flow, _get_consumer_credentials
-    creds = _get_consumer_credentials(None)
+    """Run OAuth flow and save tokens. Uses bundled app credentials."""
+    from core.oauth_discogs import run_oauth_flow
+
+    creds = self._ensure_oauth_configured()
     if not creds:
-      messagebox.showerror(
-        "OAuth Setup",
-        "Sign-in isn’t available in this build: no OAuth app is configured.\n\n"
-        "• Easiest: expand “Advanced” below and paste a Personal Access Token "
-        "(Discogs → Settings → Developers).\n\n"
-        "• Add Consumer Key and Secret to core/discogs_oauth_secrets.py "
-        "(copy from discogs_oauth_secrets.example.py), or to core/discogs_oauth_app.py, "
-        "or set DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET in a .env file.\n\n"
-        "See OAUTH_SETUP.md (callback URL: http://127.0.0.1:8765/callback)."
-      )
       return
     try:
       self._log("Opening browser for Discogs sign-in…")
@@ -2294,24 +2310,8 @@ class App:
     if hasattr(self, "v_match"):
       self.v_match.set("0 items")
 
-    self._log("Signed out. Records cleared. Enter a token or sign in again.")
-    messagebox.showinfo("Signed out", "Cleared saved sign-in and collection view. Enter a token or sign in again.")
-
-  def _toggle_token_section(self) -> None:
-    """Expand or collapse the 'Advanced: use Personal Access Token' section."""
-    self._token_section_collapsed = not self._token_section_collapsed
-    if self._token_section_collapsed:
-      self._token_row.grid_remove()
-      self._token_toggle_btn.configure(text="Advanced: use Personal Access Token  ▶")
-    else:
-      self._token_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
-      self._token_toggle_btn.configure(text="Advanced: use Personal Access Token  ▼")
-
-  def _toggle_token_visibility(self) -> None:
-    try:
-      self.token_entry.configure(show="" if self.v_show_token.get() else "•")
-    except Exception:
-      pass
+    self._log("Signed out. Records cleared. Sign in again to reload your collection.")
+    messagebox.showinfo("Signed out", "Signed out and cleared the collection view. Click Sign in with Discogs to reconnect.")
 
   def _switch_tab(self, tab_name: str) -> None:
     """Switch between tabs in the custom tab system."""
@@ -2547,6 +2547,8 @@ class App:
         "highlightcolor": self._colors["accent"],
       }
       for widget in [self.token_entry, self._useragent_entry, self._output_entry]:
+        if widget is None:
+          continue
         try:
           widget.config(**entry_config)
         except Exception:
@@ -3103,9 +3105,9 @@ class App:
     )
 
   def _oauth_signin_available(self) -> bool:
-    from core.oauth_discogs import _get_consumer_credentials
+    from core.oauth_discogs import oauth_is_configured
 
-    return _get_consumer_credentials(None) is not None
+    return oauth_is_configured()
 
   def _ensure_settings_visible(self) -> None:
     """Expand the settings sidebar if it is collapsed."""
@@ -3122,27 +3124,23 @@ class App:
     self._auth_prompt_shown = True
     self._ensure_settings_visible()
     if self._oauth_signin_available():
-      messagebox.showinfo(
+      if messagebox.askyesno(
         "Connect to Discogs",
-        "Discogs Auto-Sort needs access to your collection.\n\n"
-        "In Settings (left), click «Sign in with Discogs» and approve access in your browser.\n\n"
-        "Or expand «Advanced: use Personal Access Token» and paste a token from "
-        "Discogs → Settings → Developers.",
-      )
+        "Sign in with your Discogs account to load your vinyl collection.\n\n"
+        "Your web browser will open. Click Approve on Discogs, then return here.",
+      ):
+        self._do_oauth_signin()
     else:
       messagebox.showinfo(
-        "Connect to Discogs",
-        "Discogs Auto-Sort needs a Personal Access Token.\n\n"
-        "In Settings (left), expand «Advanced: use Personal Access Token» and paste your token "
-        "(Discogs → Settings → Developers).\n\n"
-        "One-click sign-in is not configured in this build. "
-        "See OAUTH_SETUP.md if you want to enable it.",
+        "One-time setup required",
+        "Before you can sign in, run SETUP_OAUTH.bat once in the app folder.\n\n"
+        "That registers the app with Discogs. After that, sign-in is just one click.",
       )
-    self._log("No Discogs authentication configured — use Settings to sign in or add a token.")
+    self._log("No Discogs sign-in yet — use Sign in with Discogs in Settings.")
 
   def _handle_missing_token(self, cfg):
-    self._log("Error: No Discogs authentication. Sign in or enter your token in Settings.")
-    self.v_status.set("Error: No token (see Log tab)")
+    self._log("Error: Not signed in to Discogs. Click Sign in with Discogs in Settings.")
+    self.v_status.set("Error: Sign in required (see Settings)")
     self._wake.clear()
     self._wake.wait(timeout=cfg.poll_seconds)
 

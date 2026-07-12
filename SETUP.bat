@@ -81,6 +81,7 @@ echo Setup complete!
 echo ==================================================
 echo.
 echo You can now run:
+echo   - SETUP_OAUTH.bat (one-time: enable Sign in with Discogs)
 echo   - LaunchAutoSortGUI.bat (Auto-Sort GUI)
 echo.
 echo Or use the command line:
