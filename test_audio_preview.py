@@ -105,9 +105,9 @@ def test_fetch_discogs_youtube_preview(mock_api_get):
 
 
 @patch("core.audio_preview.fetch_discogs_youtube_preview")
-@patch("core.audio_preview.search_deezer_preview", return_value=None)
 @patch("core.audio_preview.search_itunes_preview", return_value=None)
-def test_find_audio_preview_falls_back_to_discogs(mock_itunes, mock_deezer, mock_discogs):
+@patch("core.audio_preview.search_deezer_preview", return_value=None)
+def test_find_audio_preview_falls_back_to_discogs(mock_deezer, mock_itunes, mock_discogs):
     mock_discogs.return_value = MagicMock(
         kind="youtube",
         url="https://youtube.com/x",

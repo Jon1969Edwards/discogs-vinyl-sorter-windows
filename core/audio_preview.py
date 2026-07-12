@@ -182,8 +182,8 @@ def find_audio_preview(
     headers: Optional[dict] = None,
     session=None,
 ) -> Optional[AudioPreview]:
-    """Find the best available preview: iTunes, Deezer, then Discogs YouTube."""
-    for finder in (search_itunes_preview, search_deezer_preview):
+    """Find the best available preview: Deezer, iTunes, then Discogs YouTube."""
+    for finder in (search_deezer_preview, search_itunes_preview):
         preview = finder(artist, album)
         if preview:
             return preview

@@ -171,7 +171,7 @@ class AudioPreviewPanel(tk.Frame):
             return
 
         if not PreviewPlayer.is_available():
-            self._set_status("Install pygame to play previews.")
+            self._set_status("Audio playback unavailable.\nRun SETUP.bat, then restart the app.")
             self._set_action("▶ Play sample")
             return
 
