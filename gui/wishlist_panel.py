@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import customtkinter as ctk
 from tkinter import StringVar, ttk
 
-from core.wishlist import load_wishlist
+from core.wishlist import load_wishlist, release_id_from_entry
 from gui import constants as ui
 from gui.tooltip import ToolTip
 
@@ -112,12 +111,7 @@ class WishlistPanel:
 
   @staticmethod
   def make_wishlist_row(entry: dict):
-    release_id = entry.get("release_id")
-    if not release_id:
-      url = entry.get("discogs_url", entry.get("url", ""))
-      match = re.search(r"/releases?/(\d+)", url)
-      if match:
-        release_id = int(match.group(1))
+    release_id = release_id_from_entry(entry)
     return SimpleNamespace(
       artist_display=entry.get("artist", ""),
       title=entry.get("title", ""),

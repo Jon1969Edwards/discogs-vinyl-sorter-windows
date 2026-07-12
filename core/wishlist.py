@@ -1,10 +1,26 @@
 # wishlist.py
 # Simple wishlist management for Discogs Vinyl Sorter
 import json
+import re
 
 from core.paths import project_root
 
 WISHLIST_FILE = project_root() / "wishlist.json"
+
+
+def release_id_from_entry(entry: dict) -> int | None:
+    """Extract a Discogs release ID from a wishlist entry."""
+    release_id = entry.get("release_id")
+    if release_id is not None:
+        try:
+            return int(release_id)
+        except (TypeError, ValueError):
+            pass
+    url = entry.get("discogs_url", entry.get("url", ""))
+    match = re.search(r"/releases?/(\d+)", url, re.I)
+    if match:
+        return int(match.group(1))
+    return None
 
 
 def load_wishlist():

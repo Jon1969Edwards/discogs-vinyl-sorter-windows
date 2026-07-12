@@ -1301,77 +1301,99 @@ class App:
   def _check_wishlist_availability(self):
     """Check Discogs Marketplace for availability of all wishlist items."""
     import threading
-    from core.wishlist import load_wishlist, save_wishlist
-    
-    if not self._wishlist_rows:
+    from core.wishlist import load_wishlist, save_wishlist, release_id_from_entry
+
+    wishlist_data = load_wishlist()
+    if not wishlist_data:
       self._wishlist_status_var.set("No items in wishlist")
       return
-    
-    # Get auth (token or OAuth)
+
     cfg = self._get_cfg()
     if not self._has_valid_token(cfg):
-      messagebox.showwarning("Auth Required", "Sign in or enter your Discogs token in Settings to check marketplace availability.")
+      messagebox.showwarning(
+        "Auth Required",
+        "Sign in or enter your Discogs token in Settings to check marketplace availability.",
+      )
       return
-    
-    self._wishlist_check_btn.config(state="disabled")
+
+    total = len(wishlist_data)
+    self._wishlist_check_btn.configure(state="disabled")
     self._wishlist_status_var.set("Checking availability...")
-    
+    self._log(f"Checking marketplace availability for {total} wishlist items…")
+
+    progress = ProgressDialog(
+      self.root,
+      "Checking Availability",
+      f"Fetching marketplace prices for {total} wishlist items…",
+    )
+
     def check_availability():
       try:
         import core.api as api
+
         _, headers, session, _ = self._get_user_info(cfg)
-        currency = self.v_currency.get()
-        wishlist_data = list(load_wishlist())
-        
-        total = len(wishlist_data)
-        updated_count = 0
+        currency = (self.v_currency.get() or "USD").strip()
         available_count = 0
-        
+        skipped = 0
+
         for i, entry in enumerate(wishlist_data):
-          release_id = entry.get("release_id")
+          artist = entry.get("artist", "")
+          title = entry.get("title", "")
+          release_id = release_id_from_entry(entry)
+          if release_id and not entry.get("release_id"):
+            entry["release_id"] = release_id
+
+          progress_msg = f"[{i + 1}/{total}] {artist} - {title}"
+          status_msg = f"Checking {i + 1}/{total}…"
+
+          def update_ui(p=progress_msg, s=status_msg):
+            progress.update_progress(p)
+            self._wishlist_status_var.set(s)
+
+          self.root.after(0, update_ui)
+
           if not release_id:
-            # Try to extract from URL
-            import re
-            url = entry.get("discogs_url", entry.get("url", ""))
-            match = re.search(r'/releases?/(\d+)', url)
-            if match:
-              release_id = int(match.group(1))
-              entry["release_id"] = release_id
-          
-          if release_id:
-            # Update status
-            self.root.after(0, lambda i=i, t=total: self._wishlist_status_var.set(f"Checking {i+1}/{t}..."))
-            
-            # Fetch price from API
-            lowest, num_for_sale, actual_currency = api.fetch_release_price(headers=headers, session=session, release_id=release_id, currency=currency)
-            
-            # Update entry with availability info
-            entry["lowest_price"] = lowest
-            entry["num_for_sale"] = num_for_sale
-            entry["price_currency"] = actual_currency
-            updated_count += 1
-            
-            if num_for_sale and num_for_sale > 0:
-              available_count += 1
-        
-        # Save updated wishlist
+            skipped += 1
+            continue
+
+          lowest, num_for_sale, actual_currency = api.fetch_release_price(
+            headers=headers,
+            session=session,
+            release_id=release_id,
+            currency=currency,
+          )
+          entry["lowest_price"] = lowest
+          entry["num_for_sale"] = num_for_sale
+          entry["price_currency"] = actual_currency
+          if num_for_sale and num_for_sale > 0:
+            available_count += 1
+
         save_wishlist(wishlist_data)
-        
-        # Update UI on main thread
+
+        summary = f"✓ {available_count} of {total} available for purchase"
+        if skipped:
+          summary += f" ({skipped} skipped — no release ID)"
+
         def finish():
-          self._wishlist_check_btn.config(state="normal")
-          self._wishlist_status_var.set(f"✓ {available_count} of {total} available for purchase")
+          self._wishlist_check_btn.configure(state="normal")
+          self._wishlist_status_var.set(summary)
           self.refresh_wishlist_tree()
-        
+          self._log(f"Wishlist availability check complete: {summary}")
+          progress.set_done(summary)
+
         self.root.after(0, finish)
-        
+
       except Exception as e:
         def show_error():
-          self._wishlist_check_btn.config(state="normal")
-          self._wishlist_status_var.set(f"Error: {str(e)[:50]}")
+          self._wishlist_check_btn.configure(state="normal")
+          err = str(e)
+          self._wishlist_status_var.set(f"Error: {err[:50]}")
+          self._log(f"Wishlist availability check failed: {err}")
+          progress.set_error(err[:200])
+          self.root.after(2000, progress.close)
+
         self.root.after(0, show_error)
-    
-    # Run in background thread
+
     threading.Thread(target=check_availability, daemon=True).start()
 
   def _build_log_tab(self, parent):

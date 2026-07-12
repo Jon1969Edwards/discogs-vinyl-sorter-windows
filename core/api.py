@@ -235,6 +235,7 @@ def fetch_discogs_wantlist(token: Optional[str] = None, per_page: int = 100,
                 "title": basic.get("title", ""),
                 "year": basic.get("year"),
                 "discogs_url": basic.get("resource_url", ""),
+                "release_id": basic.get("id"),
                 "thumb": basic.get("thumb", ""),
             })
         pagination = data.get("pagination", {})
