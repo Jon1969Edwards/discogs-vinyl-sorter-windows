@@ -1460,12 +1460,6 @@ class App:
       return f"https://www.discogs.com/release/{release_id}"
     return ""
 
-  def _get_marketplace_url(self, row) -> str:
-    release_id = getattr(row, "release_id", None)
-    if release_id:
-      return f"https://www.discogs.com/sell/release/{release_id}"
-    return ""
-
   def _format_marketplace_summary(self, row) -> str:
     if not getattr(row, "release_id", None):
       return ""
@@ -1620,15 +1614,6 @@ class App:
           command=lambda: webbrowser.open(discogs_url),
           font=(FONT_SEGOE_UI, FONT_MD), bg=accent, fg=btn_fg,
           activebackground=btn_bg, activeforeground=btn_fg, relief="groove",
-        ).pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
-
-    marketplace_url = self._get_marketplace_url(row)
-    if marketplace_url:
-        tk.Button(
-          btn_frame, text="View on Marketplace",
-          command=lambda: webbrowser.open(marketplace_url),
-          font=(FONT_SEGOE_UI, FONT_MD), bg="#2ecc71", fg="#ffffff",
-          activebackground="#27ae60", activeforeground="#ffffff", relief="groove",
         ).pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
     from gui.audio_preview_panel import AudioPreviewPanel
