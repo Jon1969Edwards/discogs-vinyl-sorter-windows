@@ -195,16 +195,16 @@ def build_artist_display(basic: Dict) -> str:
   artists = basic.get("artists") or []
   if not artists:
     return basic.get("artist") or basic.get("title") or ""
-  parts = []
-  for a in artists:
+  parts: list[str] = []
+  for i, a in enumerate(artists):
+    if i > 0:
+      j = (a.get("join") or "").strip()
+      parts.append(f" {j} " if j else " / ")
     nm = a.get("name") or ""
     nm = strip_discogs_numeric_suffix(nm)
     parts.append(nm)
-    j = a.get("join") or ""
-    if j:
-      parts.append(j)
-      parts.append(" ")
   text = "".join(parts).strip()
+  text = re.sub(r"\s+", " ", text)
   # Clean redundant spaces around joins
   return re.sub(r"\s+([&,+]|feat\.|with)\s+", r" \1 ", text, flags=re.IGNORECASE)
 

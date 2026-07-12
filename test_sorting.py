@@ -98,6 +98,33 @@ def main():
     sorted_title = app.sort_rows([r1, r2], "title")
     assert_eq(sorted_title[0].title, "Alpha Tunes", "Various Artists should be filed/sorted by title when various-policy is 'title'")
 
+    from core.sorting import build_artist_display
+
+    cash = build_artist_display({
+        "artists": [
+            {"name": "Johnny Cash", "join": ""},
+            {"name": "June Carter", "join": "Also Featuring:"},
+            {"name": "Daughter", "join": "And"},
+        ]
+    })
+    assert_eq(
+        cash,
+        "Johnny Cash Also Featuring: June Carter And Daughter",
+        "Discogs join phrases should appear before the next artist name",
+    )
+
+    coltrane = build_artist_display({
+        "artists": [
+            {"name": "John Coltrane", "join": ""},
+            {"name": "The Red Garland Trio", "join": "With"},
+        ]
+    })
+    assert_eq(
+        coltrane,
+        "John Coltrane With The Red Garland Trio",
+        "Discogs 'With' joins should be spaced before the credited artist",
+    )
+
     print("All sorting assertions passed.")
 
 
