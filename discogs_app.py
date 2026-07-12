@@ -19,8 +19,7 @@ Usage examples:
 
 from __future__ import annotations
 
-# Version constant
-VERSION = "0.2.0"
+from core.version import __version__ as VERSION
 
 # Re-export all public APIs for backward compatibility
 from core.api import (

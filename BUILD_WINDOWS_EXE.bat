@@ -33,8 +33,12 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
+echo Generate app icon (optional)...
+"%PY%" scripts\generate_icon.py
+
+echo.
 echo Building... (one-time; may take a few minutes)
-"%PY%" -m PyInstaller --noconfirm --windowed --onedir --name "DiscogsVinylSorter" --collect-all customtkinter --collect-all pygame --hidden-import core.discogs_oauth_secrets --hidden-import core.discogs_oauth_app --hidden-import core.config_store --hidden-import core.format_filter --hidden-import core.build_service --hidden-import core.audio_preview --hidden-import core.preview_player --hidden-import gui.audio_preview_panel --hidden-import gui.settings_panel --hidden-import gui.oauth_setup_dialog --hidden-import gui.tooltip --hidden-import gui.spinning_record --hidden-import gui.thumbnails --hidden-import gui.order_panel --hidden-import gui.wishlist_panel --hidden-import requests_oauthlib --hidden-import dotenv autosort_gui.py
+"%PY%" -m PyInstaller --noconfirm DiscogsVinylSorter.spec
 
 if %ERRORLEVEL% neq 0 (
   echo.

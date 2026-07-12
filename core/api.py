@@ -181,12 +181,13 @@ def fetch_prices_for_rows(
     log_callback: Optional[callable] = None,
     debug: bool = False,
     session: Optional[Any] = None,
+    on_price_fetched: Optional[callable] = None,
 ) -> None:
     """Fetch and populate price info for a list of ReleaseRows. Use headers or session."""
     # Cache by release_id to avoid duplicate fetches
     # Cache: release_id -> (lowest_price, num_for_sale, actual_currency)
     price_cache: Dict[int, Tuple[Optional[float], Optional[int], str]] = {}
-    total = len([r for r in rows if r.release_id])
+    unique_ids = len({r.release_id for r in rows if r.release_id})
     fetched = 0
 
     # Debug logger if enabled
@@ -203,8 +204,15 @@ def fetch_prices_for_rows(
                 album_info = f"{row.artist_display} - {row.title}"
                 if len(album_info) > 40:
                     album_info = album_info[:37] + "..."
-                log_callback(f"[{fetched}/{total}] {album_info}")
+                log_callback(f"[{fetched}/{unique_ids}] {album_info}")
             price_cache[rid] = fetch_release_price(headers=headers, session=session, release_id=rid, currency=currency, debug_log=debug_log)
+            if on_price_fetched:
+                lowest, num_for_sale, actual_currency = price_cache[rid]
+                row.lowest_price = lowest
+                row.median_price = lowest
+                row.num_for_sale = num_for_sale
+                row.price_currency = actual_currency
+                on_price_fetched(row)
         lowest, num_for_sale, actual_currency = price_cache[rid]
         row.lowest_price = lowest
         row.median_price = lowest  # Using lowest as median approximation

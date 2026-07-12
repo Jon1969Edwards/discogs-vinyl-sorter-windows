@@ -8,6 +8,7 @@ import webbrowser
 from typing import Callable, Optional
 
 from core.audio_preview import AudioPreview, find_audio_preview
+from core.feature_gate import can_play_audio_preview, upgrade_message
 from core.preview_player import PreviewPlayer
 from core.spotify_utils import open_album_on_spotify
 from gui.constants import FONT_MD, FONT_SEGOE_UI, FONT_SM, FONT_XS
@@ -84,6 +85,10 @@ class AudioPreviewPanel(tk.Frame):
             lambda _e: open_album_on_spotify(self._artist, self._album),
         )
 
+        if not can_play_audio_preview():
+            self._set_action("Pro feature", enabled=False)
+            self._set_status(upgrade_message("Audio preview"))
+
         self.bind("<Destroy>", self._handle_destroy)
 
     def _handle_destroy(self, _event=None) -> None:
@@ -102,6 +107,11 @@ class AudioPreviewPanel(tk.Frame):
         self.after(0, apply)
 
     def _on_action(self) -> None:
+        if not can_play_audio_preview():
+            self._set_status(upgrade_message("Audio preview"))
+            self._set_action("Pro feature", enabled=False)
+            return
+
         if self._player.is_playing():
             self._player.stop()
             self._apply_preview_ui()

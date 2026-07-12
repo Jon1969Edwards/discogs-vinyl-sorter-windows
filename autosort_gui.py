@@ -47,6 +47,17 @@ from core.build_service import (
   _get_user_headers,
 )
 from core.config_store import MANUAL_ORDER_FILE, load_config, save_config
+from core.feature_gate import (
+  FREE_RECORD_LIMIT,
+  apply_record_limit,
+  can_check_wishlist_availability,
+  can_fetch_prices,
+  can_use_abc_dividers,
+  can_use_manual_order,
+  upgrade_message,
+)
+from core.licensing import is_pro, license_summary
+from core.version import APP_NAME, __version__
 from core.format_filter import (
   FORMAT_FILTERS,
   filter_rows_by_format,
@@ -422,7 +433,7 @@ class App:
 
   def __init__(self, root: Tk) -> None:
     self.root = root
-    root.title("Discogs Auto-Sort")
+    root.title(f"{APP_NAME} {__version__}")
     try:
       root.minsize(900, 650)
     except Exception:
@@ -526,7 +537,7 @@ class App:
     self.v_json.trace_add("write", lambda *_: self._save_settings())
     self.v_divider_mode.trace_add("write", lambda *_: self._save_settings())
     self.v_poll.trace_add("write", lambda *_: self._save_settings())
-    self.v_show_prices.trace_add("write", lambda *_: self._save_settings())
+    self.v_show_prices.trace_add("write", lambda *_: self._on_show_prices_change())
     self.v_currency.trace_add("write", lambda *_: self._save_settings())
     self.v_sort_by.trace_add("write", lambda *_: self._save_settings())
     for _fvar in self.v_formats.values():
@@ -570,13 +581,16 @@ class App:
     self._loading_base_message = ""
     self._loading_last_fraction: float | None = None
 
+    self._record_limit_truncated = False
+
     self._build_ui(root)
     self._setup_keyboard_shortcuts()
     self._pump_queues()
     self.root.after(0, self._apply_startup_window_state)
 
-    # First-run: guide user to sign in before the watcher logs a cryptic error
+    # First-run wizard, then optional sign-in prompt
     self.root.after(500, self._prompt_first_run_auth)
+    self.root.after(600, self._update_pro_ui)
 
     # Snapshot settings before the watcher reads them (StringVar is main-thread only).
     self._refresh_worker_cfg()
@@ -961,14 +975,14 @@ class App:
     # Simple title
     self._header_title = ctk.CTkLabel(
       self._header,
-      text="💿 Discogs Auto-Sort",
+      text=f"💿 {APP_NAME}",
       font=(FONT_SEGOE_UI_SEMIBOLD, FONT_2XL),
     )
     self._header_title.grid(row=0, column=0, sticky="w", padx=20, pady=(8, 4))
 
     self._header_subtitle = ctk.CTkLabel(
       self._header,
-      text="Vinyl Collection Manager  •  Live Updates  •  Export & Print",
+      text=f"v{__version__}  •  Vinyl Collection Manager  •  Export & Print",
       font=(FONT_SEGOE_UI, FONT_MD),
       text_color=self._colors["muted"],
     )
@@ -1098,9 +1112,10 @@ class App:
     main_content = ctk.CTkFrame(frm, fg_color="transparent")
     main_content.grid(row=row, column=1, sticky="nsew", padx=(6, 12), pady=8)
     main_content.columnconfigure(0, weight=1)
-    main_content.rowconfigure(2, weight=1)
+    main_content.rowconfigure(3, weight=1)
     self._build_search_row(main_content)
     self._build_action_buttons(main_content)
+    self._build_pro_banner(main_content)
     return main_content
 
   def _build_search_row(self, main_content):
@@ -1154,6 +1169,7 @@ class App:
     )
     self._shortcuts_btn.grid(row=0, column=4, sticky="e", padx=(0, 6))
     ToolTip(self._shortcuts_btn, "Keyboard shortcuts")
+    self._build_help_menu(search_row)
     self.v_search.trace_add("write", lambda *_: self._on_search_change())
 
   def _build_action_buttons(self, main_content):
@@ -1193,10 +1209,59 @@ class App:
     )
     self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
 
+  def _build_pro_banner(self, main_content):
+    self._pro_banner = ctk.CTkFrame(main_content, fg_color="#4a3728", corner_radius=8)
+    self._pro_banner.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+    self._pro_banner.columnconfigure(0, weight=1)
+    self._pro_banner_label = ctk.CTkLabel(
+      self._pro_banner,
+      text="",
+      font=(FONT_SEGOE_UI, FONT_SM),
+      text_color="#fef3c7",
+      wraplength=700,
+      justify="left",
+    )
+    self._pro_banner_label.grid(row=0, column=0, sticky="w", padx=12, pady=8)
+    self._pro_upgrade_btn = ctk.CTkButton(
+      self._pro_banner,
+      text="Upgrade to Pro",
+      width=140,
+      command=self._show_license_dialog,
+      fg_color="#f59e0b",
+      hover_color="#d97706",
+    )
+    self._pro_upgrade_btn.grid(row=0, column=1, sticky="e", padx=12, pady=8)
+    self._pro_banner.grid_remove()
+
+  def _build_help_menu(self, search_row):
+    help_menu = tk.Menu(self.root, tearoff=0)
+    help_menu.add_command(label="About", command=self._show_about_dialog)
+    help_menu.add_command(label="Check for updates…", command=self._check_for_updates)
+    help_menu.add_command(label="Send feedback", command=self._send_feedback)
+    help_menu.add_command(label="Export diagnostics…", command=self._export_diagnostics)
+    help_menu.add_separator()
+    help_menu.add_command(label="Activate Pro license…", command=self._show_license_dialog)
+
+    self._help_btn = ctk.CTkButton(
+      search_row,
+      text="Help",
+      width=70,
+      height=38,
+      corner_radius=8,
+      fg_color="#4a5568",
+      hover_color="#2d3748",
+      command=lambda: help_menu.tk_popup(
+        self._help_btn.winfo_rootx(),
+        self._help_btn.winfo_rooty() + self._help_btn.winfo_height(),
+      ),
+    )
+    self._help_btn.grid(row=0, column=5, sticky="e", padx=(0, 0))
+    ToolTip(self._help_btn, "About, updates, feedback, Pro license")
+
   def _build_notebook(self, main_content):
     # Container for tabs
     notebook_container = ctk.CTkFrame(main_content, fg_color="transparent")
-    notebook_container.grid(row=2, column=0, sticky="nsew", padx=(12, 12), pady=(0, 12))
+    notebook_container.grid(row=3, column=0, sticky="nsew", padx=(12, 12), pady=(0, 12))
     notebook_container.rowconfigure(1, weight=1)
     notebook_container.columnconfigure(0, weight=1)
 
@@ -1300,6 +1365,9 @@ class App:
 
   def _check_wishlist_availability(self):
     """Check Discogs Marketplace for availability of all wishlist items."""
+    if not can_check_wishlist_availability():
+      messagebox.showinfo("Pro feature", upgrade_message("Wishlist availability check"))
+      return
     import threading
     from core.wishlist import load_wishlist, save_wishlist, release_id_from_entry
 
@@ -1463,12 +1531,18 @@ class App:
   def _format_marketplace_summary(self, row) -> str:
     if not getattr(row, "release_id", None):
       return ""
-    if not self.v_show_prices.get():
-      return 'Enable "Show prices" in settings, then refresh, to load marketplace data.'
     lowest = getattr(row, "lowest_price", None)
     num_for_sale = getattr(row, "num_for_sale", None)
     currency = getattr(row, "price_currency", "") or self.v_currency.get().strip() or "USD"
-    if num_for_sale is not None and num_for_sale > 0 and lowest is not None:
+    if num_for_sale is not None:
+      if num_for_sale > 0 and lowest is not None:
+        return f"From {lowest:.0f} {currency} · {num_for_sale} for sale"
+      return "Not currently listed on the marketplace"
+    if not self.v_show_prices.get():
+      if can_fetch_prices():
+        return 'Enable "Show prices" in settings, then refresh, to load marketplace data.'
+      return "Marketplace prices are a Pro feature (Settings → Upgrade to Pro)."
+    if lowest is not None and num_for_sale is not None and num_for_sale > 0:
       return f"From {lowest:.0f} {currency} · {num_for_sale} for sale"
     return "Not currently listed on the marketplace"
 
@@ -1771,6 +1845,10 @@ class App:
   
   def _toggle_manual_order(self) -> None:
     """Toggle manual ordering mode on/off."""
+    if self.v_manual_order_enabled.get() and not can_use_manual_order():
+      self.v_manual_order_enabled.set(False)
+      messagebox.showinfo("Pro feature", upgrade_message("Manual shelf order"))
+      return
     enabled = self.v_manual_order_enabled.get()
     self._manual_order.set_enabled(enabled)
     if enabled:
@@ -2002,6 +2080,9 @@ class App:
 
   def _refresh_prices(self) -> None:
     """Clear cached prices and trigger a refresh with price fetching enabled."""
+    if not can_fetch_prices():
+      messagebox.showinfo("Pro feature", upgrade_message("Marketplace prices"))
+      return
     currency = self.v_currency.get().strip() or "USD"
     cleared = self._collection_cache.clear_prices(currency)
     self._log(f"Cleared {cleared} cached prices for {currency}.")
@@ -2009,6 +2090,13 @@ class App:
     # Enable show prices and trigger refresh
     self.v_show_prices.set(True)
     self._refresh_now()
+
+  def _on_show_prices_change(self) -> None:
+    if self.v_show_prices.get() and not can_fetch_prices():
+      self.v_show_prices.set(False)
+      messagebox.showinfo("Pro feature", upgrade_message("Marketplace prices"))
+      return
+    self._save_settings()
 
   def _save_settings(self) -> None:
     """Save current settings to config file."""
@@ -2061,24 +2149,97 @@ class App:
         text_color=self._colors["success"] if signed_in else self._colors["muted"],
       )
 
+  def _divider_mode_value(self) -> str:
+    mode = DIVIDER_MODE_BY_LABEL.get(self.v_divider_mode.get(), "none")
+    if mode != "none" and not can_use_abc_dividers():
+      return "none"
+    return mode
+
+  def _show_about_dialog(self) -> None:
+    from gui.about_dialog import AboutDialog
+    AboutDialog(self.root)
+
+  def _show_license_dialog(self) -> None:
+    from gui.license_dialog import LicenseDialog
+    LicenseDialog(self.root, on_changed=self._update_pro_ui)
+
+  def _check_for_updates(self) -> None:
+    from core.update_checker import check_for_update
+    from core.version import PURCHASE_URL
+    import webbrowser
+
+    info = check_for_update()
+    if not info:
+      messagebox.showinfo("Updates", "You are on the latest version.")
+      return
+    msg = f"Version {info.latest_version} is available."
+    if info.release_notes:
+      msg += f"\n\n{info.release_notes}"
+    if info.download_url:
+      msg += f"\n\nDownload: {info.download_url}"
+    if messagebox.askyesno("Update available", msg + "\n\nOpen download page?"):
+      webbrowser.open(info.download_url or PURCHASE_URL)
+
+  def _send_feedback(self) -> None:
+    import webbrowser
+    from core.version import FEEDBACK_MAILTO
+    webbrowser.open(FEEDBACK_MAILTO)
+
+  def _export_diagnostics(self) -> None:
+    from core.diagnostics import export_diagnostics_zip
+    try:
+      path = export_diagnostics_zip()
+      messagebox.showinfo("Diagnostics", f"Saved support bundle:\n{path}")
+      self._log(f"Exported diagnostics: {path}")
+    except Exception as exc:
+      messagebox.showerror("Diagnostics", str(exc))
+
+  def _update_pro_ui(self) -> None:
+    """Refresh Pro-gated controls and upgrade banner."""
+    pro = is_pro()
+    if hasattr(self, "_license_status_label"):
+      self._license_status_label.configure(text=license_summary())
+    if hasattr(self, "_pro_banner"):
+      if pro:
+        self._pro_banner.grid_remove()
+        self._record_limit_truncated = False
+      elif getattr(self, "_record_limit_truncated", False):
+        self._pro_banner_label.configure(
+          text=f"Free tier shows {FREE_RECORD_LIMIT} records. Upgrade to Pro for your full collection, prices, and more.",
+        )
+        self._pro_banner.grid()
+      else:
+        self._pro_banner.grid_remove()
+    if hasattr(self, "_prices_check") and not can_fetch_prices():
+      self.v_show_prices.set(False)
+      self._prices_check.configure(state="disabled")
+    elif hasattr(self, "_prices_check"):
+      self._prices_check.configure(state="normal")
+    if hasattr(self, "_manual_order_check"):
+      state = "normal" if can_use_manual_order() else "disabled"
+      self._manual_order_check.configure(state=state)
+      if not can_use_manual_order() and self.v_manual_order_enabled.get():
+        self.v_manual_order_enabled.set(False)
+        self._manual_order.set_enabled(False)
+    if hasattr(self, "_wishlist_check_btn"):
+      self._wishlist_check_btn.configure(state="normal" if can_check_wishlist_availability() else "disabled")
+    if hasattr(self, "_divider_mode_combo") and not can_use_abc_dividers():
+      if self._divider_mode_value() != "none":
+        self.v_divider_mode.set(DIVIDER_MODE_LABELS["none"])
+
   def _ensure_oauth_configured(self) -> tuple[str, str] | None:
-    """Return consumer credentials, prompting for one-time setup if missing."""
-    from core.oauth_discogs import _get_consumer_credentials, oauth_is_configured
-    from gui.oauth_setup_dialog import OAuthSetupDialog
+    """Return consumer credentials from the bundled production build."""
+    from core.oauth_discogs import _get_consumer_credentials
 
     creds = _get_consumer_credentials(None)
     if creds:
       return creds
-    if not oauth_is_configured():
-      messagebox.showinfo(
-        "One-time setup",
-        "Before anyone can sign in, this app needs a Discogs developer application "
-        "registered once.\n\n"
-        "Run SETUP_OAUTH.bat in the app folder, or continue here to paste the "
-        "Consumer Key and Secret from Discogs → Settings → Developers.",
-      )
-    dialog = OAuthSetupDialog(self.root)
-    return dialog.result
+    messagebox.showerror(
+      "Sign-in unavailable",
+      "This build is missing Discogs OAuth credentials.\n\n"
+      "Install the official release, or contact support if you downloaded from the project site.",
+    )
+    return None
 
   def _do_oauth_signin(self) -> None:
     """Run OAuth flow and save tokens. Uses bundled app credentials."""
@@ -2563,11 +2724,18 @@ class App:
       self._show_order_empty_state(True)
       return
     self._show_order_empty_state(False)
-    self._tree_rows = list(rows)
+    display_rows, truncated = apply_record_limit(list(rows))
+    self._record_limit_truncated = truncated
+    self._tree_rows = display_rows
+    self._update_pro_ui()
     self._show_or_hide_price_column()
     placeholder = self._get_placeholder_image()
-    self._populate_treeview_rows(rows, placeholder)
-    self.v_match.set(f"{len(rows)} items")
+    self._populate_treeview_rows(display_rows, placeholder)
+    total = len(rows)
+    if truncated:
+      self.v_match.set(f"{len(display_rows)} of {total} items (Free limit)")
+    else:
+      self.v_match.set(f"{len(display_rows)} items")
     self._highlight_search()
     if self._thumbnails_enabled:
       self._download_missing_thumbnails(rows)
@@ -2933,9 +3101,6 @@ class App:
       self._stop.set()
       self.root.after(200, self.root.destroy)
 
-  def _divider_mode_value(self) -> str:
-    return DIVIDER_MODE_BY_LABEL.get(self.v_divider_mode.get(), "none")
-
   def _export_files(self) -> None:
     result = self._last_result
     if not result or not result.rows_sorted:
@@ -2948,13 +3113,24 @@ class App:
     
     # Use the current display order (which respects manual ordering)
     rows_to_export = self._tree_rows if self._tree_rows else result.rows_sorted
+    rows_to_export, truncated = apply_record_limit(list(rows_to_export))
+    if truncated:
+      if not messagebox.askyesno(
+        "Free tier limit",
+        f"Export includes the first {FREE_RECORD_LIMIT} records only.\n\nContinue?",
+      ):
+        return
+
+    divider_mode = self._divider_mode_value()
+    if divider_mode != "none" and not can_use_abc_dividers():
+      divider_mode = "none"
 
     txt_path = out_dir / "vinyl_shelf_order.txt"
     csv_path = out_dir / "vinyl_shelf_order.csv"
     write_txt(
       rows_to_export,
       txt_path,
-      divider_mode=self._divider_mode_value(),
+      divider_mode=divider_mode,
       align=False,
       show_country=False,
       show_price=bool(self.v_show_prices.get()),
@@ -2980,11 +3156,19 @@ class App:
       messagebox.showinfo("Print", "Nothing to print yet. Wait for the first build.")
       return
 
+    rows, truncated = apply_record_limit(list(self._tree_rows))
+    if truncated:
+      if not messagebox.askyesno(
+        "Free tier limit",
+        f"Print includes the first {FREE_RECORD_LIMIT} records only.\n\nContinue?",
+      ):
+        return
+
     if not messagebox.askyesno("Print", "Send the current shelf order to your default printer?"):
       return
     
     lines = generate_txt_lines(
-      self._tree_rows,
+      rows,
       divider_mode=self._divider_mode_value(),
       show_price=bool(self.v_show_prices.get()),
     )
@@ -3076,28 +3260,28 @@ class App:
       self._toggle_settings_sidebar()
 
   def _prompt_first_run_auth(self) -> None:
-    """On launch, prompt once per session when no Discogs auth is configured."""
+    """First-run wizard, then optional sign-in when no Discogs auth is configured."""
+    saved = load_config()
+    if not saved.get("wizard_completed"):
+      from gui.first_run_wizard import FirstRunWizard
+      FirstRunWizard(self).run()
     if self._auth_prompt_shown:
       return
     cfg = self._get_cfg()
     if self._has_valid_token(cfg):
       return
     self._auth_prompt_shown = True
-    self._ensure_settings_visible()
-    if self._oauth_signin_available():
-      if messagebox.askyesno(
-        "Connect to Discogs",
-        "Sign in with your Discogs account to load your vinyl collection.\n\n"
-        "Your web browser will open. Click Approve on Discogs, then return here.",
-      ):
-        self._do_oauth_signin()
+    if not self._oauth_signin_available():
+      self._log("Discogs sign-in is not available in this build.")
+      return
+    if messagebox.askyesno(
+      "Connect to Discogs",
+      "Sign in with your Discogs account to load your vinyl collection.\n\n"
+      "Your web browser will open. Click Approve on Discogs, then return here.",
+    ):
+      self._do_oauth_signin()
     else:
-      messagebox.showinfo(
-        "One-time setup required",
-        "Before you can sign in, run SETUP_OAUTH.bat once in the app folder.\n\n"
-        "That registers the app with Discogs. After that, sign-in is just one click.",
-      )
-    self._log("No Discogs sign-in yet — use Sign in with Discogs in Settings.")
+      self._log("No Discogs sign-in yet — use Sign in with Discogs in Settings.")
 
   def _handle_missing_token(self, cfg):
     self._log("Error: Not signed in to Discogs. Click Sign in with Discogs in Settings.")
@@ -3185,13 +3369,25 @@ class App:
 
 
 def main() -> None:
+  def _log_crash(exc_type, exc, tb):
+    try:
+      log_path = project_root() / "crash.log"
+      with log_path.open("a", encoding="utf-8") as f:
+        f.write("\n---\n")
+        traceback.print_exception(exc_type, exc, tb, file=f)
+    except Exception:
+      pass
+    sys.__excepthook__(exc_type, exc, tb)
+
+  sys.excepthook = _log_crash
+
   # Set CustomTkinter appearance and theme
   ctk.set_appearance_mode("dark")  # "dark" or "light"
   ctk.set_default_color_theme("blue")  # "blue", "green", "dark-blue"
 
   # Create CustomTkinter root window
   root = ctk.CTk()
-  root.title("Discogs Auto-Sort")
+  root.title(f"{APP_NAME} {__version__}")
 
   App(root)
   root.mainloop()

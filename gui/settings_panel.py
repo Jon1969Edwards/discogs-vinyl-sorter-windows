@@ -374,6 +374,61 @@ class SettingsPanel:
       "Show every item regardless of format (overrides the other checkboxes).",
     )
     self.update_format_checks_state()
+    self._build_pro_section(settings)
+
+  def _build_pro_section(self, settings) -> None:
+    a = self._a
+    from core.licensing import license_summary
+    from core.version import PURCHASE_URL
+    import webbrowser
+
+    pro_section = ctk.CTkFrame(
+      settings,
+      fg_color=a._colors.get("panel2", a._colors["panel"]),
+      corner_radius=10,
+      border_width=1,
+      border_color=a._colors.get("border", "#334155"),
+    )
+    pro_section.grid(row=999, column=0, sticky="ew", padx=20, pady=(0, 16))
+    pro_section.columnconfigure(0, weight=1)
+    ctk.CTkLabel(
+      pro_section,
+      text="⭐  Pro License",
+      font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_LG),
+      text_color=a._colors["accent"],
+    ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
+    a._license_status_label = ctk.CTkLabel(
+      pro_section,
+      text=license_summary(),
+      font=(ui.FONT_SEGOE_UI, ui.FONT_MD),
+    )
+    a._license_status_label.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
+    ctk.CTkLabel(
+      pro_section,
+      text="Pro: unlimited collection, prices, wishlist checks, manual order, audio previews.",
+      font=(ui.FONT_SEGOE_UI, ui.FONT_XS),
+      text_color=a._colors["muted"],
+      wraplength=360,
+      justify="left",
+    ).grid(row=2, column=0, sticky="w", padx=16, pady=(0, 10))
+    btn_row = ctk.CTkFrame(pro_section, fg_color="transparent")
+    btn_row.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 14))
+    ctk.CTkButton(
+      btn_row,
+      text="Activate license…",
+      command=a._show_license_dialog,
+      width=140,
+      fg_color=a._colors["accent"],
+      hover_color=a._colors["button_hover"],
+    ).pack(side="left", padx=(0, 8))
+    ctk.CTkButton(
+      btn_row,
+      text="Buy Pro",
+      command=lambda: webbrowser.open(PURCHASE_URL),
+      width=100,
+      fg_color="#f59e0b",
+      hover_color="#d97706",
+    ).pack(side="left")
 
   def _build_sort_content(self, sort_row) -> None:
     a = self._a

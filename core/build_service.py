@@ -256,8 +256,13 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
       raise
 
   def handle_prices_if_needed(headers, session, rows):
-    need_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
+    from core.feature_gate import can_fetch_prices
+
+    want_prices = cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc")
+    need_prices = want_prices and can_fetch_prices()
     report("update", "Checking if price data is needed…", 0.82)
+    if want_prices and not can_fetch_prices():
+      log("Marketplace prices require Pro. Prices disabled for this build.")
     if need_prices:
       report("update", "Fetching album prices from Discogs Marketplace…", 0.84)
       try:
@@ -298,8 +303,8 @@ def _get_user_headers(cfg: AutoConfig, log: callable):
         creds = _get_consumer_credentials(None)
         if not creds:
             raise RuntimeError(
-                "Discogs sign-in is saved but this app build is missing OAuth setup. "
-                "Run SETUP_OAUTH.bat once in the app folder, then sign in again."
+                "Discogs sign-in is saved but this build is missing OAuth credentials. "
+                "Reinstall from the official installer or sign in again."
             )
         consumer_key, consumer_secret = creds
         try:
@@ -366,7 +371,7 @@ def _populate_prices_from_cache(cfg, cache, rows):
         for row in rows:
             if row.release_id:
                 lowest, num_for_sale, is_stale = cache.get_price(row.release_id, cfg.currency)
-                if not is_stale and lowest is not None:
+                if not is_stale:
                     row.lowest_price = lowest
                     row.median_price = lowest
                     row.num_for_sale = num_for_sale
@@ -385,34 +390,50 @@ def _fetch_and_cache_prices(cfg, log, progress_callback, cache, headers, session
     def _report_progress(action, message, fraction=None):
         if progress_callback:
             progress_callback(action, message, fraction)
-        if main_progress_q:
+        elif main_progress_q:
             main_progress_q.put((action, message, fraction))
 
-    def _update_cache(cache, releases, currency):
-        for row in releases:
-            if row.release_id and row.lowest_price is not None:
-                cache.set_price(row.release_id, currency, row.lowest_price, row.num_for_sale)
-            elif row.release_id:
-                cache.set_price(row.release_id, currency, None, 0)
-        cache.save()
+    def _cache_row(row) -> None:
+        if not cache or not row.release_id:
+            return
+        cache.set_price(row.release_id, cfg.currency, row.lowest_price, row.num_for_sale)
 
     def _fetch_prices():
-        total_to_fetch = len([r for r in releases_needing_fetch if r.release_id])
+        total_to_fetch = len({r.release_id for r in releases_needing_fetch if r.release_id})
         log(f"Fetching {total_to_fetch} prices ({cfg.currency})...")
         _report_progress("show", f"Fetching {total_to_fetch} album prices in {cfg.currency}.\n({cached_count} loaded from cache)")
         _report_progress("update", f"Fetching {total_to_fetch} album prices in {cfg.currency}...")
+        fetched_since_save = 0
+
         def price_progress(msg: str):
             log(msg)
             _report_progress("update", msg)
+
+        def on_price_fetched(row) -> None:
+            nonlocal fetched_since_save
+            _cache_row(row)
+            fetched_since_save += 1
+            if cache and fetched_since_save >= 10:
+                cache.save()
+                fetched_since_save = 0
+
         try:
-            fetch_prices_for_rows(headers=headers, session=session, rows=releases_needing_fetch, currency=cfg.currency, log_callback=price_progress, debug=False)
+            fetch_prices_for_rows(
+                headers=headers,
+                session=session,
+                rows=releases_needing_fetch,
+                currency=cfg.currency,
+                log_callback=price_progress,
+                debug=False,
+                on_price_fetched=on_price_fetched,
+            )
         except Exception as e:
             _report_progress("error", f"Price fetch failed: {e}")
             raise
 
     _fetch_prices()
     if cache:
-        _update_cache(cache, releases_needing_fetch, cfg.currency)
+        cache.save()
     log("Price fetch complete.")
     _report_progress("update", "Price fetch complete.")
     _report_progress("close", None)

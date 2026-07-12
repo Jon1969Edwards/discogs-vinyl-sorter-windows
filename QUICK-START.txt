@@ -1,59 +1,45 @@
 ================================================
-DISCOGS VINYL SORTER - WINDOWS
+VINYL SHELF SORTER - WINDOWS
 Quick Start Guide
 ================================================
 
+END USERS (installer)
+---------------------
+1. Download VinylShelfSorter-Setup from GitHub Releases
+2. Run the installer
+3. Launch Vinyl Shelf Sorter
+4. Complete the welcome wizard and click Sign in with Discogs
+
+No SETUP.bat or SETUP_OAUTH.bat required for official builds.
+
+DEVELOPERS (from source)
+------------------------
 STEP 1: SETUP (First Time Only)
---------------------------------
 Double-click: SETUP.bat
 
-This will:
-✓ Create a Python virtual environment
-✓ Install required packages
-✓ Prepare the app for use
-
-STEP 2: ENABLE SIGN-IN (One Time)
-----------------------------------
+STEP 2: OAUTH (Dev builds only)
 Double-click: SETUP_OAUTH.bat
+(or set DISCOGS_CONSUMER_KEY/SECRET before release build)
 
-Follow the prompts to register the app with Discogs.
-Callback URL: http://127.0.0.1:8765/callback
+STEP 3: RUN
+Double-click: LaunchAutoSortGUI.bat
 
-STEP 3: RUN THE APP
--------------------
-
-  → Double-click: LaunchAutoSortGUI.bat
-
-  Click "Sign in with Discogs" and approve in your browser.
-  The app refreshes your shelf order and can watch for collection changes.
+PRO LICENSE
+-----------
+Help → Activate Pro license, or Settings → Pro License.
+Beta keys: python scripts/generate_license_key.py --email you@example.com
 
 OUTPUT FILES
 ------------
-By default, you'll get:
-  • vinyl_shelf_order.txt (human-readable)
-  • vinyl_shelf_order.csv (for Excel/Sheets)
+  • vinyl_shelf_order.txt
+  • vinyl_shelf_order.csv
   • vinyl_shelf_order.json (optional)
 
 TROUBLESHOOTING
 ---------------
-Problem: "Python not found"
-Solution: Install Python from python.org
-          Make sure to check "Add Python to PATH"
+Sign-in not available (dev): Run SETUP_OAUTH.bat or use the installer build.
+Free tier: 100 records shown/exported; upgrade to Pro for full collection.
 
-Problem: GUI won't start
-Solution: Use the official python.org installer
-          (includes Tkinter GUI support)
-
-Problem: Sign-in not available
-Solution: Run SETUP_OAUTH.bat once, then restart the app
-
-Problem: Setup fails
-Solution: 1. Delete the .venv folder
-          2. Run SETUP.bat again
-
-NEED MORE HELP?
----------------
-See: README-WINDOWS.md (detailed Windows guide)
-See: README.md (full documentation)
+See docs/SUPPORT.md and README-WINDOWS.md
 
 ================================================

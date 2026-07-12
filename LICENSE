@@ -1,0 +1,11 @@
+Copyright (c) 2026 Vinyl Shelf Sorter contributors. All rights reserved.
+
+This software and associated documentation files (the "Software") are proprietary.
+Unauthorized copying, modification, distribution, or sale of the Software, in whole
+or in part, is prohibited without prior written permission from the copyright holder.
+
+The Software is provided to licensed users subject to the Terms of Use (TERMS.md).
+See PRIVACY.md for data handling practices.
+
+Third-party components (Python packages, Discogs API data, preview audio sources)
+remain subject to their respective licenses.
