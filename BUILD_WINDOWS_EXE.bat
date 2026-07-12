@@ -1,5 +1,5 @@
 @echo off
-REM Build a Windows folder app (DiscogsVinylSorter.exe + DLLs) using PyInstaller.
+REM Build a Windows folder app (Spindle.exe + DLLs) using PyInstaller.
 REM Requires: SETUP.bat completed, then optional: pip install pyinstaller
 
 cd /d "%~dp0"
@@ -38,7 +38,7 @@ echo Generate app icon (optional)...
 
 echo.
 echo Building... (one-time; may take a few minutes)
-"%PY%" -m PyInstaller --noconfirm DiscogsVinylSorter.spec
+"%PY%" -m PyInstaller --noconfirm Spindle.spec
 
 if %ERRORLEVEL% neq 0 (
   echo.
@@ -49,7 +49,7 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo ============================================================
-echo Build output:  dist\DiscogsVinylSorter\DiscogsVinylSorter.exe
+echo Build output:  dist\Spindle\Spindle.exe
 echo ============================================================
 echo Copy your .env next to that .exe if you use one.
 echo You can pin that .exe to the taskbar or Start menu.

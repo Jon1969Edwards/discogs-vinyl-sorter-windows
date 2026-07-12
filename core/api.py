@@ -222,7 +222,7 @@ def fetch_prices_for_rows(
 
 def fetch_discogs_wantlist(token: Optional[str] = None, per_page: int = 100,
                            session: Optional[Any] = None,
-                           user_agent: str = "VinylSorter/1.0") -> List[Dict]:
+                           user_agent: str = "Spindle/1.0") -> List[Dict]:
     """Fetch the user's wantlist (wishlist) from Discogs. Use token or session for auth."""
     if session is None and not token:
         raise ValueError("Either token or session required")

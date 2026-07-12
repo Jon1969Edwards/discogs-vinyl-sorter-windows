@@ -1,5 +1,5 @@
 # wishlist.py
-# Simple wishlist management for Discogs Vinyl Sorter
+# Simple wishlist management for Spindle
 import json
 import re
 

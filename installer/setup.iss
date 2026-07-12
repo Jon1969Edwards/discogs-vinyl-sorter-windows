@@ -1,11 +1,11 @@
-; Inno Setup script for Vinyl Shelf Sorter (Windows)
-; Requires: dist/DiscogsVinylSorter/ from PyInstaller
+; Inno Setup script for Spindle (Windows)
+; Requires: dist/Spindle/ from PyInstaller
 
-#define MyAppName "Vinyl Shelf Sorter"
+#define MyAppName "Spindle"
 #define MyAppVersion "1.0.0-beta.1"
-#define MyAppPublisher "Vinyl Shelf Sorter"
+#define MyAppPublisher "Spindle"
 #define MyAppURL "https://github.com/your-org/discogs-vinyl-sorter-windows"
-#define MyAppExeName "DiscogsVinylSorter.exe"
+#define MyAppExeName "Spindle.exe"
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
@@ -20,12 +20,12 @@ DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 InfoBeforeFile=..\PRIVACY.md
 OutputDir=..\dist\installer
-OutputBaseFilename=VinylShelfSorter-Setup-{#MyAppVersion}
+OutputBaseFilename=Spindle-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
-; SetupIconFile=..\assets\vinyl_shelf_sorter.ico
+; SetupIconFile=..\assets\spindle.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -34,7 +34,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\DiscogsVinylSorter\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\Spindle\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\PRIVACY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\TERMS.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion

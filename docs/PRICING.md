@@ -8,7 +8,7 @@ One-time **Pro unlock** (recommended **$19–29 USD**).
 
 Use [Lemon Squeezy](https://www.lemonsqueezy.com) or Gumroad:
 
-1. Create a digital product “Vinyl Shelf Sorter Pro”
+1. Create a digital product “Spindle Pro”
 2. Set `PURCHASE_URL` in `core/version.py` to your checkout link
 3. Deliver license keys manually or via Lemon Squeezy license keys API (v2)
 

@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-03-22
 
-**Vinyl Shelf Sorter** ("the app") is a desktop application that helps you organize
+**Spindle** ("the app") is a desktop application that helps you organize
 your personal Discogs vinyl collection. This app is **not affiliated with, endorsed by,
 or sponsored by Discogs**.
 

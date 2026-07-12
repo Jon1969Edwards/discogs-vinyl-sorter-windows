@@ -1,6 +1,6 @@
-# Discogs Vinyl Sorter - Windows Edition
+# Spindle — Windows
 
-Windows-compatible version of the Discogs 33⅓ LP Shelf Sorter.
+Windows build of **Spindle**: sort your Discogs vinyl collection for physical shelves and export printable lists. Full cross-platform docs: [README.md](README.md).
 
 ## Quick Start (Windows)
 
@@ -17,7 +17,9 @@ Double-click **SETUP_OAUTH.bat** to register the app with Discogs (callback `htt
 
 ### 3. Run the GUI
 
-Double-click **LaunchAutoSortGUI.bat** to open the Auto-Sort GUI (recommended). It can watch your collection, use browser sign-in (OAuth), and export shelf order. You can also run `.venv\Scripts\python autosort_gui.py`.
+Double-click **LaunchAutoSortGUI.bat** to open the Auto-Sort GUI (recommended). It watches your collection, supports browser sign-in (OAuth), and exports shelf order as TXT, CSV, or JSON. You can also run `.venv\Scripts\python autosort_gui.py`.
+
+**Free tier** covers sort and export for up to 100 records. **Pro** unlocks unlimited collection size, marketplace prices, wishlist availability checks, manual shelf order, audio preview, and A/B/C shelf dividers. See [docs/PRICING.md](docs/PRICING.md).
 
 For a one-shot fetch without the Auto-Sort window, use the command line (see below) or run `python discogs_app.py` with your token.
 
@@ -29,11 +31,11 @@ To get a normal program you can pin to the taskbar or Start menu (no `.bat`):
 
 1. Run **SETUP.bat** once so `.venv` exists.
 2. Double-click **BUILD_WINDOWS_EXE.bat** (installs PyInstaller if needed, then builds).
-3. Run **`dist\DiscogsVinylSorter\DiscogsVinylSorter.exe`**.
+3. Run **`dist\Spindle\Spindle.exe`**.
 
-**Build failed with "Access is denied" on `dist\DiscogsVinylSorter`?** Close any running copy of `DiscogsVinylSorter.exe`, close File Explorer windows inside `dist\`, then run **BUILD_WINDOWS_EXE.bat** again. The script now stops the app and retries cleanup automatically.
+**Build failed with "Access is denied" on `dist\Spindle`?** Close any running copy of `Spindle.exe`, close File Explorer windows inside `dist\`, then run **BUILD_WINDOWS_EXE.bat** again. The script now stops the app and retries cleanup automatically.
 
-Put your **`.env`** file in **the same folder as** `DiscogsVinylSorter.exe` if you use one (OAuth consumer key/secret, token, etc.). Config and cache files from the app are stored next to that `.exe` as well.
+Put your **`.env`** file in **the same folder as** `Spindle.exe` if you use one (OAuth consumer key/secret, token, etc.). Config and cache files from the app are stored next to that `.exe` as well.
 
 ### 3. Command Line Usage
 
@@ -43,7 +45,7 @@ REM Activate virtual environment
 
 REM Run with token from environment variable
 set DISCOGS_TOKEN=your_token_here
-python discogs_app.py --user-agent "VinylSorter/1.0 (you@example.com)"
+python discogs_app.py --user-agent "Spindle/1.0 (you@example.com)"
 
 REM Or pass token directly
 python discogs_app.py --token your_token_here --dividers --json
@@ -118,15 +120,20 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 - `test_format_filter.py` - Format detection/filter tests (`python test_format_filter.py`)
 - `requirements.txt` - Python dependencies
 - `LaunchAutoSortGUI.bat` - Windows launcher for the Auto-Sort GUI
-- `BUILD_WINDOWS_EXE.bat` - Optional: build `DiscogsVinylSorter.exe` (PyInstaller)
+- `BUILD_WINDOWS_EXE.bat` - Optional: build `Spindle.exe` (PyInstaller)
 - `SETUP.bat` - Windows setup script
 - `README.md` - Full documentation (cross-platform)
 
 ## Support
 
-For detailed documentation, see [README.md](README.md) (the full cross-platform guide).
-
-For issues or questions, check the project repository.
+| Doc | Description |
+|-----|-------------|
+| [README.md](README.md) | Full feature list and CLI reference |
+| [OAUTH_SETUP.md](OAUTH_SETUP.md) | OAuth sign-in setup |
+| [docs/PRICING.md](docs/PRICING.md) | Free vs Pro |
+| [docs/SUPPORT.md](docs/SUPPORT.md) | Common issues, diagnostics export |
+| [PRIVACY.md](PRIVACY.md) | Privacy policy |
+| [TERMS.md](TERMS.md) | Terms of use |
 
 ---
 

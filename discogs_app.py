@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Discogs 33⅓ LP Shelf Sorter
+Spindle — Discogs shelf sorter (CLI)
 
 Fetches your Discogs collection with a Personal Access Token, filters to
 Vinyl LPs at 33⅓ RPM, normalizes artist/title for sorting (e.g., strips
@@ -13,7 +13,7 @@ Token discovery order:
 - Optional .env file (if python-dotenv is installed)
 
 Usage examples:
-  python discogs_app.py --user-agent "VinylSorter/1.0 (you@example.com)"
+  python discogs_app.py --user-agent "Spindle/1.0 (you@example.com)"
   python discogs_app.py --various-policy last --articles-extra "le,la,les,el,los,las,der,die,das"
 """
 
@@ -88,7 +88,7 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
     "--user-agent",
-    default="VinylSorter/1.0 (+contact)",
+    default="Spindle/1.0 (+contact)",
     help="User-Agent header per Discogs API policy (include a way to contact you).",
   )
   parser.add_argument(

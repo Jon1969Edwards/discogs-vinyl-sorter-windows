@@ -16,7 +16,7 @@ def _project_root() -> Path:
 def _stop_running_app() -> None:
     if sys.platform != "win32":
         return
-    for image in ("DiscogsVinylSorter.exe",):
+    for image in ("Spindle.exe",):
         subprocess.run(
             ["taskkill", "/IM", image, "/F"],
             stdout=subprocess.DEVNULL,
@@ -45,9 +45,9 @@ def _remove_tree(path: Path, attempts: int = 5, delay_seconds: float = 2.0) -> b
 
 def main() -> int:
     root = _project_root()
-    dist_dir = root / "dist" / "DiscogsVinylSorter"
+    dist_dir = root / "dist" / "Spindle"
 
-    print("Stopping any running DiscogsVinylSorter.exe instances...")
+    print("Stopping any running Spindle.exe instances...")
     _stop_running_app()
     time.sleep(1.5)
 
@@ -62,8 +62,8 @@ def main() -> int:
 
     print()
     print("ERROR: Could not delete the previous build folder.")
-    print("Close DiscogsVinylSorter.exe if it is still running,")
-    print("close any File Explorer window open inside dist\\DiscogsVinylSorter,")
+    print("Close Spindle.exe if it is still running,")
+    print("close any File Explorer window open inside dist\\Spindle,")
     print("then run BUILD_WINDOWS_EXE.bat again.")
     return 1
 

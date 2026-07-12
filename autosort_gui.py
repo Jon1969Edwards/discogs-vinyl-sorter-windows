@@ -498,7 +498,7 @@ class App:
     self.v_token = StringVar(value=saved_cfg.get("token", ""))
     self._oauth_access_token = saved_cfg.get("oauth_access_token") or ""
     self._oauth_access_secret = saved_cfg.get("oauth_access_secret") or ""
-    self.v_user_agent = StringVar(value=saved_cfg.get("user_agent", "VinylSorter/1.0 (+contact)"))
+    self.v_user_agent = StringVar(value=saved_cfg.get("user_agent", "Spindle/1.0 (+contact)"))
     self.v_output_dir = StringVar(value=saved_cfg.get("output_dir", str(Path.cwd())))
     self.v_per_page = IntVar(value=saved_cfg.get("per_page", 100))
     self.v_json = BooleanVar(value=saved_cfg.get("write_json", False))
@@ -982,7 +982,7 @@ class App:
 
     self._header_subtitle = ctk.CTkLabel(
       self._header,
-      text=f"v{__version__}  •  Vinyl Collection Manager  •  Export & Print",
+      text=f"v{__version__}  •  Discogs shelf organizer  •  Export & Print",
       font=(FONT_SEGOE_UI, FONT_MD),
       text_color=self._colors["muted"],
     )
@@ -1699,7 +1699,7 @@ class App:
       try:
         return discogs_headers(self.v_token.get(), self.v_user_agent.get())
       except Exception:
-        return {"User-Agent": self.v_user_agent.get() or "VinylSorter/1.0"}
+        return {"User-Agent": self.v_user_agent.get() or "Spindle/1.0"}
 
     AudioPreviewPanel(
       btn_frame,
@@ -2252,7 +2252,7 @@ class App:
       self._log("Opening browser for Discogs sign-in…")
       access_token, access_secret = run_oauth_flow(
         creds[0], creds[1],
-        self.v_user_agent.get().strip() or "VinylSorter/1.0",
+        self.v_user_agent.get().strip() or "Spindle/1.0",
       )
       self._oauth_access_token = access_token
       self._oauth_access_secret = access_secret
@@ -3062,7 +3062,7 @@ class App:
   def _get_cfg(self) -> AutoConfig:
     return AutoConfig(
       token=self.v_token.get().strip(),
-      user_agent=self.v_user_agent.get().strip() or "VinylSorter/1.0 (+contact)",
+      user_agent=self.v_user_agent.get().strip() or "Spindle/1.0 (+contact)",
       output_dir=self.v_output_dir.get().strip() or str(Path.cwd()),
       per_page=max(1, min(int(self.v_per_page.get() or 100), 100)),
       write_json=bool(self.v_json.get()),

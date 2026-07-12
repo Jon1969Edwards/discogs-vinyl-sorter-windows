@@ -19,7 +19,7 @@ CALLBACK_URL = f"http://127.0.0.1:{CALLBACK_PORT}{CALLBACK_PATH}"
 def main() -> None:
     print()
     print("=" * 56)
-    print("Discogs Vinyl Sorter — one-time OAuth setup")
+    print("Spindle — one-time OAuth setup")
     print("=" * 56)
     print()
     print("This is a ONE-TIME step for whoever builds or distributes the app.")

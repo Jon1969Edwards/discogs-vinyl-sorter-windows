@@ -43,7 +43,7 @@ jobs:
         env:
           VSS_LICENSE_SECRET: ${{ secrets.VSS_LICENSE_SECRET }}
         run: |
-          pyinstaller --noconfirm DiscogsVinylSorter.spec
+          pyinstaller --noconfirm Spindle.spec
 
       - name: Code sign (optional)
         if: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
@@ -54,7 +54,7 @@ jobs:
         run: |
           $certPath = "$env:RUNNER_TEMP\codesign.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
-          Get-ChildItem -Path dist\DiscogsVinylSorter -Filter *.exe -Recurse | ForEach-Object {
+          Get-ChildItem -Path dist\Spindle -Filter *.exe -Recurse | ForEach-Object {
             & signtool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
           }
 

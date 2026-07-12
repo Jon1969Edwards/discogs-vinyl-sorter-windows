@@ -1,13 +1,13 @@
 ================================================
-VINYL SHELF SORTER - WINDOWS
+SPINDLE - WINDOWS
 Quick Start Guide
 ================================================
 
 END USERS (installer)
 ---------------------
-1. Download VinylShelfSorter-Setup from GitHub Releases
+1. Download Spindle-Setup from GitHub Releases
 2. Run the installer
-3. Launch Vinyl Shelf Sorter
+3. Launch Spindle
 4. Complete the welcome wizard and click Sign in with Discogs
 
 No SETUP.bat or SETUP_OAUTH.bat required for official builds.

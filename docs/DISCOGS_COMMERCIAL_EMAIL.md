@@ -2,13 +2,13 @@
 
 Send this to Discogs developer support **before** charging for Pro. Customize bracketed fields.
 
-**Subject:** Commercial use notification — Vinyl Shelf Sorter desktop app
+**Subject:** Commercial use notification — Spindle desktop app
 
 ---
 
 Hello Discogs Developer Support,
 
-I am building **Vinyl Shelf Sorter**, an independent desktop application for Windows
+I am building **Spindle**, an independent desktop application for Windows
 that helps vinyl collectors organize their personal Discogs collection on physical shelves.
 
 **Authentication:** OAuth 1.0a (Sign in with Discogs). Users authorize access to their own account.
@@ -29,7 +29,7 @@ that helps vinyl collectors organize their personal Discogs collection on physic
 We do not sell Discogs data, bulk-export database content, or charge for raw API access.
 All data stays on the user's device except normal Discogs API calls.
 
-Application name on Discogs Developers: [Your App Name]
+Application name on Discogs Developers: Spindle
 Callback URL: `http://127.0.0.1:8765/callback`
 
 Please let me know if this use requires additional approval under the API Terms of Use.

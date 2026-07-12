@@ -5,7 +5,7 @@ cd /d "%~dp0"
 
 echo.
 echo ==================================================
-echo Discogs Vinyl Sorter - Windows Setup
+echo Spindle - Windows Setup
 echo ==================================================
 echo.
 

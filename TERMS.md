@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-03-22
 
-By installing or using **Vinyl Shelf Sorter** ("the app"), you agree to these terms.
+By installing or using **Spindle** ("the app"), you agree to these terms.
 
 ## Not affiliated with Discogs
 

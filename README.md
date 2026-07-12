@@ -1,93 +1,116 @@
-# Discogs 33⅓ LP Shelf Sorter
+# Spindle
 
-This script connects to the Discogs API with your Personal Access Token, downloads your collection, filters to 33⅓ RPM Vinyl LPs, sorts them by Artist → Title → Year (with article stripping and Discogs numeric suffix cleanup), and outputs both a printable TXT and a CSV.
+**Spindle** connects to your [Discogs](https://www.discogs.com) collection, filters to the formats you care about (33⅓ RPM LPs by default), sorts them for physical shelving (Artist → Title → Year, with article stripping and Discogs suffix cleanup), and exports printable shelf lists.
 
-## Prerequisites
+The **Auto-Sort GUI** is the recommended way to use the app: sign in with Discogs, watch your collection for changes, search and browse with cover art, and export TXT, CSV, or JSON. A full **CLI** is available for scripting and one-shot runs.
 
-- Python 3.9+
-- A Discogs Personal Access Token
-  - Discogs → Settings → Developers → Personal Access Tokens → Generate new token
+> Not affiliated with Discogs. See [TERMS.md](TERMS.md) and [PRIVACY.md](PRIVACY.md).
 
-## Setup
+## Quick start
 
-Install dependencies:
+**Windows (recommended):** see [README-WINDOWS.md](README-WINDOWS.md) — run `SETUP.bat`, then `LaunchAutoSortGUI.bat`. Optional: build a standalone `.exe` with `BUILD_WINDOWS_EXE.bat`.
+
+**From source (any OS with Python 3.9+):**
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+python autosort_gui.py
 ```
 
-### Authentication
+On first launch, use **Sign in with Discogs** in Settings (OAuth), or paste a Personal Access Token under Advanced. See [OAUTH_SETUP.md](OAUTH_SETUP.md).
 
-There are two ways to authenticate with Discogs:
+## Features
+
+| | Free | Pro |
+|---|------|-----|
+| Collection sort + export | Up to **100 records** | **Unlimited** |
+| Search, album info, Discogs links | ✓ | ✓ |
+| Auto-watch collection changes | ✓ | ✓ |
+| Letter dividers in TXT export | ✓ | ✓ |
+| Marketplace prices | — | ✓ |
+| Wishlist marketplace availability check | — | ✓ |
+| Manual drag-and-drop shelf order | — | ✓ |
+| Audio preview (Discogs samples) | — | ✓ |
+| A/B/C physical shelf dividers in export | — | ✓ |
+
+Activate Pro in **Settings → Pro License**. Details: [docs/PRICING.md](docs/PRICING.md).
+
+### Auto-Sort GUI highlights
+
+- **Sign in with Discogs** (OAuth) or Personal Access Token
+- Auto-watch: regenerates shelf order when your collection changes
+- Export **TXT / CSV / JSON**, print, optional aligned columns and country codes
+- Album thumbnails, search/filter, sort by artist / title / year / price
+- **Wishlist** tab synced from your Discogs wantlist; check marketplace availability (Pro)
+- **Manual order mode**: drag rows to match your physical shelves (Pro)
+- **Audio preview** for selected releases (Pro)
+- Include **45 RPM singles** and **CDs** as separate exports
+- First-run wizard, dark/light theme, update checker, diagnostics export
+
+Launch:
+
+```bash
+# Windows
+LaunchAutoSortGUI.bat
+
+# macOS / Linux (from activated venv)
+python autosort_gui.py
+```
+
+Tip: set `DISCOGS_TOKEN` in a `.env` file (copy from `.env.example`) to skip re-entering a token for CLI use.
+
+## Authentication
 
 | Method | Use case | Variables |
 |--------|----------|-----------|
-| **Personal Access Token (PAT)** | CLI, simple GUI, Auto-Sort GUI | `DISCOGS_TOKEN` |
-| **OAuth** | Auto-Sort GUI “Sign in” (browser flow) | `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET` (or local `core/discogs_oauth_secrets.py`; see example file) |
+| **OAuth** | Auto-Sort GUI “Sign in” (browser flow) | `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET` (or bundled in release builds; see [OAUTH_SETUP.md](OAUTH_SETUP.md)) |
+| **Personal Access Token (PAT)** | CLI, GUI Advanced settings | `DISCOGS_TOKEN` |
 
+- **OAuth**: Discogs → Settings → Developers → Create Application (callback `http://127.0.0.1:8765/callback`). Put credentials in `.env`, or copy `core/discogs_oauth_secrets.example.py` to `core/discogs_oauth_secrets.py` (gitignored).
 - **PAT**: Discogs → Settings → Developers → Personal Access Tokens → Generate. Set `DISCOGS_TOKEN` or pass `--token <your_token>` to the CLI.
-- **OAuth**: Create an app at Discogs → Settings → Developers → Create Application (callback `http://127.0.0.1:8765/callback`). Put the consumer key/secret in `.env`, **or** copy `core/discogs_oauth_secrets.example.py` to `core/discogs_oauth_secrets.py` (gitignored) so secrets stay out of version control (see `OAUTH_SETUP.md`).
-- You can use one or both. Copy `.env.example` to `.env` and fill in your values.
 
-Provide your token either via environment variable or CLI flag:
-
-- Environment: `DISCOGS_TOKEN` (you can use a `.env` file if you have `python-dotenv` installed)
-- CLI: `--token <your_token>`
-
-## Run
+## CLI usage
 
 ```bash
-python discogs_app.py --user-agent "VinylSorter/1.0 (you@example.com)"
+python discogs_app.py --user-agent "Spindle/1.0 (you@example.com)"
 ```
 
 Outputs:
+
 - `vinyl_shelf_order.txt` — printable shelf order
 - `vinyl_shelf_order.csv` — spreadsheet-friendly
+- `vinyl_shelf_order.json` — optional, with `--json`
 
-### Auto-Sort GUI (Recommended)
-
-The Auto-Sort GUI is the main graphical interface. It monitors your Discogs collection and regenerates the shelf order when it changes:
-
-```bash
-# macOS / Linux
-./.venv/bin/python autosort_gui.py
-
-# Windows
-LaunchAutoSortGUI.bat
-# Or: .venv\Scripts\python autosort_gui.py
-```
-
-Features: Auto-watch, Refresh Now, Export TXT/CSV/JSON, Print, album thumbnails, wishlist tab, manual drag-and-drop ordering, search/filter, optional price display, sort by artist/title/year/price.
-
-No-terminal launch: Windows: `LaunchAutoSortGUI.bat` | macOS: `LaunchAutoSortGUI.command`
-
-Tip: to avoid entering your token each time, set `DISCOGS_TOKEN` in your environment (or create a `.env` file in the project directory).
-
-## Customization
+### Customization
 
 Push Various Artists to the end:
+
 ```bash
 python discogs_app.py --various-policy last
 ```
 
 Add extra leading articles to strip (French/Spanish/German/etc.):
+
 ```bash
 python discogs_app.py --articles-extra "le,la,les,el,los,las,der,die,das"
 ```
 
 Choose an output directory:
+
 ```bash
 python discogs_app.py --output-dir ./out
 ```
 
 Version and banner:
+
 ```bash
 python discogs_app.py --version
 ```
 
 Show debug stats and/or enforce explicit RPM:
+
 ```bash
 # Print counts of scanned items and how many matched Vinyl/LP/33RPM
 python discogs_app.py --debug-stats
@@ -97,22 +120,27 @@ python discogs_app.py --lp-strict
 ```
 
 Insert letter dividers in TXT output (`=== A ===` between artists):
+
 ```bash
 python discogs_app.py --dividers
 ```
 
 Insert **A/B/C shelf** dividers for physical shelf units (`=== SHELF A (A–H) ===`, etc.):
+
 ```bash
 python discogs_app.py --abc-dividers
 ```
-Shelf ranges: **A** = A–H (and non-alpha), **B** = I–P, **C** = Q–Z. The Auto-Sort GUI offers the same options under Settings → **TXT shelf dividers**.
+
+Shelf ranges: **A** = A–H (and non-alpha), **B** = I–P, **C** = Q–Z. The Auto-Sort GUI offers the same options under Settings → **TXT shelf dividers** (A/B/C dividers require Pro).
 
 Also write JSON alongside TXT/CSV:
+
 ```bash
 python discogs_app.py --json
 ```
 
 Include additional media categories (7" 45 RPM singles and CDs) with separate outputs:
+
 ```bash
 # 45 RPM singles only
 python discogs_app.py --include-45s
@@ -125,34 +153,41 @@ python discogs_app.py --include-45s --include-cds --json
 ```
 
 When enabled:
+
 - LP files: `vinyl_shelf_order.txt`, `vinyl_shelf_order.csv`, optional `vinyl_shelf_order.json`
 - 45 RPM files: `vinyl45_shelf_order.txt`, `vinyl45_shelf_order.csv`, optional `vinyl45_shelf_order.json`
 - CD files: `cd_shelf_order.txt`, `cd_shelf_order.csv`, optional `cd_shelf_order.json`
 - Combined JSON (only if `--json` and at least one extra category selected): `all_media_shelf_order.json` with a `media_type` field (`LP`, `45`, or `CD`).
 
 List items worth at least a given Discogs lowest_price (in SEK) in a separate file:
+
 ```bash
 # Anything with lowest_price >= 500 SEK
 python discogs_app.py --valuable-sek 500
 ```
+
 Creates `valuable_over_500kr.txt` containing shelf-order lines with an appended approximate price (e.g. `[~750 SEK]`). Notes:
+
 - Uses Discogs `lowest_price` (may be None if not available).
 - Fetches each release individually; large collections will take extra time.
 - Prices reflect the moment of querying and may change; treat as rough guidance.
 
-Last-name-first (conservative heuristic – only flips simple two-word personal names like "David Bowie" -> "Bowie, David"):
+Last-name-first (conservative heuristic – only flips simple two-word personal names like "David Bowie" → "Bowie, David"):
+
 ```bash
 python discogs_app.py --last-name-first
 ```
 
 Aligned columns and country code:
+
 ```bash
 python discogs_app.py --txt-align --show-country
 ```
 
 Extended last-name-first controls:
+
 ```bash
-# Allow certain 3-word names where middle is an initial or language particle (e.g. "John Lee Hooker", "Ludwig van Beethoven")
+# Allow certain 3-word names where middle is an initial or language particle
 python discogs_app.py --last-name-first --lnf-allow-3
 
 # Exclude specific names from flipping (semicolon-separated, case-insensitive)
@@ -160,17 +195,18 @@ python discogs_app.py --last-name-first --lnf-exclude "fine young cannibals;red 
 
 # Avoid flipping obvious band-like two-word names (plural nouns / ensemble terms)
 python discogs_app.py --last-name-first --lnf-safe-bands
-
-GUI equivalents: checkboxes map directly (LP strict, Debug stats, Last-name-first, LNF allow 3, LNF safe bands, Dividers, TXT align, Show country, Also JSON). The "LNF exclude" field accepts semicolon-separated names.
-Additional GUI checkboxes: "Include 45s" and "Include CDs" produce their respective files and (if JSON is also checked) contribute to the combined `all_media_shelf_order.json`.
 ```
 
+GUI equivalents: checkboxes map directly (LP strict, Debug stats, Last-name-first, LNF allow 3, LNF safe bands, Dividers, TXT align, Show country, Also JSON). The "LNF exclude" field accepts semicolon-separated names. Additional GUI checkboxes: "Include 45s" and "Include CDs" produce their respective files and (if JSON is also checked) contribute to the combined `all_media_shelf_order.json`.
+
 Cap number of pages (safety / testing):
+
 ```bash
 python discogs_app.py --max-pages 3
 ```
 
 Change per-page (max 100):
+
 ```bash
 python discogs_app.py --per-page 50
 ```
@@ -185,7 +221,24 @@ python discogs_app.py --per-page 50
 - The app retries transient API errors (HTTP 429/5xx) a few times with short backoff and honors `Retry-After` when provided.
 - Be mindful of Discogs API rate limits; the script sleeps briefly when remaining calls are low.
 
-## Future Ideas
+## Documentation
 
-- Export JSON for downstream tooling.
-- Optional exclusion of specific countries or labels.
+| Doc | Description |
+|-----|-------------|
+| [README-WINDOWS.md](README-WINDOWS.md) | Windows quick start, `.exe` build, troubleshooting |
+| [OAUTH_SETUP.md](OAUTH_SETUP.md) | OAuth sign-in for users and developers |
+| [docs/PRICING.md](docs/PRICING.md) | Free vs Pro, licensing |
+| [docs/SUPPORT.md](docs/SUPPORT.md) | Common issues, diagnostics |
+| [docs/BETA.md](docs/BETA.md) | Beta testing guide |
+| [PRIVACY.md](PRIVACY.md) | Privacy policy |
+| [TERMS.md](TERMS.md) | Terms of use |
+
+## Roadmap
+
+Planned or under consideration:
+
+- Shelf position numbers in exports (sequential `#001`, `#002`, … for physical lookup)
+- Highlight new acquisitions since last export
+- Duplicate / variant detection (same master, different pressings)
+- Optional exclusion filters by country or label
+- Mobile companion sync (see [docs/MOBILE_ROADMAP.md](docs/MOBILE_ROADMAP.md))

@@ -32,7 +32,7 @@ def _parse_version(v: str) -> tuple:
 
 def check_for_update(timeout: float = 8.0) -> Optional[UpdateInfo]:
     try:
-        req = urllib.request.Request(UPDATE_MANIFEST_URL, headers={"User-Agent": "VinylShelfSorter"})
+        req = urllib.request.Request(UPDATE_MANIFEST_URL, headers={"User-Agent": "Spindle"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         latest = data.get("version", "")

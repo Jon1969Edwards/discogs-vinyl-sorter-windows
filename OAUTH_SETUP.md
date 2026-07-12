@@ -19,7 +19,7 @@ To enable one-click sign-in for everyone **without** asking users to create a `.
 1. Go to [discogs.com/settings/developers](https://www.discogs.com/settings/developers).
 2. Click **Create an application**.
 3. Fill in:
-   - **Application Name:** Discogs Vinyl Sorter (or your product name)
+   - **Application Name:** Spindle
    - **Description:** (see main README)
    - **Callback URL:** `http://127.0.0.1:8765/callback`
 4. Create the application and copy the **Consumer Key** and **Consumer Secret**.
