@@ -1565,22 +1565,30 @@ class App:
         btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, FONT_MD), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
         btn.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
-    # Play on Spotify button
-    def play_on_spotify():
-        from core.spotify_utils import open_album_on_spotify
-        artist = getattr(row, "artist_display", "")
-        album = getattr(row, "title", "")
-        open_album_on_spotify(artist, album)
-    btn_spotify = tk.Button(
-        btn_frame, text="Play on Spotify", command=play_on_spotify,
-        font=(FONT_SEGOE_UI, FONT_MD), bg="#1db954", fg="#fff", activebackground="#1ed760", activeforeground="#fff", relief="groove"
-    )
-    btn_spotify.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+    from gui.audio_preview_panel import AudioPreviewPanel
+
+    artist = getattr(row, "artist_display", "")
+    album = getattr(row, "title", "")
+
+    def get_discogs_headers():
+      try:
+        return discogs_headers(self.v_token.get(), self.v_user_agent.get())
+      except Exception:
+        return {"User-Agent": self.v_user_agent.get() or "VinylSorter/1.0"}
+
+    AudioPreviewPanel(
+      btn_frame,
+      artist=artist,
+      album=album,
+      release_id=getattr(row, "release_id", None),
+      get_headers=get_discogs_headers,
+      bg=bg,
+      fg=self._colors["text"] if hasattr(self, "_colors") else "#eaeaea",
+      accent=accent,
+    ).pack(side="top", fill="x")
 
     # Wishlist button
     from core.wishlist import add_to_wishlist, remove_from_wishlist, is_in_wishlist
-    artist = getattr(row, "artist_display", "")
-    album = getattr(row, "title", "")
     discogs_url = getattr(row, "discogs_url", getattr(row, "url", None))
     year = getattr(row, "year", None)
     thumb_url = getattr(row, "thumb_url", None)
