@@ -36,6 +36,7 @@ from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 from core.api import discogs_headers
 from core.export import generate_txt_lines, write_csv, write_json, write_txt
 from core.models import ReleaseRow, BuildResult
+from gui.spinning_record import SpinningRecord
 from gui.thumbnails import ImagePreviewPopup, ThumbnailCache
 from gui.tooltip import ToolTip
 from core.build_service import (
@@ -214,9 +215,7 @@ class ProgressDialog:
 
   def __init__(self, parent, title: str = "Please Wait", message: str = "Loading..."):
     import tkinter as tk
-    from tkinter import scrolledtext
-    import math
-    
+
     self.top = tk.Toplevel(parent)
     self.top.title(title)
     self.top.transient(parent)
@@ -248,14 +247,9 @@ class ProgressDialog:
     content_frame.pack(fill="x", padx=24, pady=(8, 12))
     
     # Left side: Spinning record canvas
-    self.canvas = tk.Canvas(
-      content_frame,
-      width=100,
-      height=100,
-      bg="#16213e",
-      highlightthickness=0
-    )
-    self.canvas.pack(side="left", padx=(0, 20))
+    self._record_spinner = SpinningRecord(content_frame, size=100, bg="#16213e", accent="#6c63ff")
+    self._record_spinner.pack(side="left", padx=(0, 20))
+    self._record_spinner.start()
     
     # Right side: Message and progress
     info_frame = tk.Frame(content_frame, bg="#16213e")
@@ -314,16 +308,6 @@ class ProgressDialog:
     )
     self.log_text.pack(fill="both", expand=True)
     
-    # Animation state
-    self.angle = 0
-    self.spinning = True
-    
-    # Draw the vinyl record
-    self._draw_record()
-    
-    # Start animation
-    self._animate()
-    
     # Prevent closing
     self.top.protocol("WM_DELETE_WINDOW", lambda: None)
     
@@ -332,69 +316,6 @@ class ProgressDialog:
     x = parent.winfo_x() + (parent.winfo_width() // 2) - (self.top.winfo_width() // 2)
     y = parent.winfo_y() + (parent.winfo_height() // 2) - (self.top.winfo_height() // 2)
     self.top.geometry(f"+{x}+{y}")
-  
-  def _draw_record(self) -> None:
-    """Draw the vinyl record on the canvas with visible spinning indicator."""
-    import math
-    cx, cy = 50, 50  # Center (smaller record)
-    
-    # Clear canvas
-    self.canvas.delete("all")
-    
-    # Outer edge shadow
-    self.canvas.create_oval(3, 3, 97, 97, fill="#151525", outline="")
-    
-    # Outer edge (slightly lighter)
-    self.canvas.create_oval(2, 2, 96, 96, fill="#2a2a3e", outline="#3a3a4e", width=2)
-    
-    # Main record (black vinyl)
-    self.canvas.create_oval(5, 5, 95, 95, fill="#1a1a1a", outline="#0a0a0a", width=1)
-    
-    # Grooves (concentric circles)
-    for r in range(42, 15, -4):
-      self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r, outline="#252525", width=1)
-    
-    # Center label (purple)
-    self.canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill="#6c63ff", outline="#5a52dd", width=2)
-    
-    # Spindle hole
-    self.canvas.create_oval(cx-3, cy-3, cx+3, cy+3, fill="#1a1a2e", outline="#0a0a1e", width=1)
-    
-    # SPINNING INDICATOR - A bright white/silver highlight that rotates
-    angle_rad = math.radians(self.angle)
-    
-    # Bright spinning highlight line (very visible)
-    x1 = cx + 14 * math.cos(angle_rad)
-    y1 = cy + 14 * math.sin(angle_rad)
-    x2 = cx + 42 * math.cos(angle_rad)
-    y2 = cy + 42 * math.sin(angle_rad)
-    self.canvas.create_line(x1, y1, x2, y2, fill="#ffffff", width=3, capstyle="round")
-    
-    # Secondary highlight (dimmer, offset by 120 degrees)
-    angle_rad2 = math.radians(self.angle + 120)
-    x1 = cx + 14 * math.cos(angle_rad2)
-    y1 = cy + 14 * math.sin(angle_rad2)
-    x2 = cx + 42 * math.cos(angle_rad2)
-    y2 = cy + 42 * math.sin(angle_rad2)
-    self.canvas.create_line(x1, y1, x2, y2, fill="#888888", width=2, capstyle="round")
-    
-    # Third highlight (dimmest, offset by 240 degrees)
-    angle_rad3 = math.radians(self.angle + 240)
-    x1 = cx + 14 * math.cos(angle_rad3)
-    y1 = cy + 14 * math.sin(angle_rad3)
-    x2 = cx + 42 * math.cos(angle_rad3)
-    y2 = cy + 42 * math.sin(angle_rad3)
-    self.canvas.create_line(x1, y1, x2, y2, fill="#444444", width=1, capstyle="round")
-  
-  def _animate(self) -> None:
-    """Animate the spinning record."""
-    if self.spinning:
-      self.angle = (self.angle + 10) % 360  # Rotate 10 degrees per frame
-      self._draw_record()
-      try:
-        self.top.after(40, self._animate)  # 25 FPS for smoother animation
-      except Exception:
-        pass  # Dialog may have been closed
   
   def update_message(self, message: str) -> None:
     """Update the main message."""
@@ -420,7 +341,7 @@ class ProgressDialog:
   def close(self) -> None:
     """Close the dialog."""
     try:
-      self.spinning = False
+      self._record_spinner.stop()
       self.top.grab_release()
       self.top.destroy()
     except Exception:
@@ -2334,6 +2255,13 @@ class App:
         self._order_empty_label.configure(text_color=self._colors["muted"])
       if hasattr(self, "_order_loading_label"):
         self._order_loading_label.configure(text_color=self._colors["muted"])
+      if hasattr(self, "_order_loading_spinner"):
+        self._order_loading_spinner.set_colors(
+          bg=self._colors["panel"],
+          accent=self._colors["accent"],
+        )
+      if hasattr(self, "_order_loading_overlay"):
+        self._order_loading_overlay.configure(fg_color=self._colors["panel"])
       if hasattr(self, "_wishlist_empty_label"):
         self._wishlist_empty_label.configure(text_color=self._colors["muted"])
       if self.v_dark_mode.get():
@@ -2497,8 +2425,17 @@ class App:
       self._download_missing_thumbnails(rows)
 
   def _show_order_loading_state(self, show: bool) -> None:
-    """Show or hide the loading collection message."""
-    if hasattr(self, "_order_loading_label"):
+    """Show or hide the loading collection overlay."""
+    if hasattr(self, "_order_loading_overlay"):
+      if show:
+        self._order_loading_overlay.grid()
+        if hasattr(self, "_order_loading_spinner"):
+          self._order_loading_spinner.start()
+      else:
+        if hasattr(self, "_order_loading_spinner"):
+          self._order_loading_spinner.stop()
+        self._order_loading_overlay.grid_remove()
+    elif hasattr(self, "_order_loading_label"):
       if show:
         self._order_loading_label.grid()
       else:
@@ -2783,6 +2720,8 @@ class App:
     # Wake the watcher and force immediate check
     self._log("Manual refresh requested.")
     self.v_status.set("Refresh requested…")
+    if self._last_result is None:
+      self._show_order_loading_state(True)
     self._force_rebuild = True
     self._wake.set()
 
@@ -2992,6 +2931,7 @@ class App:
     except Exception as e:
       self._log(f"Failed to update wishlist from Discogs: {e}")
     # ---
+    self._show_order_loading_state(True)
     self._log("Building shelf order…")
     self.v_status.set("Building…")
     result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)

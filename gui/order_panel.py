@@ -129,18 +129,38 @@ class OrderPanel:
     a._order_empty_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
     a._order_empty_label.grid_remove()
 
+    a._order_loading_overlay = ctk.CTkFrame(order_wrap, fg_color=a._colors["panel"])
+    a._order_loading_overlay.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
+    a._order_loading_overlay.grid_rowconfigure(0, weight=1)
+    a._order_loading_overlay.grid_rowconfigure(2, weight=1)
+    a._order_loading_overlay.grid_columnconfigure(0, weight=1)
+
+    loading_content = ctk.CTkFrame(a._order_loading_overlay, fg_color="transparent")
+    loading_content.grid(row=1, column=0)
+
+    from gui.spinning_record import SpinningRecord
+
+    a._order_loading_spinner = SpinningRecord(
+      loading_content,
+      size=120,
+      bg=a._colors["panel"],
+      accent=a._colors["accent"],
+    )
+    a._order_loading_spinner.pack(pady=(0, 12))
+
     a._order_loading_label = ctk.CTkLabel(
-      order_wrap,
+      loading_content,
       text="Loading your collection…",
       font=(ui.FONT_SEGOE_UI, ui.FONT_LG),
       text_color=a._colors["muted"],
       justify="center",
     )
-    a._order_loading_label.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=3)
+    a._order_loading_label.pack()
+
     if a._last_result is None:
-      a._order_loading_label.grid()
+      a._show_order_loading_state(True)
     else:
-      a._order_loading_label.grid_remove()
+      a._show_order_loading_state(False)
 
     a.order_tree.heading("#0", text="", anchor="center")
     a.order_tree.column("#0", width=50, minwidth=50, stretch=False, anchor="center")
