@@ -1251,7 +1251,7 @@ class App:
     details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
     self._populate_album_details(details_frame, row, fg, bg, row_offset)
     self._setup_details_scroll(details_frame, details_canvas)
-    self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
+    self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg, show_wishlist_button=True)
 
   def _on_wishlist_right_click(self, event):
     from core.wishlist import remove_from_wishlist
@@ -1426,6 +1426,36 @@ class App:
     except Exception:
       return None
 
+  def _get_release_page_url(self, row) -> str:
+    release_id = getattr(row, "release_id", None)
+    url = getattr(row, "discogs_url", "") or getattr(row, "url", "")
+    if url.startswith("http"):
+      if "discogs.com/release/" in url:
+        return url.split("?")[0]
+      if release_id and "api.discogs.com/releases/" in url:
+        return f"https://www.discogs.com/release/{release_id}"
+    if release_id:
+      return f"https://www.discogs.com/release/{release_id}"
+    return ""
+
+  def _get_marketplace_url(self, row) -> str:
+    release_id = getattr(row, "release_id", None)
+    if release_id:
+      return f"https://www.discogs.com/sell/release/{release_id}"
+    return ""
+
+  def _format_marketplace_summary(self, row) -> str:
+    if not getattr(row, "release_id", None):
+      return ""
+    if not self.v_show_prices.get():
+      return 'Enable "Show prices" in settings, then refresh, to load marketplace data.'
+    lowest = getattr(row, "lowest_price", None)
+    num_for_sale = getattr(row, "num_for_sale", None)
+    currency = getattr(row, "price_currency", "") or self.v_currency.get().strip() or "USD"
+    if num_for_sale is not None and num_for_sale > 0 and lowest is not None:
+      return f"From {lowest:.0f} {currency} · {num_for_sale} for sale"
+    return "Not currently listed on the marketplace"
+
   def _create_album_popup_window(self, row):
     popup = tk.Toplevel(self.root)
     popup.title(f"Album Info: {row.artist_display} - {row.title}")
@@ -1503,27 +1533,29 @@ class App:
       ("Artist", getattr(row, "artist_display", "")),
       ("Title", getattr(row, "title", "")),
       ("Year", getattr(row, "year", "")),
+      ("Format", getattr(row, "format_str", getattr(row, "format", ""))),
       ("Label", getattr(row, "label", "")),
       ("Catalog #", getattr(row, "catno", "")),
-      ("Format", getattr(row, "format_str", getattr(row, "format", ""))),
       ("Country", getattr(row, "country", "")),
-      ("Price", f"{getattr(row, 'lowest_price', '')} {getattr(row, 'price_currency', '')}" if getattr(row, "lowest_price", None) is not None else ""),
-      ("Discogs ID", getattr(row, "release_id", "")),
-      ("Master ID", getattr(row, "master_id", "")),
-      ("Barcode", getattr(row, "barcode", "")),
-      ("Companies", getattr(row, "companies", "")),
-      ("Contributors", getattr(row, "contributors", "")),
-      ("URL", getattr(row, "discogs_url", getattr(row, "url", ""))),
-      ("Genres", getattr(row, "genres", "")),
-      ("Styles", getattr(row, "styles", "")),
-      ("Notes", getattr(row, "notes", "")),
-      ("Tracklist", getattr(row, "tracklist", "")),
-      ("Extra", getattr(row, "extra", "")),
     ]
+    marketplace = self._format_marketplace_summary(row)
+    if marketplace:
+      details.append(("Marketplace", marketplace))
+    notes = getattr(row, "notes", "")
+    if notes:
+      details.append(("Your notes", notes))
+
     for i, (label, value) in enumerate(details):
       if value:
-        tk.Label(details_frame, text=label+":", anchor="e", font=(FONT_SEGOE_UI, FONT_LG, "bold"), bg=bg, fg=fg).grid(row=i+row_offset, column=0, sticky="e", padx=(0,18), pady=10)
-        tk.Label(details_frame, text=str(value), anchor="w", font=(FONT_SEGOE_UI, FONT_LG), bg=bg, fg=fg, wraplength=480, justify="left").grid(row=i+row_offset, column=1, sticky="w", padx=(0,12), pady=10)
+        tk.Label(
+          details_frame, text=label + ":", anchor="e",
+          font=(FONT_SEGOE_UI, FONT_LG, "bold"), bg=bg, fg=fg,
+        ).grid(row=i + row_offset, column=0, sticky="e", padx=(0, 18), pady=10)
+        tk.Label(
+          details_frame, text=str(value), anchor="w",
+          font=(FONT_SEGOE_UI, FONT_LG), bg=bg, fg=fg,
+          wraplength=480, justify="left",
+        ).grid(row=i + row_offset, column=1, sticky="w", padx=(0, 12), pady=10)
 
   def _setup_details_scroll(self, details_frame, details_canvas):
     details_frame.update_idletasks()
@@ -1550,20 +1582,32 @@ class App:
       details_canvas.unbind_all("<Button-5>")
     details_canvas.master.master.protocol("WM_DELETE_WINDOW", lambda: (details_canvas.master.master.destroy(), _unbind_mousewheel()))
 
-  def _add_popup_buttons(self, popup, row, accent, btn_bg, btn_fg, bg):
+  def _add_popup_buttons(self, popup, row, accent, btn_bg, btn_fg, bg, *, show_wishlist_button: bool = False):
+    import webbrowser
+
     # Use the stacked button frame if present (from _add_album_cover_to_popup)
     btn_frame = getattr(popup, '_btn_stack', None)
     if btn_frame is None:
         btn_frame = tk.Frame(popup.outer, bg=bg)
         btn_frame.pack(fill="x", pady=(12,0))
 
-    url = getattr(row, "url", "")
-    if url:
-        def open_url():
-            import webbrowser
-            webbrowser.open(url)
-        btn = tk.Button(btn_frame, text="Open in Discogs", command=open_url, font=(FONT_SEGOE_UI, FONT_MD), bg=accent, fg=btn_fg, activebackground=btn_bg, activeforeground=btn_fg, relief="groove")
-        btn.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+    discogs_url = self._get_release_page_url(row)
+    if discogs_url:
+        tk.Button(
+          btn_frame, text="Open in Discogs",
+          command=lambda: webbrowser.open(discogs_url),
+          font=(FONT_SEGOE_UI, FONT_MD), bg=accent, fg=btn_fg,
+          activebackground=btn_bg, activeforeground=btn_fg, relief="groove",
+        ).pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+
+    marketplace_url = self._get_marketplace_url(row)
+    if marketplace_url:
+        tk.Button(
+          btn_frame, text="View on Marketplace",
+          command=lambda: webbrowser.open(marketplace_url),
+          font=(FONT_SEGOE_UI, FONT_MD), bg="#2ecc71", fg="#ffffff",
+          activebackground="#27ae60", activeforeground="#ffffff", relief="groove",
+        ).pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
     from gui.audio_preview_panel import AudioPreviewPanel
 
@@ -1587,40 +1631,42 @@ class App:
       accent=accent,
     ).pack(side="top", fill="x")
 
-    # Wishlist button
-    from core.wishlist import add_to_wishlist, remove_from_wishlist, is_in_wishlist
-    discogs_url = getattr(row, "discogs_url", getattr(row, "url", None))
-    year = getattr(row, "year", None)
-    thumb_url = getattr(row, "thumb_url", None)
-    cover_image_url = getattr(row, "cover_image_url", None)
-    release_id = getattr(row, "release_id", None)
-    wishlist_state = tk.StringVar()
-    def update_wishlist_state():
+    if show_wishlist_button:
+      from core.wishlist import add_to_wishlist, remove_from_wishlist, is_in_wishlist
+      discogs_url = getattr(row, "discogs_url", getattr(row, "url", None))
+      year = getattr(row, "year", None)
+      thumb_url = getattr(row, "thumb_url", None)
+      cover_image_url = getattr(row, "cover_image_url", None)
+      release_id = getattr(row, "release_id", None)
+      wishlist_state = tk.StringVar()
+
+      def update_wishlist_state():
         if is_in_wishlist(artist, album):
-            wishlist_state.set("Remove from Wishlist")
+          wishlist_state.set("Remove from Wishlist")
         else:
-            wishlist_state.set("Add to Wishlist")
-    def toggle_wishlist():
+          wishlist_state.set("Add to Wishlist")
+
+      def toggle_wishlist():
         if is_in_wishlist(artist, album):
-            remove_from_wishlist(artist, album)
+          remove_from_wishlist(artist, album)
         else:
-            add_to_wishlist(
-                artist, album, discogs_url,
-                year=year,
-                thumb=thumb_url,
-                cover_image_url=cover_image_url,
-                release_id=release_id
-            )
+          add_to_wishlist(
+            artist, album, discogs_url,
+            year=year,
+            thumb=thumb_url,
+            cover_image_url=cover_image_url,
+            release_id=release_id,
+          )
         update_wishlist_state()
-        # Refresh wishlist tree if it exists
         if hasattr(self, 'refresh_wishlist_tree'):
-            self.refresh_wishlist_tree()
-    update_wishlist_state()
-    btn_wishlist = tk.Button(
+          self.refresh_wishlist_tree()
+
+      update_wishlist_state()
+      tk.Button(
         btn_frame, textvariable=wishlist_state, command=toggle_wishlist,
-        font=(FONT_SEGOE_UI, FONT_MD), bg="#ffb347", fg="#222", activebackground="#ffd580", activeforeground="#222", relief="groove"
-    )
-    btn_wishlist.pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+        font=(FONT_SEGOE_UI, FONT_MD), bg="#ffb347", fg="#222",
+        activebackground="#ffd580", activeforeground="#222", relief="groove",
+      ).pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
     tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, FONT_MD), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="top", fill="x", padx=12, pady=(0, 0), ipadx=12, ipady=4)
 
