@@ -28,6 +28,7 @@ import json
 import os
 import queue
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -808,6 +809,7 @@ class App:
     self._build_ui(root)
     self._setup_keyboard_shortcuts()
     self._pump_queues()
+    self.root.after(0, self._apply_startup_window_state)
 
     # First-run: guide user to sign in before the watcher logs a cryptic error
     self.root.after(500, self._prompt_first_run_auth)
@@ -1141,6 +1143,53 @@ class App:
     row += 1
     self._build_status_bar(frm, row)
 
+  def _is_window_maximized(self) -> bool:
+    try:
+      if sys.platform == "win32":
+        return self.root.state() == "zoomed"
+      return bool(self.root.attributes("-fullscreen"))
+    except Exception:
+      return False
+
+  def _maximize_window(self) -> None:
+    try:
+      if sys.platform == "win32":
+        self.root.state("zoomed")
+      else:
+        self.root.attributes("-fullscreen", True)
+    except Exception:
+      pass
+
+  def _restore_window(self) -> None:
+    try:
+      if sys.platform == "win32":
+        self.root.state("normal")
+      else:
+        self.root.attributes("-fullscreen", False)
+    except Exception:
+      pass
+
+  def _toggle_window_maximize(self) -> None:
+    if self._is_window_maximized():
+      self._restore_window()
+    else:
+      self._maximize_window()
+    self._update_maximize_button()
+
+  def _update_maximize_button(self) -> None:
+    btn = getattr(self, "_maximize_btn", None)
+    tooltip = getattr(self, "_maximize_tooltip", None)
+    if btn is None:
+      return
+    if self._is_window_maximized():
+      btn.configure(text="❐")
+      if tooltip is not None:
+        tooltip.text = "Restore (F11)"
+    else:
+      btn.configure(text="□")
+      if tooltip is not None:
+        tooltip.text = "Maximize (F11)"
+
   def _build_header(self, frm, row):
     # Clean, minimal header
     self._header = ctk.CTkFrame(frm, fg_color="transparent")
@@ -1180,6 +1229,20 @@ class App:
     )
     min_btn.pack(side="left", padx=(0, 4))
     ToolTip(min_btn, "Minimize")
+
+    self._maximize_btn = ctk.CTkButton(
+      win_ctrl,
+      text="□",
+      width=40,
+      height=36,
+      corner_radius=6,
+      fg_color=self._colors["accent"],
+      hover_color=self._colors["button_hover"],
+      font=(FONT_SEGOE_UI, 16),
+      command=self._toggle_window_maximize,
+    )
+    self._maximize_btn.pack(side="left", padx=(0, 4))
+    self._maximize_tooltip = ToolTip(self._maximize_btn, "Maximize (F11)")
 
     close_btn = ctk.CTkButton(
       win_ctrl,
@@ -1828,6 +1891,10 @@ class App:
     ToolTip(self._move_up_btn, "Move selected item up one position (Alt+Up)")
     ToolTip(self._move_down_btn, "Move selected item down one position (Alt+Down)")
 
+  def _apply_startup_window_state(self) -> None:
+    self._maximize_window()
+    self._update_maximize_button()
+
   def _setup_keyboard_shortcuts(self) -> None:
     """Set up keyboard shortcuts for common actions."""
     # Ctrl+F - Focus search
@@ -1837,6 +1904,9 @@ class App:
     # Escape - Clear search (when search has focus)
     self._search_entry.bind("<Escape>", lambda e: self._clear_search())
     
+    # F11 - Toggle maximize / restore
+    self.root.bind("<F11>", lambda e: self._toggle_window_maximize())
+
     # F5 - Refresh
     self.root.bind("<F5>", lambda e: self._refresh_now())
     
@@ -3146,9 +3216,6 @@ def main() -> None:
   # Create CustomTkinter root window
   root = ctk.CTk()
   root.title("Discogs Auto-Sort")
-
-  # Start in full screen
-  root.attributes('-fullscreen', True)
 
   App(root)
   root.mainloop()
