@@ -54,7 +54,7 @@ python discogs_app.py --token your_token_here --dividers --json
 ## Requirements
 
 - **Windows 10 or 11**
-- **Python 3.9+** (from [python.org](https://www.python.org/downloads/))
+- **Python 3.12 recommended** (3.9–3.12 supported for full features). Python 3.13+ may not install **pygame** (Pro audio preview) until prebuilt wheels exist.
   - **Important**: During installation, check "Add Python to PATH"
   - The standard installer includes Tkinter (required for GUI)
 

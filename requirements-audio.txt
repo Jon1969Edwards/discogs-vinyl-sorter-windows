@@ -1,0 +1,2 @@
+# Optional: Pro audio preview (requires prebuilt wheels; use Python 3.12 on Windows)
+pygame>=2.5.0

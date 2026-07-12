@@ -29,7 +29,8 @@ Include:
 
 ### Audio preview unavailable
 
-- Pro feature; install pygame via official setup if running from source
+- Pro feature; requires **pygame** (installed automatically on Python 3.12)
+- On Python 3.13+, pygame may fail to install — use Python 3.12 and re-run **SETUP.bat**, or run: `pip install -r requirements-audio.txt`
 
 ## Not affiliated with Discogs
 
