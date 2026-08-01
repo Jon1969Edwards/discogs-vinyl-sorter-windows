@@ -27,6 +27,23 @@ Include:
 
 - Free tier limit; upgrade to Pro for full collection display and export
 
+### Local testing without Pro paywall
+
+Set an environment variable before launching (dev builds only):
+
+```powershell
+$env:SPINDLE_DEV_PRO = "1"
+.\LaunchAutoSortGUI.bat
+```
+
+License status shows **Pro (dev)**. Or generate a real key:
+
+```powershell
+.venv\Scripts\python scripts\generate_license_key.py --email you@example.com
+```
+
+Then activate it under **Help → Activate Pro license…**.
+
 ### Audio preview unavailable
 
 - Pro feature; requires **pygame** (installed automatically on Python 3.12)

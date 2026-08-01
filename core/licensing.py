@@ -76,11 +76,26 @@ def _license_from_config() -> Optional[dict]:
     return None
 
 
+def _dev_pro_unlocked() -> bool:
+    """True when SPINDLE_DEV_PRO / VSS_DEV_PRO is set (local testing only)."""
+    import os
+
+    raw = (
+        os.environ.get("SPINDLE_DEV_PRO", "").strip()
+        or os.environ.get("VSS_DEV_PRO", "").strip()
+    ).lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def is_pro() -> bool:
+    if _dev_pro_unlocked():
+        return True
     return _license_from_config() is not None
 
 
 def license_summary() -> str:
+    if _dev_pro_unlocked() and _license_from_config() is None:
+        return "Pro (dev)"
     lic = _license_from_config()
     if not lic:
         return "Free"
