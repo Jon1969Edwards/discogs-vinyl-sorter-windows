@@ -2099,9 +2099,10 @@ class App:
     self._save_settings()
 
   def _save_settings(self) -> None:
-    """Save current settings to config file."""
+    """Save current settings to config file (preserve license and other keys)."""
     try:
-      config = {
+      config = load_config()
+      config.update({
         "token": self.v_token.get().strip(),
         "user_agent": self.v_user_agent.get().strip(),
         "output_dir": self.v_output_dir.get().strip(),
@@ -2113,7 +2114,7 @@ class App:
         "sort_by": self.v_sort_by.get().strip(),
         "formats": self._selected_formats(),
         "divider_mode": self._divider_mode_value(),
-      }
+      })
       if getattr(self, "_oauth_access_token", None):
         config["oauth_access_token"] = self._oauth_access_token
       if getattr(self, "_oauth_access_secret", None):
