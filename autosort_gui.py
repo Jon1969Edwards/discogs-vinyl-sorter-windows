@@ -2643,6 +2643,9 @@ class App:
       return False
 
   def _update_loading_progress(self, message: str, fraction: float | None = None, *, error: bool = False) -> None:
+    # Modal owns progress UI whenever it is open.
+    if self._progress_dialog is not None:
+      return
     self._loading_base_message = message
     self._loading_last_fraction = fraction
     if hasattr(self, "_order_loading_detail"):
@@ -2674,9 +2677,8 @@ class App:
   def _process_progress_action(self, action: str, message: str | None, fraction: float | None = None) -> None:
     if action == "show":
       self._set_action_buttons_state("disabled")
-      # Modal owns the spinner — hide the inline overlay so we don't show two records.
-      if self._is_loading_overlay_visible():
-        self._show_order_loading_state(False)
+      # Always dismiss inline spinner — do not rely on winfo_ismapped().
+      self._show_order_loading_state(False)
       if self._progress_dialog is None:
         self._progress_dialog = ProgressDialog(self.root, "Working...", message or "Please wait...")
       else:
@@ -2748,6 +2750,9 @@ class App:
 
   def _show_order_loading_state(self, show: bool) -> None:
     """Show or hide the loading collection overlay."""
+    # Never compete with the modal Working… dialog.
+    if show and self._progress_dialog is not None:
+      return
     if hasattr(self, "_order_loading_overlay"):
       if show:
         self._order_loading_overlay.grid()
@@ -3098,7 +3103,13 @@ class App:
     self._refresh_worker_cfg()
     self._log("Manual refresh requested.")
     self.v_status.set("Refresh requested…")
-    self._show_order_loading_state(True)
+    # Keep the shelf list visible when we already have data. The modal spinner
+    # (e.g. price fetch) owns long-running work; only use the inline overlay
+    # for the first load when the tree is empty.
+    if self._last_result is None:
+      self._show_order_loading_state(True)
+    else:
+      self._show_order_loading_state(False)
     self._force_rebuild = True
     self._wake.set()
 
