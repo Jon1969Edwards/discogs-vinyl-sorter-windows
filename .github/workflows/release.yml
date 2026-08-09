@@ -11,6 +11,10 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      # Map secrets to env so optional steps can use `if:` (secrets.* is not allowed in if).
+      WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,11 +50,8 @@ jobs:
           pyinstaller --noconfirm Spindle.spec
 
       - name: Code sign (optional)
-        if: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
+        if: env.WINDOWS_CERT_BASE64 != ''
         shell: pwsh
-        env:
-          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
-          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           $certPath = "$env:RUNNER_TEMP\codesign.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
@@ -64,11 +65,8 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/setup.iss
 
       - name: Sign installer (optional)
-        if: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
+        if: env.WINDOWS_CERT_BASE64 != ''
         shell: pwsh
-        env:
-          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
-          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           $certPath = "$env:RUNNER_TEMP\codesign.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
