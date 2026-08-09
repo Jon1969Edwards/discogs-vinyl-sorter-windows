@@ -51,6 +51,7 @@ class AutoConfig:
   sort_by: str = "artist"
   oauth_access_token: str | None = None
   oauth_access_secret: str | None = None
+  formats: list[str] | None = None
 
 
 class CollectionCache:
@@ -252,6 +253,17 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
       if not rows:
         log("No matching items found.")
         report("error", "No matching items found.")
+        return []
+      from core.format_filter import DEFAULT_FORMAT_SELECTION, filter_rows_by_format
+
+      selected = set(cfg.formats or DEFAULT_FORMAT_SELECTION)
+      before = len(rows)
+      rows = filter_rows_by_format(rows, selected)
+      if selected and "everything" not in selected and before != len(rows):
+        log(f"Format filter {sorted(selected)}: {len(rows)} of {before} items.")
+      if not rows:
+        log("No items match the selected format filters.")
+        report("error", "No items match the selected format filters.")
         return []
       return rows
     except Exception as e:

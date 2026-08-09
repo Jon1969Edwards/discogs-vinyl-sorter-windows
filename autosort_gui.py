@@ -3083,6 +3083,7 @@ class App:
       sort_by=self.v_sort_by.get().strip() or "artist",
       oauth_access_token=(self._oauth_access_token or "").strip() or None,
       oauth_access_secret=(self._oauth_access_secret or "").strip() or None,
+      formats=self._selected_formats(),
     )
 
   def _refresh_worker_cfg(self) -> None:
