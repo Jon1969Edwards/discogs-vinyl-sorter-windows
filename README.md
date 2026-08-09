@@ -226,6 +226,7 @@ python discogs_app.py --per-page 50
 | Doc | Description |
 |-----|-------------|
 | [README-WINDOWS.md](README-WINDOWS.md) | Windows quick start, `.exe` build, troubleshooting |
+| [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) | Local and release Authenticode signing |
 | [OAUTH_SETUP.md](OAUTH_SETUP.md) | OAuth sign-in for users and developers |
 | [docs/PRICING.md](docs/PRICING.md) | Free vs Pro, licensing |
 | [docs/SUPPORT.md](docs/SUPPORT.md) | Common issues, diagnostics |

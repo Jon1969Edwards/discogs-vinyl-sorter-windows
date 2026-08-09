@@ -48,6 +48,33 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
+if exist "certs\spindle-dev-codesign.pfx" (
+  echo Signing Spindle.exe with local code-signing certificate...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\sign_windows_exe.ps1"
+  if %ERRORLEVEL% neq 0 (
+    echo.
+    echo WARNING: Build succeeded but signing failed.
+    echo          Install the Windows SDK Signing Tools, or run SIGN_WINDOWS.bat later.
+    echo          See docs\CODE_SIGNING.md
+    echo.
+  )
+) else if defined SPINDLE_CODESIGN_PFX (
+  echo Signing Spindle.exe with SPINDLE_CODESIGN_PFX...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\sign_windows_exe.ps1"
+  if %ERRORLEVEL% neq 0 (
+    echo.
+    echo WARNING: Build succeeded but signing failed. See docs\CODE_SIGNING.md
+    echo.
+  )
+) else (
+  echo NOTE: No local code-signing cert found. Unsigned builds may be blocked by
+  echo       Smart App Control. Run SETUP_LOCAL_CODESIGN.bat once, then rebuild,
+  echo       or run SIGN_WINDOWS.bat after installing the Windows SDK.
+  echo       See docs\CODE_SIGNING.md
+  echo.
+)
+
+echo.
 echo ============================================================
 echo Build output:  dist\Spindle\Spindle.exe
 echo ============================================================

@@ -19,6 +19,13 @@ dist/
 .env
 env/
 venv/
+
+# Local / release code-signing material (never commit)
+certs/
+*.pfx
+*.p12
+*.cer
+*.password.txt
 # Discogs OAuth consumer key/secret (copy from discogs_oauth_secrets.example.py)
 core/discogs_oauth_secrets.py
 

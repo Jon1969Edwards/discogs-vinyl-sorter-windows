@@ -30,8 +30,13 @@ For a one-shot fetch without the Auto-Sort window, use the command line (see bel
 To get a normal program you can pin to the taskbar or Start menu (no `.bat`):
 
 1. Run **SETUP.bat** once so `.venv` exists.
-2. Double-click **BUILD_WINDOWS_EXE.bat** (installs PyInstaller if needed, then builds).
-3. Run **`dist\Spindle\Spindle.exe`**.
+2. **(Recommended)** Run **SETUP_LOCAL_CODESIGN.bat** once — creates a local code-signing certificate so Windows can verify your build. Requires [Windows SDK Signing Tools](https://developer.microsoft.com/windows/downloads/windows-sdk/) (`signtool`). See [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md).
+3. Double-click **BUILD_WINDOWS_EXE.bat** (installs PyInstaller if needed, then builds and signs when a cert is present).
+4. Run **`dist\Spindle\Spindle.exe`**.
+
+To sign an existing build: **SIGN_WINDOWS.bat**.
+
+**Smart App Control blocked Spindle.exe?** Unsigned (and often self-signed) builds are blocked. Prefer signing with a commercially trusted certificate for distribution; for daily development use **LaunchAutoSortGUI.bat**. Details: [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md).
 
 **Build failed with "Access is denied" on `dist\Spindle`?** Close any running copy of `Spindle.exe`, close File Explorer windows inside `dist\`, then run **BUILD_WINDOWS_EXE.bat** again. The script now stops the app and retries cleanup automatically.
 
@@ -120,7 +125,9 @@ Add `--last-name-first` to sort artists by last name (e.g., "Davis, Miles")
 - `test_format_filter.py` - Format detection/filter tests (`python test_format_filter.py`)
 - `requirements.txt` - Python dependencies
 - `LaunchAutoSortGUI.bat` - Windows launcher for the Auto-Sort GUI
-- `BUILD_WINDOWS_EXE.bat` - Optional: build `Spindle.exe` (PyInstaller)
+- `BUILD_WINDOWS_EXE.bat` - Optional: build `Spindle.exe` (PyInstaller); signs if a cert exists
+- `SETUP_LOCAL_CODESIGN.bat` - One-time local code-signing certificate
+- `SIGN_WINDOWS.bat` - Sign `dist\Spindle\Spindle.exe` (and installer if present)
 - `SETUP.bat` - Windows setup script
 - `README.md` - Full documentation (cross-platform)
 
