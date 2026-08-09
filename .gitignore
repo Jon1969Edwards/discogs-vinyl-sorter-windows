@@ -13,6 +13,7 @@ __pycache__/
 build/
 dist/
 *.spec
+!Spindle.spec
 
 # Virtual env + secrets
 .venv/
@@ -32,8 +33,13 @@ core/discogs_oauth_secrets.py
 # App config and cache (contains user token)
 .discogs_config.json
 .discogs_collection_cache.json
+.discogs_manual_order.json
+wishlist.json
 # Downloaded album-art thumbnail cache (per-user, regenerated on demand)
 .discogs_thumbnails/
+crash.log
+diagnostics_*.zip
+
 
 # Generated outputs (Discogs sorter)
 vinyl_shelf_order.txt
