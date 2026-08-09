@@ -6,10 +6,13 @@ import base64
 import json
 from pathlib import Path
 
-from core.paths import project_root
+from core.paths import migrate_user_file
 
-CONFIG_FILE = project_root() / ".discogs_config.json"
-MANUAL_ORDER_FILE = project_root() / ".discogs_manual_order.json"
+CONFIG_FILE = migrate_user_file("config.json", legacy_names=(".discogs_config.json",))
+MANUAL_ORDER_FILE = migrate_user_file(
+  "manual_order.json",
+  legacy_names=(".discogs_manual_order.json",),
+)
 
 _OBFUSCATE_KEY = b"DiscogsVinylSorter2026"
 

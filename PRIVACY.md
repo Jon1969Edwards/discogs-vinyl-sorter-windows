@@ -9,20 +9,25 @@ or sponsored by Discogs**.
 ## What we collect
 
 **We do not operate servers that receive your collection data.** By default, everything
-stays on your computer:
+stays on your computer under a local app-data folder (on Windows:
+`%LOCALAPPDATA%\Spindle\`):
 
 | Data | Where stored | Purpose |
 |------|----------------|---------|
-| Discogs OAuth tokens | `.discogs_config.json` next to the app | Sign in and access your collection |
-| Collection / price cache | `.discogs_collection_cache.json` | Faster reloads |
-| Manual shelf order | `.discogs_manual_order.json` | Your custom sort order |
+| Discogs OAuth tokens | `config.json` | Sign in and access your collection |
+| Collection / price cache | `collection_cache.json` | Faster reloads |
+| Manual shelf order | `manual_order.json` | Your custom sort order |
 | Wishlist | `wishlist.json` | Local wishlist and availability checks |
-| Thumbnail cache | `.discogs_thumbnails/` | Album artwork |
-| License key (Pro) | `.discogs_config.json` | Unlock Pro features offline |
-| Settings | `.discogs_config.json` | Preferences |
+| Thumbnail cache | `thumbnails/` | Album artwork |
+| License key (Pro) | `config.json` | Unlock Pro features offline |
+| Settings | `config.json` | Preferences |
+| Crash log / diagnostics | `crash.log`, `diagnostics_*.zip` | Local troubleshooting |
 
 Tokens are obfuscated on disk but are not a substitute for full encryption. Protect
 your computer user account like you would for any app that stores API credentials.
+
+Existing installs that stored these files next to the app (project / `.exe` folder)
+are migrated automatically into the AppData location on first launch.
 
 ## What leaves your device
 

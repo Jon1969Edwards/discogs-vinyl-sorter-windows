@@ -17,7 +17,7 @@ import time
 import traceback
 from pathlib import Path
 
-from core.paths import project_root
+from core.paths import project_root, user_data_dir
 
 # Load .env from project folder before discogs_app / OAuth (cwd may differ e.g. IDE, shortcuts)
 try:
@@ -3372,7 +3372,7 @@ class App:
 def main() -> None:
   def _log_crash(exc_type, exc, tb):
     try:
-      log_path = project_root() / "crash.log"
+      log_path = user_data_dir() / "crash.log"
       with log_path.open("a", encoding="utf-8") as f:
         f.write("\n---\n")
         traceback.print_exception(exc_type, exc, tb, file=f)

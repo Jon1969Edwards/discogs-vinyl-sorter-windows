@@ -7,9 +7,12 @@ from typing import TYPE_CHECKING
 
 import tkinter as tk
 
-from core.paths import project_root
+from core.paths import migrate_user_dir
 
-THUMBNAIL_CACHE_DIR = project_root() / ".discogs_thumbnails"
+THUMBNAIL_CACHE_DIR = migrate_user_dir(
+  "thumbnails",
+  legacy_names=(".discogs_thumbnails",),
+)
 
 if TYPE_CHECKING:
   from PIL import ImageTk

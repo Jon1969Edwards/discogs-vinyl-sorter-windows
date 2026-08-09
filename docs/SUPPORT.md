@@ -9,7 +9,7 @@ Include:
 - App version (**Help → About**)
 - Windows version
 - Steps to reproduce
-- Optional: **Help → Export diagnostics** zip
+- Optional: **Help → Export diagnostics** zip (written under `%LOCALAPPDATA%\Spindle\`)
 
 ## Common issues
 

@@ -3,9 +3,9 @@
 import json
 import re
 
-from core.paths import project_root
+from core.paths import migrate_user_file
 
-WISHLIST_FILE = project_root() / "wishlist.json"
+WISHLIST_FILE = migrate_user_file("wishlist.json")
 
 
 def release_id_from_entry(entry: dict) -> int | None:

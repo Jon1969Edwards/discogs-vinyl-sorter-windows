@@ -27,11 +27,14 @@ from core.api import (
 from core.export import generate_txt_lines
 from core.models import BuildResult
 from core.oauth_discogs import get_oauth_session, _get_consumer_credentials
-from core.paths import project_root
+from core.paths import migrate_user_file
 from core.sorting import collect_all_rows, sort_rows
 
-# Collection cache file
-CACHE_FILE = project_root() / ".discogs_collection_cache.json"
+# Collection cache file (local AppData)
+CACHE_FILE = migrate_user_file(
+  "collection_cache.json",
+  legacy_names=(".discogs_collection_cache.json",),
+)
 PRICE_CACHE_MAX_AGE_SECONDS = 86400 * 7  # 7 days before prices are considered stale
 
 
