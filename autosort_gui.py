@@ -2674,33 +2674,38 @@ class App:
   def _process_progress_action(self, action: str, message: str | None, fraction: float | None = None) -> None:
     if action == "show":
       self._set_action_buttons_state("disabled")
+      # Modal owns the spinner — hide the inline overlay so we don't show two records.
+      if self._is_loading_overlay_visible():
+        self._show_order_loading_state(False)
       if self._progress_dialog is None:
         self._progress_dialog = ProgressDialog(self.root, "Working...", message or "Please wait...")
-      if self._is_loading_overlay_visible():
-        self._update_loading_progress(message or "Working…", fraction)
+      else:
+        self._progress_dialog.update_message(message or "Please wait...")
     elif action == "update":
-      if self._last_result is None and not self._is_loading_overlay_visible():
-        self._show_order_loading_state(True)
       if self._progress_dialog is not None:
         self._progress_dialog.update_progress(message or "")
+        return
+      # Inline overlay only when no modal is open (e.g. first collection sync).
+      if self._last_result is None and not self._is_loading_overlay_visible():
+        self._show_order_loading_state(True)
       if self._is_loading_overlay_visible():
         self._update_loading_progress(message or "Loading…", fraction)
     elif action == "message" and self._progress_dialog is not None:
       self._progress_dialog.update_message(message or "")
     elif action == "error":
-      if self._is_loading_overlay_visible():
-        self._update_loading_progress(message or "An error occurred.", None, error=True)
       if self._progress_dialog is not None:
         self._progress_dialog.set_error(message or "An error occurred.")
         self._progress_dialog.top.after(1600, self._progress_dialog.close)
         self._progress_dialog = None
+      elif self._is_loading_overlay_visible():
+        self._update_loading_progress(message or "An error occurred.", None, error=True)
       self._set_action_buttons_state("normal")
     elif action == "done":
-      if self._is_loading_overlay_visible():
-        self._update_loading_progress(message or "Done!", 1.0)
       if self._progress_dialog is not None:
         self._progress_dialog.set_done(message or self._progress_dialog.DONE_MESSAGE)
         self._progress_dialog = None
+      elif self._is_loading_overlay_visible():
+        self._update_loading_progress(message or "Done!", 1.0)
       self._set_action_buttons_state("normal")
     elif action == "close" and self._progress_dialog is not None:
       self._progress_dialog.close()
