@@ -40,7 +40,7 @@ To sign an existing build: **SIGN_WINDOWS.bat**.
 
 **Build failed with "Access is denied" on `dist\Spindle`?** Close any running copy of `Spindle.exe`, close File Explorer windows inside `dist\`, then run **BUILD_WINDOWS_EXE.bat** again. The script now stops the app and retries cleanup automatically.
 
-Put your **`.env`** file in **the same folder as** `Spindle.exe` if you use one (OAuth consumer key/secret, token, etc.). Config and cache files from the app are stored next to that `.exe` as well.
+Put your **`.env`** file in **the same folder as** `Spindle.exe` if you use one for OAuth/token overrides. **User data** (config, wishlist, thumbnails, collection cache) is stored under **`%LOCALAPPDATA%\Spindle\`**, not next to the `.exe`.
 
 ### 3. Command Line Usage
 

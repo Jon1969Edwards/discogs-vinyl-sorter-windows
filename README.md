@@ -37,6 +37,8 @@ On first launch, use **Sign in with Discogs** in Settings (OAuth), or paste a Pe
 
 Activate Pro in **Settings → Pro License**. Details: [docs/PRICING.md](docs/PRICING.md).
 
+On Windows, user data (config, caches, wishlist, thumbnails) lives under `%LOCALAPPDATA%\Spindle\` — not next to the `.exe`. See [PRIVACY.md](PRIVACY.md).
+
 ### Auto-Sort GUI highlights
 
 - **Sign in with Discogs** (OAuth) or Personal Access Token
@@ -229,6 +231,8 @@ python discogs_app.py --per-page 50
 | [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) | Local and release Authenticode signing |
 | [OAUTH_SETUP.md](OAUTH_SETUP.md) | OAuth sign-in for users and developers |
 | [docs/PRICING.md](docs/PRICING.md) | Free vs Pro, licensing |
+| [docs/RELEASE.md](docs/RELEASE.md) | Production release checklist (secrets, signing, store) |
+| [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) | Local and release Authenticode signing |
 | [docs/SUPPORT.md](docs/SUPPORT.md) | Common issues, diagnostics |
 | [docs/BETA.md](docs/BETA.md) | Beta testing guide |
 | [PRIVACY.md](PRIVACY.md) | Privacy policy |

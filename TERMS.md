@@ -1,8 +1,10 @@
 # Terms of Use
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-08-09
 
 By installing or using **Spindle** ("the app"), you agree to these terms.
+
+**Operator:** Jonathan C Edwards · Contact: jon1969edwards@gmail.com
 
 ## Not affiliated with Discogs
 
@@ -40,3 +42,7 @@ time of purchase.
 
 We may update features, pricing, or these terms. Material changes will be reflected
 in the app version notes or purchase page.
+
+## Contact
+
+Questions: jon1969edwards@gmail.com · https://github.com/Jon1969Edwards/discogs-vinyl-sorter-windows/issues

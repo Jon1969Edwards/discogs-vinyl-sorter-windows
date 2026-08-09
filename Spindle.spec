@@ -3,7 +3,22 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['core.discogs_oauth_secrets', 'core.discogs_oauth_app', 'core.config_store', 'core.format_filter', 'core.build_service', 'gui.settings_panel', 'gui.tooltip', 'gui.spinning_record', 'gui.thumbnails', 'gui.order_panel', 'gui.wishlist_panel', 'requests_oauthlib', 'dotenv']
+hiddenimports = [
+    'core.discogs_oauth_secrets',
+    'core.discogs_oauth_app',
+    'core.license_secrets',
+    'core.config_store',
+    'core.format_filter',
+    'core.build_service',
+    'gui.settings_panel',
+    'gui.tooltip',
+    'gui.spinning_record',
+    'gui.thumbnails',
+    'gui.order_panel',
+    'gui.wishlist_panel',
+    'requests_oauthlib',
+    'dotenv',
+]
 tmp_ret = collect_all('customtkinter')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
@@ -39,6 +54,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/spindle.ico',
 )
 coll = COLLECT(
     exe,

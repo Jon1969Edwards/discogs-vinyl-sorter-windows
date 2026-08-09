@@ -29,6 +29,8 @@ certs/
 *.password.txt
 # Discogs OAuth consumer key/secret (copy from discogs_oauth_secrets.example.py)
 core/discogs_oauth_secrets.py
+# Pro license HMAC secret (baked at release from VSS_LICENSE_SECRET)
+core/license_secrets.py
 
 # App config and cache (contains user token)
 .discogs_config.json

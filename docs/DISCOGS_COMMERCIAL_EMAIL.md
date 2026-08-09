@@ -1,6 +1,8 @@
-# Discogs commercial-use notification (template)
+# Discogs commercial-use notification
 
-Send this to Discogs developer support **before** charging for Pro. Customize bracketed fields.
+Send this to Discogs developer support **before** charging for Pro.
+
+**To:** developer / API support via [Discogs support](https://support.discogs.com/) (API / commercial use)
 
 **Subject:** Commercial use notification — Spindle desktop app
 
@@ -31,9 +33,10 @@ All data stays on the user's device except normal Discogs API calls.
 
 Application name on Discogs Developers: Spindle
 Callback URL: `http://127.0.0.1:8765/callback`
+Product site / source: https://github.com/Jon1969Edwards/discogs-vinyl-sorter-windows
 
 Please let me know if this use requires additional approval under the API Terms of Use.
 
 Thank you,
-[Your name]
-[Your email]
+Jonathan C Edwards
+jon1969edwards@gmail.com

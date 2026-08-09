@@ -94,6 +94,8 @@ CI signs `dist\Spindle\*.exe` and the Inno Setup installer when those secrets ar
 
 Timestamping uses DigiCert’s server (`http://timestamp.digicert.com`) so signatures remain valid after the cert expires.
 
+Full production checklist (OAuth, license bake, store, Discogs notice, tag): [`RELEASE.md`](RELEASE.md).
+
 ## Security notes
 
 - Never commit `certs\`, `.pfx`, or password files (already covered by `.gitignore`).

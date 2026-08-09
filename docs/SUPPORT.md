@@ -2,7 +2,9 @@
 
 ## Contact
 
-Email: `support@example.com` (update in `core/version.py` for production)
+Email: **jon1969edwards@gmail.com** (also shown in **Help → About**)
+
+GitHub Issues: https://github.com/Jon1969Edwards/discogs-vinyl-sorter-windows/issues
 
 Include:
 
@@ -36,9 +38,10 @@ $env:SPINDLE_DEV_PRO = "1"
 .\LaunchAutoSortGUI.bat
 ```
 
-License status shows **Pro (dev)**. Or generate a real key:
+License status shows **Pro (dev)**. Or generate a real key (requires `VSS_LICENSE_SECRET`):
 
 ```powershell
+$env:VSS_LICENSE_SECRET = "<your-secret>"
 .venv\Scripts\python scripts\generate_license_key.py --email you@example.com
 ```
 
@@ -48,6 +51,10 @@ Then activate it under **Help → Activate Pro license…**.
 
 - Pro feature; requires **pygame** (installed automatically on Python 3.12)
 - On Python 3.13+, pygame may fail to install — use Python 3.12 and re-run **SETUP.bat**, or run: `pip install -r requirements-audio.txt`
+
+### Smart App Control blocked Spindle.exe
+
+- Unsigned or self-signed builds are often blocked. Use `LaunchAutoSortGUI.bat` for development, or a commercially signed installer (see [CODE_SIGNING.md](CODE_SIGNING.md) and [RELEASE.md](RELEASE.md)).
 
 ## Not affiliated with Discogs
 

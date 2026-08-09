@@ -8,9 +8,11 @@
 
 ## Beta Pro keys
 
-Generate keys for testers:
+Generate keys with the **same** `VSS_LICENSE_SECRET` used in release CI (see [RELEASE.md](RELEASE.md)):
 
 ```bash
+# PowerShell
+$env:VSS_LICENSE_SECRET = "<secret>"
 python scripts/generate_license_key.py --email tester@example.com
 ```
 
@@ -19,8 +21,8 @@ Share keys privately. Testers activate via **Help → Activate Pro license** or 
 ## Feedback
 
 - In-app: **Help → Send feedback**
-- GitHub Issues (if public repo)
-- Email: support contact in `core/version.py`
+- GitHub Issues: https://github.com/Jon1969Edwards/discogs-vinyl-sorter-windows/issues
+- Email: jon1969edwards@gmail.com
 
 ## Update checker
 

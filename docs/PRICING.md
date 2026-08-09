@@ -2,27 +2,20 @@
 
 ## Model
 
-One-time **Pro unlock** (recommended **$19–29 USD**).
+One-time **Pro unlock** — **$24 USD** (recommended list price).
 
-## Payment provider (MVP)
+## Payment provider
 
-Use [Lemon Squeezy](https://www.lemonsqueezy.com) or Gumroad:
-
-1. Create a digital product “Spindle Pro”
+1. Create a digital product “Spindle Pro” on [Lemon Squeezy](https://www.lemonsqueezy.com) or Gumroad
 2. Set `PURCHASE_URL` in `core/version.py` to your checkout link
-3. Deliver license keys manually or via Lemon Squeezy license keys API (v2)
-
-## License keys
-
-Offline HMAC-signed format: `VSS1-…`
-
-Generate for sales or beta:
+3. Deliver license keys manually or via your store’s license-key integration:
 
 ```bash
+# Use the SAME VSS_LICENSE_SECRET as GitHub Actions release builds
 python scripts/generate_license_key.py --email customer@example.com
 ```
 
-Set `VSS_LICENSE_SECRET` in CI release builds (GitHub secret) so only your builds validate keys.
+See [RELEASE.md](RELEASE.md) for baking `VSS_LICENSE_SECRET` into installers.
 
 ## Free tier
 

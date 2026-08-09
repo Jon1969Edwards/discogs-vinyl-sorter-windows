@@ -7,16 +7,25 @@ import hashlib
 import hmac
 import json
 import re
+import sys
 import time
 from typing import Optional
 
 from core.config_store import load_config, save_config
-from core.paths import project_root
 
-# Build-time secret: override via VSS_LICENSE_SECRET env for release builds.
-# Beta keys can be generated with scripts/generate_license_key.py
+# Dev-only fallback when not frozen and no env/baked secret is present.
+# Never used in release/frozen builds (fail closed — keys will not validate).
 _DEFAULT_SECRET = b"VSS-CHANGE-ME-IN-RELEASE-BUILDS-2026"
 LICENSE_PREFIX = "VSS1"
+
+
+def _bundled_secret() -> str:
+    try:
+        from core.license_secrets import BUNDLED_LICENSE_SECRET  # type: ignore
+
+        return (BUNDLED_LICENSE_SECRET or "").strip()
+    except Exception:
+        return ""
 
 
 def _secret() -> bytes:
@@ -25,17 +34,33 @@ def _secret() -> bytes:
     raw = os.environ.get("VSS_LICENSE_SECRET", "").strip()
     if raw:
         return raw.encode("utf-8")
+
+    bundled = _bundled_secret()
+    if bundled:
+        return bundled.encode("utf-8")
+
+    # Shipped binaries must not accept keys signed with the public default.
+    if getattr(sys, "frozen", False):
+        return b""
+
     return _DEFAULT_SECRET
 
 
 def _sign_payload(payload: dict) -> str:
+    secret = _secret()
+    if not secret:
+        return ""
     body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    sig = hmac.new(_secret(), body, hashlib.sha256).digest()
+    sig = hmac.new(secret, body, hashlib.sha256).digest()
     return base64.urlsafe_b64encode(sig).decode("ascii").rstrip("=")
 
 
 def generate_license_key(email: str = "", tier: str = "pro", years: int = 99) -> str:
     """Generate a signed license key (for beta / manual sales)."""
+    if not _secret():
+        raise RuntimeError(
+            "Set VSS_LICENSE_SECRET (or bake core/license_secrets.py) before generating keys."
+        )
     payload = {
         "tier": tier,
         "email": email.strip().lower(),
@@ -60,7 +85,7 @@ def _parse_key(key: str) -> Optional[dict]:
     except Exception:
         return None
     expected = _sign_payload(payload)
-    if not hmac.compare_digest(expected, sig):
+    if not expected or not hmac.compare_digest(expected, sig):
         return None
     if payload.get("exp", 0) < time.time():
         return None

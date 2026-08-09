@@ -11,7 +11,7 @@
   powershell -ExecutionPolicy Bypass -File scripts\sign_windows_exe.ps1
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File scripts\sign_windows_exe.ps1 -Path dist\Spindle\Spindle.exe,dist\installer\Spindle-Setup-1.0.0-beta.1.exe
+  powershell -ExecutionPolicy Bypass -File scripts\sign_windows_exe.ps1 -Path dist\Spindle\Spindle.exe,dist\installer\Spindle-Setup-1.0.0.exe
 #>
 [CmdletBinding()]
 param(

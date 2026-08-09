@@ -24,6 +24,17 @@ if not exist "core\discogs_oauth_secrets.py" (
   echo.
 )
 
+if not exist "core\license_secrets.py" (
+  if defined VSS_LICENSE_SECRET (
+    echo Baking license secret from VSS_LICENSE_SECRET...
+    "%PY%" scripts\prepare_license_secret.py
+  ) else (
+    echo NOTE: No core\license_secrets.py — copying empty example for local builds.
+    echo       Release builds must set VSS_LICENSE_SECRET ^(see docs\RELEASE.md^).
+    copy /Y "core\license_secrets.example.py" "core\license_secrets.py" >nul
+  )
+)
+
 echo.
 echo Preparing build folder...
 "%PY%" scripts\prebuild_cleanup.py

@@ -27,13 +27,12 @@ Double-click: LaunchAutoSortGUI.bat
 PRO LICENSE
 -----------
 Help → Activate Pro license, or Settings → Pro License.
-Beta keys: python scripts/generate_license_key.py --email you@example.com
+Keys require VSS_LICENSE_SECRET (same as release CI). See docs/RELEASE.md.
 
 OUTPUT FILES
 ------------
-  • vinyl_shelf_order.txt
-  • vinyl_shelf_order.csv
-  • vinyl_shelf_order.json (optional)
+  • vinyl_shelf_order.txt / .csv / .json (optional)
+  • User data: %LOCALAPPDATA%\Spindle\
 
 TROUBLESHOOTING
 ---------------

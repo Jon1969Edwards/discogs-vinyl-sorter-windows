@@ -1,10 +1,12 @@
 # Privacy Policy
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-08-09
 
 **Spindle** ("the app") is a desktop application that helps you organize
 your personal Discogs vinyl collection. This app is **not affiliated with, endorsed by,
 or sponsored by Discogs**.
+
+**Operator:** Jonathan C Edwards · Contact: jon1969edwards@gmail.com
 
 ## What we collect
 
@@ -61,5 +63,4 @@ We may update this policy. Continued use after changes constitutes acceptance.
 
 ## Contact
 
-For privacy questions, use the support contact listed in the app (Help → About) or
-your purchase receipt from Gumroad / Lemon Squeezy.
+For privacy questions, email **jon1969edwards@gmail.com** or use Help → About / Send feedback in the app.

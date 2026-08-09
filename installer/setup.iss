@@ -2,18 +2,19 @@
 ; Requires: dist/Spindle/ from PyInstaller
 
 #define MyAppName "Spindle"
-#define MyAppVersion "1.0.0-beta.1"
-#define MyAppPublisher "Spindle"
-#define MyAppURL "https://github.com/your-org/discogs-vinyl-sorter-windows"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "Jonathan C Edwards"
+#define MyAppURL "https://github.com/Jon1969Edwards/discogs-vinyl-sorter-windows"
 #define MyAppExeName "Spindle.exe"
 
 [Setup]
-AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+; Stable AppId — do not change after first public release (breaks upgrades).
+AppId={{F6AF4BB6-3E32-4AA0-A97D-F2914247AF95}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL={#MyAppURL}
+AppSupportURL={#MyAppURL}/issues
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -25,7 +26,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
-; SetupIconFile=..\assets\spindle.ico
+SetupIconFile=..\assets\spindle.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

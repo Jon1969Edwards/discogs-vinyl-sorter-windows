@@ -34,6 +34,11 @@ jobs:
           DISCOGS_CONSUMER_SECRET: ${{ secrets.DISCOGS_CONSUMER_SECRET }}
         run: python scripts/prepare_oauth_secrets.py
 
+      - name: Prepare license secret
+        env:
+          VSS_LICENSE_SECRET: ${{ secrets.VSS_LICENSE_SECRET }}
+        run: python scripts/prepare_license_secret.py
+
       - name: Generate app icon
         run: python scripts/generate_icon.py
 
@@ -44,8 +49,6 @@ jobs:
           python test_audio_preview.py
 
       - name: Build PyInstaller bundle
-        env:
-          VSS_LICENSE_SECRET: ${{ secrets.VSS_LICENSE_SECRET }}
         run: |
           pyinstaller --noconfirm Spindle.spec
 
