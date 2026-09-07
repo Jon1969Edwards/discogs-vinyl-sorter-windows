@@ -70,6 +70,9 @@ class SettingsPanel:
       a._settings_frame,
       fg_color=a._colors["panel"],
       width=420,
+      scrollbar_fg_color=a._colors["panel"],
+      scrollbar_button_color=a._colors["muted"],
+      scrollbar_button_hover_color=a._colors["accent"],
     )
     a._settings_scroll.grid(row=1, column=0, sticky="nsew", padx=0, pady=(0, 8))
     a._settings_scroll.columnconfigure(0, weight=1)
@@ -501,10 +504,15 @@ class SettingsPanel:
           except Exception:
             pass
 
-      # Scroll area + internal canvas (avoids white gutters after theme toggle)
+      # Scroll area + scrollbar (keep thumb visible — do not match panel color)
       if hasattr(a, "_settings_scroll"):
         try:
-          a._settings_scroll.configure(fg_color=panel)
+          a._settings_scroll.configure(
+            fg_color=panel,
+            scrollbar_fg_color=panel,
+            scrollbar_button_color=a._colors.get("muted", border),
+            scrollbar_button_hover_color=accent,
+          )
         except Exception:
           pass
         self._sync_scrollable_canvas(a._settings_scroll, panel)
@@ -539,29 +547,29 @@ class SettingsPanel:
 
   @staticmethod
   def _sync_scrollable_canvas(scroll, color: str) -> None:
-    """Force CTkScrollableFrame internals to match theme (canvas/gutters)."""
+    """Keep canvas/gutters in sync and ensure the vertical scrollbar is mapped."""
     try:
-      # CustomTkinter stores the drawable canvas under a few private names across versions
-      for attr in ("_parent_canvas", "_canvas", "_scrollbar"):
-        widget = getattr(scroll, attr, None)
-        if widget is None:
-          continue
+      canvas = getattr(scroll, "_parent_canvas", None)
+      if canvas is not None:
         try:
-          if attr == "_scrollbar":
-            widget.configure(fg_color=color, button_color=color, button_hover_color=color)
-          else:
-            widget.configure(bg=color, highlightthickness=0)
+          canvas.configure(bg=color, highlightthickness=0)
+        except Exception:
+          pass
+      try:
+        tk_frame_bg = color
+        import tkinter as tk
+        if isinstance(scroll, tk.Frame):
+          tk.Frame.configure(scroll, bg=tk_frame_bg)
+      except Exception:
+        pass
+      scrollbar = getattr(scroll, "_scrollbar", None)
+      if scrollbar is not None:
+        try:
+          # Recreate grid placement after theme changes (CTk uses grid for the bar)
+          scroll._create_grid()
         except Exception:
           try:
-            widget.configure(fg_color=color)
-          except Exception:
-            pass
-      # Nested frame that holds children
-      for attr in ("_scrollable_frame", "_parent_frame", "_frame"):
-        frame = getattr(scroll, attr, None)
-        if frame is not None:
-          try:
-            frame.configure(fg_color=color)
+            scrollbar.grid(row=1, column=1, sticky="nsew")
           except Exception:
             pass
     except Exception:
