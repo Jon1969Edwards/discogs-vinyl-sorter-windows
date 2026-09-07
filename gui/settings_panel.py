@@ -68,7 +68,7 @@ class SettingsPanel:
     a._settings_frame.rowconfigure(1, weight=1)
     a._settings_scroll = ctk.CTkScrollableFrame(
       a._settings_frame,
-      fg_color="transparent",
+      fg_color=a._colors["panel"],
       width=420,
     )
     a._settings_scroll.grid(row=1, column=0, sticky="nsew", padx=0, pady=(0, 8))
@@ -195,13 +195,13 @@ class SettingsPanel:
       auth_btns,
       text="Sign out",
       command=a._do_oauth_signout,
-      width=80,
+      width=100,
       height=42,
       corner_radius=8,
-      fg_color="#4a5568",
-      hover_color="#2d3748",
+      fg_color=a._colors.get("secondary_btn", "#4a5568"),
+      hover_color=a._colors.get("secondary_btn_hover", "#2d3748"),
     )
-    a._signout_btn.pack(side="left")
+    # Packed by _update_auth_buttons_state (only one of Sign in / Sign out visible)
     ToolTip(a._signout_btn, "Sign out of Discogs on this computer")
     a._auth_status_label = ctk.CTkLabel(
       auth_section,
@@ -277,6 +277,10 @@ class SettingsPanel:
       values=list(ui.DIVIDER_MODE_BY_LABEL.keys()),
       width=220,
       corner_radius=8,
+      fg_color=a._colors.get("panel2", a._colors["panel"]),
+      button_color=a._colors["accent"],
+      button_hover_color=a._colors["button_hover"],
+      text_color=a._colors["text"],
     )
     a._divider_mode_combo.grid(row=0, column=0, sticky="w")
     ToolTip(
@@ -311,6 +315,10 @@ class SettingsPanel:
       values=["USD", "EUR", "GBP", "SEK", "CAD", "AUD", "JPY"],
       width=100,
       corner_radius=8,
+      fg_color=a._colors.get("panel2", a._colors["panel"]),
+      button_color=a._colors["accent"],
+      button_hover_color=a._colors["button_hover"],
+      text_color=a._colors["text"],
     )
     a._currency_combo.grid(row=0, column=0, sticky="w")
     a._refresh_prices_btn = ctk.CTkButton(
@@ -459,12 +467,20 @@ class SettingsPanel:
     """Recolor settings section cards and labels after theme toggle."""
     a = self._a
     try:
+      panel = a._colors["panel"]
+      panel2 = a._colors.get("panel2", panel)
+      border = a._colors.get("card_border", a._colors.get("border", "#e5e7eb"))
+      accent = a._colors["accent"]
+      hover = a._colors["button_hover"]
+      secondary = a._colors.get("secondary_btn", "#4a5568")
+      secondary_hover = a._colors.get("secondary_btn_hover", "#2d3748")
+
       if hasattr(a, "_settings_title_label"):
         a._settings_title_label.configure(text_color=a._colors["text"])
       if hasattr(a, "_settings_heading_labels"):
         for heading in a._settings_heading_labels:
           try:
-            heading.configure(text_color=a._colors["accent"])
+            heading.configure(text_color=accent)
           except Exception:
             pass
       if hasattr(a, "_auth_status_label"):
@@ -479,11 +495,73 @@ class SettingsPanel:
           except Exception:
             pass
       if hasattr(a, "_settings_section_frames"):
-        panel2 = a._colors.get("panel2", a._colors["panel"])
-        border = a._colors.get("card_border", a._colors.get("border", "#e5e7eb"))
         for section in a._settings_section_frames:
           try:
             section.configure(fg_color=panel2, border_color=border)
+          except Exception:
+            pass
+
+      # Scroll area + internal canvas (avoids white gutters after theme toggle)
+      if hasattr(a, "_settings_scroll"):
+        try:
+          a._settings_scroll.configure(fg_color=panel)
+        except Exception:
+          pass
+        self._sync_scrollable_canvas(a._settings_scroll, panel)
+
+      # Buttons / menus that keep stale theme colors
+      for btn_name in ("_signin_btn", "_browse_btn", "_refresh_prices_btn", "_settings_collapse_btn", "_settings_expand_btn"):
+        btn = getattr(a, btn_name, None)
+        if btn is not None:
+          try:
+            btn.configure(fg_color=accent, hover_color=hover)
+          except Exception:
+            pass
+      if hasattr(a, "_signout_btn"):
+        try:
+          a._signout_btn.configure(fg_color=secondary, hover_color=secondary_hover)
+        except Exception:
+          pass
+      for menu_name in ("_divider_mode_combo", "_currency_combo", "_sort_combo"):
+        menu = getattr(a, menu_name, None)
+        if menu is not None:
+          try:
+            menu.configure(
+              fg_color=panel2,
+              button_color=accent,
+              button_hover_color=hover,
+              text_color=a._colors["text"],
+            )
+          except Exception:
+            pass
+    except Exception:
+      pass
+
+  @staticmethod
+  def _sync_scrollable_canvas(scroll, color: str) -> None:
+    """Force CTkScrollableFrame internals to match theme (canvas/gutters)."""
+    try:
+      # CustomTkinter stores the drawable canvas under a few private names across versions
+      for attr in ("_parent_canvas", "_canvas", "_scrollbar"):
+        widget = getattr(scroll, attr, None)
+        if widget is None:
+          continue
+        try:
+          if attr == "_scrollbar":
+            widget.configure(fg_color=color, button_color=color, button_hover_color=color)
+          else:
+            widget.configure(bg=color, highlightthickness=0)
+        except Exception:
+          try:
+            widget.configure(fg_color=color)
+          except Exception:
+            pass
+      # Nested frame that holds children
+      for attr in ("_scrollable_frame", "_parent_frame", "_frame"):
+        frame = getattr(scroll, attr, None)
+        if frame is not None:
+          try:
+            frame.configure(fg_color=color)
           except Exception:
             pass
     except Exception:

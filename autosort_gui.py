@@ -497,7 +497,8 @@ class App:
       "secondary_btn_hover": "#475569",
       "card_border_width": 1,
     }
-    # Dark extras used by themed chrome (status / Pro banner / rows)
+    # Dark section cards: slightly elevated above panel (not darker holes)
+    self._dark_colors["panel2"] = "#243044"
     self._dark_colors.update({
       "row_odd": "#1a2d4d",
       "status_bar_bg": "#6c63ff",
@@ -2169,12 +2170,20 @@ class App:
       pass
 
   def _update_auth_buttons_state(self) -> None:
-    """Enable/disable Sign in and Sign out based on OAuth state."""
+    """Show Sign in or Sign out based on OAuth state (avoid washed-out disabled buttons)."""
     if not hasattr(self, "_signin_btn") or not hasattr(self, "_signout_btn"):
       return
     signed_in = bool((self._oauth_access_token or "").strip())
-    self._signin_btn.configure(state="disabled" if signed_in else "normal")
-    self._signout_btn.configure(state="normal" if signed_in else "disabled")
+    if signed_in:
+      self._signin_btn.pack_forget()
+      if not self._signout_btn.winfo_ismapped():
+        self._signout_btn.pack(side="left")
+      self._signout_btn.configure(state="normal")
+    else:
+      self._signout_btn.pack_forget()
+      if not self._signin_btn.winfo_ismapped():
+        self._signin_btn.pack(side="left")
+      self._signin_btn.configure(state="normal")
     if hasattr(self, "_auth_status_label"):
       self._auth_status_label.configure(
         text="Signed in to Discogs" if signed_in else "Not signed in",
