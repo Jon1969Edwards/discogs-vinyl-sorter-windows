@@ -33,7 +33,7 @@ class SettingsPanel:
       frm,
       corner_radius=12,
       fg_color=a._colors["panel"],
-      border_width=2,
+      border_width=int(a._colors.get("card_border_width", 1)),
       border_color=a._colors.get("card_border", a._colors["border"]),
     )
     a._settings_frame.grid(row=row, column=0, sticky="nsew", padx=(20, 10), pady=(16, 12))
@@ -130,7 +130,7 @@ class SettingsPanel:
         fg_color=a._colors.get("panel2", a._colors["panel"]),
         corner_radius=10,
         border_width=1,
-        border_color=a._colors.get("border", "#334155"),
+        border_color=a._colors.get("card_border", a._colors.get("border", "#e5e7eb")),
       )
       section.grid(row=_section_row[0], column=0, sticky="ew", padx=SECTION_PADX, pady=(0, SECTION_PADY))
       _section_row[0] += 1
@@ -385,7 +385,7 @@ class SettingsPanel:
       fg_color=a._colors.get("panel2", a._colors["panel"]),
       corner_radius=10,
       border_width=1,
-      border_color=a._colors.get("border", "#334155"),
+      border_color=a._colors.get("card_border", a._colors.get("border", "#e5e7eb")),
     )
     a._pro_section.grid(row=999, column=0, sticky="ew", padx=20, pady=(0, 16))
     a._pro_section.columnconfigure(0, weight=1)
@@ -465,7 +465,7 @@ class SettingsPanel:
     try:
       if hasattr(a, "_settings_section_frames"):
         panel2 = a._colors.get("panel2", a._colors["panel"])
-        border = a._colors.get("border", "#334155")
+        border = a._colors.get("card_border", a._colors.get("border", "#e5e7eb"))
         for section in a._settings_section_frames:
           try:
             section.configure(fg_color=panel2, border_color=border)

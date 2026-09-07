@@ -98,7 +98,7 @@ class OrderPanel:
       order_fr,
       corner_radius=12,
       fg_color=a._colors["panel"],
-      border_width=2,
+      border_width=int(a._colors.get("card_border_width", 1)),
       border_color=a._colors.get("card_border", a._colors["border"]),
     )
     order_wrap.grid(row=1, column=0, sticky="nsew", padx=(12, 12), pady=(0, 12))
@@ -202,7 +202,7 @@ class OrderPanel:
     a.order_tree.tag_configure("row_even", background=a._colors["order_bg"], foreground=a._colors["order_fg"])
     a.order_tree.tag_configure(
       "row_odd",
-      background="#1a2d4d" if a.v_dark_mode.get() else "#f0f4f8",
+      background=a._colors.get("row_odd", "#f3f4f8" if not a.v_dark_mode.get() else "#1a2d4d"),
       foreground=a._colors["order_fg"],
     )
     a.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")

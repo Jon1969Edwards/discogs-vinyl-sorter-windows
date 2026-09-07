@@ -468,25 +468,48 @@ class App:
       "card_border": "#475569", # Even lighter border for cards
     }
     self._light_colors = {
-      "bg": "#f0f4f8",        # light blue-gray
-      "panel": "#ffffff",     # white - for cards
-      "panel2": "#e8eef4",    # light gray-blue - for background
-      "text": "#1a1a2e",      # dark text
-      "muted": "#64748b",     # muted gray
-      "accent": "#6c63ff",    # purple accent
-      "accent2": "#0891b2",   # teal accent
-      "accent3": "#e11d48",   # rose accent
-      "success": "#16a34a",   # green
-      "warn": "#d97706",      # amber
-      "order_bg": "#ffffff",  # white for table cells
-      "order_fg": "#1a1a2e",  # dark text
-      "button_bg": "#6c63ff", # purple button
-      "button_fg": "#ffffff", # white text
-      "button_hover": "#5a52d5", # darker purple on hover
-      "border": "#cbd5e1",    # visible border color
-      "shadow": "#94a3b8",    # shadow for depth
-      "card_border": "#94a3b8", # Card border for light mode
+      "bg": "#f7f8fb",
+      "panel": "#ffffff",
+      "panel2": "#f1f3f7",
+      "text": "#1e293b",
+      "muted": "#64748b",
+      "accent": "#5b54e8",
+      "accent2": "#0e7490",
+      "accent3": "#dc2626",
+      "success": "#059669",
+      "warn": "#d97706",
+      "order_bg": "#ffffff",
+      "order_fg": "#1e293b",
+      "button_bg": "#5b54e8",
+      "button_fg": "#ffffff",
+      "button_hover": "#4a44c9",
+      "border": "#e2e8f0",
+      "shadow": "#cbd5e1",
+      "card_border": "#e5e7eb",
+      "row_odd": "#f3f4f8",
+      "status_bar_bg": "#eef0f6",
+      "status_bar_fg": "#334155",
+      "pro_banner_bg": "#fff7ed",
+      "pro_banner_fg": "#9a3412",
+      "pro_banner_btn": "#ea580c",
+      "pro_banner_btn_hover": "#c2410c",
+      "secondary_btn": "#64748b",
+      "secondary_btn_hover": "#475569",
+      "card_border_width": 1,
     }
+    # Dark extras used by themed chrome (status / Pro banner / rows)
+    self._dark_colors.update({
+      "row_odd": "#1a2d4d",
+      "status_bar_bg": "#6c63ff",
+      "status_bar_fg": "#ffffff",
+      "pro_banner_bg": "#3f2f1f",
+      "pro_banner_fg": "#ffedd5",
+      "pro_banner_btn": "#f59e0b",
+      "pro_banner_btn_hover": "#d97706",
+      "secondary_btn": "#4a5568",
+      "secondary_btn_hover": "#2d3748",
+      "card_border_width": 1,
+    })
     self._colors = self._dark_colors.copy()
 
     # Configure custom styles
@@ -1052,7 +1075,7 @@ class App:
     self._status_bar = ctk.CTkFrame(
       frm,
       height=36,
-      fg_color=self._colors["accent"],
+      fg_color=self._colors.get("status_bar_bg", self._colors["accent"]),
       corner_radius=0,
     )
     self._status_bar.grid(row=row, column=0, columnspan=2, sticky="ew", padx=0, pady=0)
@@ -1060,11 +1083,12 @@ class App:
     self._status_bar.columnconfigure(0, weight=1)
 
     # Main status message (left)
+    _status_fg = self._colors.get("status_bar_fg", "#ffffff")
     self._status_label = ctk.CTkLabel(
       self._status_bar,
       textvariable=self.v_status,
       font=(FONT_SEGOE_UI, FONT_SM),
-      text_color="#ffffff",
+      text_color=_status_fg,
     )
     self._status_label.grid(row=0, column=0, sticky="w", padx=16, pady=6)
 
@@ -1072,34 +1096,34 @@ class App:
     info_frame = ctk.CTkFrame(self._status_bar, fg_color="transparent")
     info_frame.grid(row=0, column=1, sticky="e", padx=16, pady=6)
 
-    self._count_icon = ctk.CTkLabel(info_frame, text="💿", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._count_icon = ctk.CTkLabel(info_frame, text="💿", font=(FONT_SEGOE_UI, FONT_SM), text_color=_status_fg)
     self._count_icon.pack(side="left", padx=(0, 4))
     self._count_label = ctk.CTkLabel(
       info_frame,
       textvariable=self.v_collection_count,
       font=(FONT_SEGOE_UI, FONT_SM),
-      text_color="#ffffff",
+      text_color=_status_fg,
     )
     self._count_label.pack(side="left", padx=(0, 16))
 
-    self._sync_icon = ctk.CTkLabel(info_frame, text="🕐", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._sync_icon = ctk.CTkLabel(info_frame, text="🕐", font=(FONT_SEGOE_UI, FONT_SM), text_color=_status_fg)
     self._sync_icon.pack(side="left", padx=(0, 4))
     self._sync_label = ctk.CTkLabel(
       info_frame,
       textvariable=self.v_last_sync,
       font=(FONT_SEGOE_UI, FONT_SM),
-      text_color="#ffffff",
+      text_color=_status_fg,
     )
     self._sync_label.pack(side="left", padx=(0, 16))
 
-    self._value_sep = ctk.CTkLabel(info_frame, text="|", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._value_sep = ctk.CTkLabel(info_frame, text="|", font=(FONT_SEGOE_UI, FONT_SM), text_color=_status_fg)
     self._value_sep.pack(side="left", padx=(0, 8))
-    self._value_icon = ctk.CTkLabel(info_frame, text="💰", font=(FONT_SEGOE_UI, FONT_SM), text_color="#ffffff")
+    self._value_icon = ctk.CTkLabel(info_frame, text="💰", font=(FONT_SEGOE_UI, FONT_SM), text_color=_status_fg)
     self._value_label = ctk.CTkLabel(
       info_frame,
       textvariable=self.v_total_value,
       font=(FONT_SEGOE_UI, FONT_SM),
-      text_color="#ffffff",
+      text_color=_status_fg,
     )
     # Value section not packed initially; _show_value_section() shows when prices available
 
@@ -1210,14 +1234,20 @@ class App:
     self._stop_btn.grid(row=0, column=3, sticky="ew", pady=4)
 
   def _build_pro_banner(self, main_content):
-    self._pro_banner = ctk.CTkFrame(main_content, fg_color="#4a3728", corner_radius=8)
+    self._pro_banner = ctk.CTkFrame(
+      main_content,
+      fg_color=self._colors.get("pro_banner_bg", "#fff7ed"),
+      corner_radius=8,
+      border_width=1,
+      border_color=self._colors.get("border", "#e2e8f0"),
+    )
     self._pro_banner.grid(row=2, column=0, sticky="ew", pady=(0, 6))
     self._pro_banner.columnconfigure(0, weight=1)
     self._pro_banner_label = ctk.CTkLabel(
       self._pro_banner,
       text="",
       font=(FONT_SEGOE_UI, FONT_SM),
-      text_color="#fef3c7",
+      text_color=self._colors.get("pro_banner_fg", "#9a3412"),
       wraplength=700,
       justify="left",
     )
@@ -1227,8 +1257,8 @@ class App:
       text="Upgrade to Pro",
       width=140,
       command=self._show_license_dialog,
-      fg_color="#f59e0b",
-      hover_color="#d97706",
+      fg_color=self._colors.get("pro_banner_btn", "#ea580c"),
+      hover_color=self._colors.get("pro_banner_btn_hover", "#c2410c"),
     )
     self._pro_upgrade_btn.grid(row=0, column=1, sticky="e", padx=12, pady=8)
     self._pro_banner.grid_remove()
@@ -2388,6 +2418,7 @@ class App:
     self._update_tab_selector()
     self._update_toolbar_widgets()
     self._update_status_bar_widgets()
+    self._restyle_pro_banner()
     self._update_treeview_widget()
     self._update_settings_entries()
     self._update_settings_frames()
@@ -2431,7 +2462,8 @@ class App:
       if hasattr(self, '_settings_frame'):
         self._settings_frame.configure(
           fg_color=self._colors["panel"],
-          border_color=self._colors.get("card_border", self._colors["border"])
+          border_color=self._colors.get("card_border", self._colors["border"]),
+          border_width=int(self._colors.get("card_border_width", 1)),
         )
       if hasattr(self, '_settings_expand_tab'):
         self._settings_expand_tab.configure(
@@ -2445,7 +2477,8 @@ class App:
           try:
             parent.configure(
               fg_color=self._colors["panel"],
-              border_color=self._colors.get("card_border", self._colors["border"])
+              border_color=self._colors.get("card_border", self._colors["border"]),
+              border_width=int(self._colors.get("card_border_width", 1)),
             )
           except:
             pass
@@ -2456,7 +2489,8 @@ class App:
           try:
             parent.configure(
               fg_color=self._colors["panel"],
-              border_color=self._colors.get("card_border", self._colors["border"])
+              border_color=self._colors.get("card_border", self._colors["border"]),
+              border_width=int(self._colors.get("card_border_width", 1)),
             )
           except:
             pass
@@ -2516,14 +2550,32 @@ class App:
     try:
       if not hasattr(self, "_status_bar"):
         return
-      self._status_bar.configure(fg_color=self._colors["accent"])
-      self._status_label.configure(fg_color="transparent", text_color="#ffffff")
+      bar_bg = self._colors.get("status_bar_bg", self._colors["accent"])
+      bar_fg = self._colors.get("status_bar_fg", "#ffffff")
+      self._status_bar.configure(fg_color=bar_bg)
+      self._status_label.configure(fg_color="transparent", text_color=bar_fg)
       for widget in [self._count_icon, self._count_label, self._sync_icon, self._sync_label,
                      self._value_sep, self._value_icon, self._value_label]:
         try:
-          widget.configure(fg_color="transparent", text_color="#ffffff")
+          widget.configure(fg_color="transparent", text_color=bar_fg)
         except Exception:
           pass
+    except Exception:
+      pass
+
+  def _restyle_pro_banner(self) -> None:
+    if not hasattr(self, "_pro_banner"):
+      return
+    try:
+      self._pro_banner.configure(
+        fg_color=self._colors.get("pro_banner_bg", "#fff7ed"),
+        border_color=self._colors.get("border", "#e2e8f0"),
+      )
+      self._pro_banner_label.configure(text_color=self._colors.get("pro_banner_fg", "#9a3412"))
+      self._pro_upgrade_btn.configure(
+        fg_color=self._colors.get("pro_banner_btn", "#ea580c"),
+        hover_color=self._colors.get("pro_banner_btn_hover", "#c2410c"),
+      )
     except Exception:
       pass
 
@@ -2553,12 +2605,12 @@ class App:
       if self.v_dark_mode.get():
         self.order_tree.tag_configure("search_match", background="#fbbf24", foreground="#1a1a2e")
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
-        self.order_tree.tag_configure("row_odd", background="#1a2d4d", foreground=self._colors["order_fg"])
+        self.order_tree.tag_configure("row_odd", background=self._colors.get("row_odd", "#1a2d4d"), foreground=self._colors["order_fg"])
         self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
       else:
         self.order_tree.tag_configure("search_match", background="#fef08a", foreground="#1a1a2e")
         self.order_tree.tag_configure("row_even", background=self._colors["order_bg"], foreground=self._colors["order_fg"])
-        self.order_tree.tag_configure("row_odd", background="#e8eef4", foreground=self._colors["order_fg"])
+        self.order_tree.tag_configure("row_odd", background=self._colors.get("row_odd", "#f3f4f8"), foreground=self._colors["order_fg"])
         self.order_tree.tag_configure("dragging", background=self._colors["accent"], foreground="#ffffff")
       if self._last_result:
         self._render_order(self._last_result)

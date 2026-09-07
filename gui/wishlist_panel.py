@@ -66,7 +66,7 @@ class WishlistPanel:
       wishlist_fr,
       corner_radius=12,
       fg_color=a._colors["panel"],
-      border_width=2,
+      border_width=int(a._colors.get("card_border_width", 1)),
       border_color=a._colors.get("card_border", a._colors["border"]),
     )
     wishlist_wrap.grid(row=grid_row, column=0, sticky="nsew", padx=(12, 12), pady=(0, 12))
