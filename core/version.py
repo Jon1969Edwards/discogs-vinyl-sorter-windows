@@ -20,9 +20,20 @@ UPDATE_MANIFEST_URL = (
 SUPPORT_EMAIL = "jon1969edwards@gmail.com"
 
 # Lemon Squeezy / Gumroad checkout. Override at release bake with SPINDLE_PURCHASE_URL
-# (see docs/RELEASE.md). Until the store product exists, Buy Pro opens Releases.
+# (see docs/RELEASE.md). Until the store product exists, keep this as Releases so
+# purchase_store_ready() stays False and Buy Pro is hidden.
 PURCHASE_URL = GITHUB_RELEASES_URL
 
 FEEDBACK_MAILTO = f"mailto:{SUPPORT_EMAIL}?subject={APP_NAME}%20Feedback"
 
 DISCOGS_DISCLAIMER = "Not affiliated with Discogs."
+
+
+def purchase_store_ready() -> bool:
+    """True when Buy Pro should open a real checkout (not GitHub Releases)."""
+    url = (PURCHASE_URL or "").strip()
+    if not url:
+        return False
+    if url.rstrip("/") == GITHUB_RELEASES_URL.rstrip("/"):
+        return False
+    return True

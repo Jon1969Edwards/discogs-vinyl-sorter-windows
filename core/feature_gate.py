@@ -35,4 +35,8 @@ def apply_record_limit(rows: list) -> tuple[list, bool]:
 
 
 def upgrade_message(feature: str) -> str:
-    return f"{feature} is a Pro feature. Upgrade to unlock unlimited collection tools."
+    return (
+        f"{feature} is included with Pro.\n\n"
+        "Pro also unlocks unlimited collection size, marketplace prices, "
+        "wishlist checks, manual shelf order, and audio previews."
+    )

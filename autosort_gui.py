@@ -1240,7 +1240,7 @@ class App:
     help_menu.add_command(label="Send feedback", command=self._send_feedback)
     help_menu.add_command(label="Export diagnostics…", command=self._export_diagnostics)
     help_menu.add_separator()
-    help_menu.add_command(label="Activate Pro license…", command=self._show_license_dialog)
+    help_menu.add_command(label="Pro license…", command=self._show_license_dialog)
 
     self._help_btn = ctk.CTkButton(
       search_row,
@@ -1366,7 +1366,7 @@ class App:
   def _check_wishlist_availability(self):
     """Check Discogs Marketplace for availability of all wishlist items."""
     if not can_check_wishlist_availability():
-      messagebox.showinfo("Pro feature", upgrade_message("Wishlist availability check"))
+      self._offer_pro_upgrade("Wishlist availability check")
       return
     import threading
     from core.wishlist import load_wishlist, save_wishlist, release_id_from_entry
@@ -1541,7 +1541,7 @@ class App:
     if not self.v_show_prices.get():
       if can_fetch_prices():
         return 'Enable "Show prices" in settings, then refresh, to load marketplace data.'
-      return "Marketplace prices are a Pro feature (Settings → Upgrade to Pro)."
+      return "Marketplace prices are a Pro feature — use Upgrade to Pro in Settings or Help."
     if lowest is not None and num_for_sale is not None and num_for_sale > 0:
       return f"From {lowest:.0f} {currency} · {num_for_sale} for sale"
     return "Not currently listed on the marketplace"
@@ -1710,6 +1710,7 @@ class App:
       bg=bg,
       fg=self._colors["text"] if hasattr(self, "_colors") else "#eaeaea",
       accent=accent,
+      on_upgrade=lambda: self._offer_pro_upgrade("Audio preview"),
     ).pack(side="top", fill="x")
 
     if show_wishlist_button:
@@ -1847,7 +1848,7 @@ class App:
     """Toggle manual ordering mode on/off."""
     if self.v_manual_order_enabled.get() and not can_use_manual_order():
       self.v_manual_order_enabled.set(False)
-      messagebox.showinfo("Pro feature", upgrade_message("Manual shelf order"))
+      self._offer_pro_upgrade("Manual shelf order")
       return
     enabled = self.v_manual_order_enabled.get()
     self._manual_order.set_enabled(enabled)
@@ -2081,7 +2082,7 @@ class App:
   def _refresh_prices(self) -> None:
     """Clear cached prices and trigger a refresh with price fetching enabled."""
     if not can_fetch_prices():
-      messagebox.showinfo("Pro feature", upgrade_message("Marketplace prices"))
+      self._offer_pro_upgrade("Marketplace prices")
       return
     currency = self.v_currency.get().strip() or "USD"
     cleared = self._collection_cache.clear_prices(currency)
@@ -2094,7 +2095,7 @@ class App:
   def _on_show_prices_change(self) -> None:
     if self.v_show_prices.get() and not can_fetch_prices():
       self.v_show_prices.set(False)
-      messagebox.showinfo("Pro feature", upgrade_message("Marketplace prices"))
+      self._offer_pro_upgrade("Marketplace prices")
       return
     self._save_settings()
 
@@ -2163,6 +2164,14 @@ class App:
   def _show_license_dialog(self) -> None:
     from gui.license_dialog import LicenseDialog
     LicenseDialog(self.root, on_changed=self._update_pro_ui)
+
+  def _offer_pro_upgrade(self, feature: str) -> None:
+    """Explain a Pro gate and optionally open the license dialog."""
+    if messagebox.askyesno(
+      "Pro feature",
+      upgrade_message(feature) + "\n\nOpen Pro license now?",
+    ):
+      self._show_license_dialog()
 
   def _check_for_updates(self) -> None:
     from core.update_checker import check_for_update

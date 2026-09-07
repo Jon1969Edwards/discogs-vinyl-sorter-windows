@@ -81,8 +81,9 @@ class FirstRunWizard:
             ctk.CTkLabel(
                 self.body,
                 text=(
-                    "Pro unlocks marketplace prices, wishlist checks, and unlimited collection size.\n\n"
-                    "You can enable prices later in Settings. First load may take several minutes for large collections."
+                    "Marketplace prices are a Pro feature (optional).\n\n"
+                    "You can unlock Pro later via Settings or Help → Pro license. "
+                    "First price load may take several minutes for large collections."
                 ),
                 wraplength=460,
                 justify="left",
@@ -92,7 +93,11 @@ class FirstRunWizard:
             if can_fetch_prices():
                 ctk.CTkCheckBox(self.body, text="Show marketplace prices", variable=self.app.v_show_prices).pack(anchor="w")
             else:
-                ctk.CTkLabel(self.body, text="Upgrade to Pro in Settings to enable prices.", text_color="#94a3b8").pack(anchor="w")
+                ctk.CTkLabel(
+                    self.body,
+                    text="Optional — unlock Pro later in Settings or Help.",
+                    text_color="#94a3b8",
+                ).pack(anchor="w")
             ctk.CTkButton(nav, text="Back", command=lambda: self._goto(2)).pack(side="left")
             ctk.CTkButton(nav, text="Finish", command=self._finish).pack(side="right")
 

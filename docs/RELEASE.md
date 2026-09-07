@@ -33,7 +33,7 @@ $env:VSS_LICENSE_SECRET = "<same secret as CI>"
 .venv\Scripts\python scripts\generate_license_key.py --email customer@example.com
 ```
 
-Until the store is live, **Buy Pro** opens GitHub Releases.
+Until the store is live, **Buy Pro** stays hidden (`purchase_store_ready()` is false while `PURCHASE_URL` points at GitHub Releases).
 
 ## 3. Discogs commercial notice
 

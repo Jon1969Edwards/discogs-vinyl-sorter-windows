@@ -379,8 +379,6 @@ class SettingsPanel:
   def _build_pro_section(self, settings) -> None:
     a = self._a
     from core.licensing import is_pro, license_summary
-    from core.version import PURCHASE_URL
-    import webbrowser
 
     a._pro_section = ctk.CTkFrame(
       settings,
@@ -397,7 +395,7 @@ class SettingsPanel:
 
     ctk.CTkLabel(
       a._pro_section,
-      text="⭐  Pro License",
+      text="⭐  Pro",
       font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_LG),
       text_color=a._colors["accent"],
     ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
@@ -407,9 +405,14 @@ class SettingsPanel:
       font=(ui.FONT_SEGOE_UI, ui.FONT_MD),
     )
     a._license_status_label.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
+    benefits = (
+      "• Unlimited collection (no 100-record Free limit)\n"
+      "• Marketplace prices and wishlist checks\n"
+      "• Manual shelf order and audio previews"
+    )
     ctk.CTkLabel(
       a._pro_section,
-      text="Pro: unlimited collection, prices, wishlist checks, manual order, audio previews.",
+      text=benefits,
       font=(ui.FONT_SEGOE_UI, ui.FONT_XS),
       text_color=a._colors["muted"],
       wraplength=360,
@@ -419,17 +422,9 @@ class SettingsPanel:
     btn_row.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 14))
     ctk.CTkButton(
       btn_row,
-      text="Activate license…",
+      text="Upgrade to Pro",
       command=a._show_license_dialog,
-      width=140,
-      fg_color=a._colors["accent"],
-      hover_color=a._colors["button_hover"],
-    ).pack(side="left", padx=(0, 8))
-    ctk.CTkButton(
-      btn_row,
-      text="Buy Pro",
-      command=lambda: webbrowser.open(PURCHASE_URL),
-      width=100,
+      width=160,
       fg_color="#f59e0b",
       hover_color="#d97706",
     ).pack(side="left")

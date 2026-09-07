@@ -29,6 +29,7 @@ class AudioPreviewPanel(tk.Frame):
         fg: str,
         accent: str,
         on_destroy: Optional[Callable[[], None]] = None,
+        on_upgrade: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(master, bg=bg)
         self._artist = artist
@@ -42,6 +43,7 @@ class AudioPreviewPanel(tk.Frame):
         self._lookup_thread: Optional[threading.Thread] = None
         self._player = PreviewPlayer()
         self._on_destroy = on_destroy
+        self._on_upgrade = on_upgrade
 
         self._status = tk.StringVar(value="")
         self._action_text = tk.StringVar(value="▶ Play sample")
@@ -86,8 +88,8 @@ class AudioPreviewPanel(tk.Frame):
         )
 
         if not can_play_audio_preview():
-            self._set_action("Pro feature", enabled=False)
-            self._set_status(upgrade_message("Audio preview"))
+            self._set_action("Upgrade to Pro", enabled=True)
+            self._set_status("Audio previews are included with Pro.")
 
         self.bind("<Destroy>", self._handle_destroy)
 
@@ -108,8 +110,10 @@ class AudioPreviewPanel(tk.Frame):
 
     def _on_action(self) -> None:
         if not can_play_audio_preview():
-            self._set_status(upgrade_message("Audio preview"))
-            self._set_action("Pro feature", enabled=False)
+            if self._on_upgrade:
+                self._on_upgrade()
+            else:
+                self._set_status(upgrade_message("Audio preview"))
             return
 
         if self._player.is_playing():
