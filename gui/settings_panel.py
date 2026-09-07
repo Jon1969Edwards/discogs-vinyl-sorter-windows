@@ -43,12 +43,13 @@ class SettingsPanel:
     settings_header.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 4))
     settings_header.columnconfigure(0, weight=1)
 
-    ctk.CTkLabel(
+    a._settings_title_label = ctk.CTkLabel(
       settings_header,
       text="⚙️ Settings",
       font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_XL),
       text_color=a._colors["text"],
-    ).grid(row=0, column=0, sticky="w")
+    )
+    a._settings_title_label.grid(row=0, column=0, sticky="w")
 
     a._settings_collapse_btn = ctk.CTkButton(
       settings_header,
@@ -113,6 +114,20 @@ class SettingsPanel:
     ITEM_SPACING = 10
     _section_row = [0]
 
+    a._settings_muted_labels = []
+    a._settings_heading_labels = []
+
+    def muted_label(parent, text, **kwargs):
+      lbl = ctk.CTkLabel(
+        parent,
+        text=text,
+        font=kwargs.pop("font", (ui.FONT_SEGOE_UI, ui.FONT_SM)),
+        text_color=a._colors["muted"],
+        **kwargs,
+      )
+      a._settings_muted_labels.append(lbl)
+      return lbl
+
     def make_entry(parent, textvar, width=200, show=""):
       return ctk.CTkEntry(
         parent,
@@ -138,20 +153,22 @@ class SettingsPanel:
       if not hasattr(a, "_settings_section_frames"):
         a._settings_section_frames = []
       a._settings_section_frames.append(section)
-      ctk.CTkLabel(
+      if not hasattr(a, "_settings_heading_labels"):
+        a._settings_heading_labels = []
+      heading = ctk.CTkLabel(
         section,
         text=f"{icon}  {title}" if icon else title,
         font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_LG),
         text_color=a._colors["accent"],
-      ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
+      )
+      heading.grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
+      a._settings_heading_labels.append(heading)
       return section
 
     auth_section = make_section("Authentication", "🔐")
-    ctk.CTkLabel(
+    muted_label(
       auth_section,
       text="Sign in with your Discogs account. Your browser opens once to approve access.",
-      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      text_color=a._colors["muted"],
       wraplength=360,
       justify="left",
     ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 10))
@@ -196,12 +213,7 @@ class SettingsPanel:
     a._update_auth_buttons_state()
 
     output_section = make_section("Output Settings", "📁")
-    ctk.CTkLabel(
-      output_section,
-      text="Output directory",
-      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      text_color=a._colors["muted"],
-    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    muted_label(output_section, text="Output directory").grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
     a._out_row = ctk.CTkFrame(output_section, fg_color="transparent")
     a._out_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, ITEM_SPACING))
     a._out_row.columnconfigure(0, weight=1)
@@ -220,12 +232,7 @@ class SettingsPanel:
     a._browse_btn.grid(row=0, column=1, sticky="e", padx=(12, 0))
     a._open_btn = None
 
-    ctk.CTkLabel(
-      output_section,
-      text="Auto-refresh interval (seconds)",
-      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      text_color=a._colors["muted"],
-    ).grid(row=3, column=0, sticky="w", padx=16, pady=(8, 4))
+    muted_label(output_section, text="Auto-refresh interval (seconds)").grid(row=3, column=0, sticky="w", padx=16, pady=(8, 4))
     poll_row = ctk.CTkFrame(output_section, fg_color="transparent")
     poll_row.grid(row=4, column=0, sticky="w", padx=16, pady=(0, ITEM_SPACING))
     a._poll_spin = tk.Spinbox(
@@ -246,11 +253,10 @@ class SettingsPanel:
       highlightcolor=a._colors["accent"],
     )
     a._poll_spin.grid(row=0, column=0, ipady=4, ipadx=6)
-    ctk.CTkLabel(
+    muted_label(
       output_section,
       text="How often to check Discogs for collection updates",
       font=(ui.FONT_SEGOE_UI, ui.FONT_XS),
-      text_color=a._colors["muted"],
     ).grid(row=5, column=0, sticky="w", padx=16, pady=(0, 4))
 
     a._json_check = ctk.CTkCheckBox(
@@ -262,12 +268,7 @@ class SettingsPanel:
     )
     a._json_check.grid(row=6, column=0, sticky="w", padx=16, pady=(8, 4))
 
-    ctk.CTkLabel(
-      output_section,
-      text="TXT shelf dividers",
-      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      text_color=a._colors["muted"],
-    ).grid(row=7, column=0, sticky="w", padx=16, pady=(8, 4))
+    muted_label(output_section, text="TXT shelf dividers").grid(row=7, column=0, sticky="w", padx=16, pady=(8, 4))
     divider_row = ctk.CTkFrame(output_section, fg_color="transparent")
     divider_row.grid(row=8, column=0, sticky="w", padx=16, pady=(0, 4))
     a._divider_mode_combo = ctk.CTkOptionMenu(
@@ -283,11 +284,10 @@ class SettingsPanel:
       "Insert divider lines in exported/printed TXT. "
       "By shelf: A (A–H), B (I–P), C (Q–Z) for physical shelf units.",
     )
-    ctk.CTkLabel(
+    muted_label(
       output_section,
       text="Shelf A: A–H  •  Shelf B: I–P  •  Shelf C: Q–Z (non-alpha → A)",
       font=(ui.FONT_SEGOE_UI, ui.FONT_XS),
-      text_color=a._colors["muted"],
       justify="left",
     ).grid(row=9, column=0, sticky="w", padx=16, pady=(0, 14))
 
@@ -301,12 +301,7 @@ class SettingsPanel:
     )
     a._prices_check.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
 
-    ctk.CTkLabel(
-      price_section,
-      text="Currency",
-      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      text_color=a._colors["muted"],
-    ).grid(row=2, column=0, sticky="w", padx=16, pady=(0, 4))
+    muted_label(price_section, text="Currency").grid(row=2, column=0, sticky="w", padx=16, pady=(0, 4))
     price_row = ctk.CTkFrame(price_section, fg_color="transparent")
     price_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 8))
     price_row.columnconfigure(0, weight=1)
@@ -330,32 +325,23 @@ class SettingsPanel:
     )
     a._refresh_prices_btn.grid(row=0, column=1, sticky="w", padx=(12, 0))
 
-    ctk.CTkLabel(
+    muted_label(
       price_section,
       text="Prices show lowest listed for your specific pressing",
       font=(ui.FONT_SEGOE_UI, ui.FONT_XS),
-      text_color=a._colors["muted"],
       justify="left",
     ).grid(row=4, column=0, sticky="w", padx=16, pady=(4, 14))
 
     sort_section = make_section("Sorting", "🔤")
-    ctk.CTkLabel(
-      sort_section,
-      text="Default sort order",
-      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      text_color=a._colors["muted"],
-    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    muted_label(sort_section, text="Default sort order").grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
     a._sort_row = ctk.CTkFrame(sort_section, fg_color="transparent")
     a._sort_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
     self._build_sort_content(a._sort_row)
 
     formats_section = make_section("Formats", "💿")
-    ctk.CTkLabel(
-      formats_section,
-      text="Show these formats in your collection",
-      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
-      text_color=a._colors["muted"],
-    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    muted_label(formats_section, text="Show these formats in your collection").grid(
+      row=1, column=0, sticky="w", padx=16, pady=(0, 4)
+    )
     formats_row = ctk.CTkFrame(formats_section, fg_color="transparent")
     formats_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
     a._format_checks = {}
@@ -393,16 +379,24 @@ class SettingsPanel:
       a._settings_section_frames = []
     a._settings_section_frames.append(a._pro_section)
 
-    ctk.CTkLabel(
+    if not hasattr(a, "_settings_heading_labels"):
+      a._settings_heading_labels = []
+    if not hasattr(a, "_settings_muted_labels"):
+      a._settings_muted_labels = []
+
+    heading = ctk.CTkLabel(
       a._pro_section,
       text="⭐  Pro",
       font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_LG),
       text_color=a._colors["accent"],
-    ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
+    )
+    heading.grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
+    a._settings_heading_labels.append(heading)
     a._license_status_label = ctk.CTkLabel(
       a._pro_section,
       text=license_summary(),
       font=(ui.FONT_SEGOE_UI, ui.FONT_MD),
+      text_color=a._colors["text"],
     )
     a._license_status_label.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
     benefits = (
@@ -410,14 +404,16 @@ class SettingsPanel:
       "• Marketplace prices and wishlist checks\n"
       "• Manual shelf order and audio previews"
     )
-    ctk.CTkLabel(
+    benefits_lbl = ctk.CTkLabel(
       a._pro_section,
       text=benefits,
       font=(ui.FONT_SEGOE_UI, ui.FONT_XS),
       text_color=a._colors["muted"],
       wraplength=360,
       justify="left",
-    ).grid(row=2, column=0, sticky="w", padx=16, pady=(0, 10))
+    )
+    benefits_lbl.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 10))
+    a._settings_muted_labels.append(benefits_lbl)
     btn_row = ctk.CTkFrame(a._pro_section, fg_color="transparent")
     btn_row.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 14))
     ctk.CTkButton(
@@ -460,9 +456,28 @@ class SettingsPanel:
       chk.configure(state="disabled" if everything_on else "normal")
 
   def update_section_theme(self) -> None:
-    """Recolor settings section cards after theme toggle."""
+    """Recolor settings section cards and labels after theme toggle."""
     a = self._a
     try:
+      if hasattr(a, "_settings_title_label"):
+        a._settings_title_label.configure(text_color=a._colors["text"])
+      if hasattr(a, "_settings_heading_labels"):
+        for heading in a._settings_heading_labels:
+          try:
+            heading.configure(text_color=a._colors["accent"])
+          except Exception:
+            pass
+      if hasattr(a, "_auth_status_label"):
+        a._update_auth_buttons_state()
+      if hasattr(a, "_license_status_label"):
+        from core.licensing import license_summary
+        a._license_status_label.configure(text=license_summary(), text_color=a._colors["text"])
+      if hasattr(a, "_settings_muted_labels"):
+        for lbl in a._settings_muted_labels:
+          try:
+            lbl.configure(text_color=a._colors["muted"])
+          except Exception:
+            pass
       if hasattr(a, "_settings_section_frames"):
         panel2 = a._colors.get("panel2", a._colors["panel"])
         border = a._colors.get("card_border", a._colors.get("border", "#e5e7eb"))
