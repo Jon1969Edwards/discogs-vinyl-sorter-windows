@@ -2200,6 +2200,11 @@ class App:
     pro = is_pro()
     if hasattr(self, "_license_status_label"):
       self._license_status_label.configure(text=license_summary())
+    if hasattr(self, "_pro_section"):
+      if pro:
+        self._pro_section.grid_remove()
+      else:
+        self._pro_section.grid()
     if hasattr(self, "_pro_banner"):
       if pro:
         self._pro_banner.grid_remove()
@@ -2242,29 +2247,61 @@ class App:
     )
     return None
 
-  def _do_oauth_signin(self) -> None:
-    """Run OAuth flow and save tokens. Uses bundled app credentials."""
+  def _do_oauth_signin(self, on_done=None) -> None:
+    """Run OAuth in a background thread so the UI stays responsive.
+
+    on_done: optional callback(success: bool) invoked on the UI thread when finished.
+    """
     from core.oauth_discogs import run_oauth_flow
+
+    if getattr(self, "_oauth_signin_busy", False):
+      messagebox.showinfo(
+        "Sign-in in progress",
+        "A Discogs sign-in is already waiting for browser approval.\n\n"
+        "Finish or cancel it in your browser, then try again.",
+      )
+      return
 
     creds = self._ensure_oauth_configured()
     if not creds:
+      if on_done:
+        on_done(False)
       return
-    try:
-      self._log("Opening browser for Discogs sign-in…")
-      access_token, access_secret = run_oauth_flow(
-        creds[0], creds[1],
-        self.v_user_agent.get().strip() or "Spindle/1.0",
-      )
-      self._oauth_access_token = access_token
-      self._oauth_access_secret = access_secret
-      self._save_settings()
-      self._update_auth_buttons_state()
-      self._log("Signed in successfully. Refresh to load your collection.")
-      messagebox.showinfo("Signed in", "Sign-in complete. Refreshing your collection…")
-      self._refresh_now()
-    except Exception as e:
-      self._log(f"OAuth failed: {e}")
-      messagebox.showerror("Sign-in Failed", str(e))
+
+    self._oauth_signin_busy = True
+    user_agent = self.v_user_agent.get().strip() or "Spindle/1.0"
+    self._log("Opening browser for Discogs sign-in…")
+
+    def work() -> None:
+      try:
+        access_token, access_secret = run_oauth_flow(creds[0], creds[1], user_agent)
+
+        def ok() -> None:
+          self._oauth_signin_busy = False
+          self._oauth_access_token = access_token
+          self._oauth_access_secret = access_secret
+          self._save_settings()
+          self._update_auth_buttons_state()
+          self._log("Signed in successfully. Refresh to load your collection.")
+          messagebox.showinfo("Signed in", "Sign-in complete. Refreshing your collection…")
+          self._refresh_now()
+          if on_done:
+            on_done(True)
+
+        self.root.after(0, ok)
+      except Exception as e:
+        err = str(e)
+
+        def fail() -> None:
+          self._oauth_signin_busy = False
+          self._log(f"OAuth failed: {err}")
+          messagebox.showerror("Sign-in Failed", err)
+          if on_done:
+            on_done(False)
+
+        self.root.after(0, fail)
+
+    threading.Thread(target=work, daemon=True, name="oauth-signin").start()
 
   def _do_oauth_signout(self) -> None:
     """Clear OAuth tokens, clear all records from view, and fall back to token."""

@@ -101,8 +101,33 @@ class FirstRunWizard:
         self._render_step()
 
     def _signin(self) -> None:
-        self.app._do_oauth_signin()
-        self._goto(2)
+        """Start OAuth without freezing the wizard (flow runs on a worker thread)."""
+        for w in self.body.winfo_children():
+            w.destroy()
+        ctk.CTkLabel(self.body, text="Waiting for Discogs…", font=("Segoe UI Semibold", 20)).pack(anchor="w")
+        ctk.CTkLabel(
+            self.body,
+            text=(
+                "Your browser should open so you can Approve access.\n\n"
+                "This window stays open until you finish or the request times out "
+                "(about 2 minutes). You can Skip and sign in later from Settings."
+            ),
+            wraplength=460,
+            justify="left",
+        ).pack(anchor="w", pady=(12, 16))
+        nav = ctk.CTkFrame(self.body, fg_color="transparent")
+        nav.pack(side="bottom", fill="x", pady=(16, 0))
+        ctk.CTkButton(nav, text="Skip for now", command=lambda: self._goto(2)).pack(side="right")
+
+        def after_signin(ok: bool) -> None:
+            # Wizard may already have been skipped/closed.
+            try:
+                if self.top.winfo_exists():
+                    self._goto(2 if ok else 1)
+            except Exception:
+                pass
+
+        self.app._do_oauth_signin(on_done=after_signin)
 
     def _browse(self) -> None:
         d = filedialog.askdirectory(initialdir=self.app.v_output_dir.get())
