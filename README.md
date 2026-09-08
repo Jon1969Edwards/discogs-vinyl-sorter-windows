@@ -1,6 +1,6 @@
 # Spindle
 
-**Spindle** sorts physical vinyl collections for real-world shelves (Artist → Title → Year, with article stripping and Discogs suffix cleanup) and exports printable lists.
+**Spindle** sorts physical vinyl collections for real-world shelves (Artist → Title → Year, or by Discogs primary genre, with article stripping and Discogs suffix cleanup) and exports printable lists.
 
 Connect your [Discogs](https://www.discogs.com) collection, **or import a CSV/JSON file** if you do not use Discogs. Filter to the formats you care about (33⅓ RPM LPs by default).
 
@@ -48,7 +48,7 @@ On Windows, user data (config, caches, wishlist, thumbnails) lives under `%LOCAL
 - **Import CSV/JSON** to sort a collection without Discogs (Settings, first-run wizard, or CLI `--from-file`)
 - Auto-watch: regenerates shelf order when your Discogs collection changes
 - Export **TXT / CSV / JSON**, print, optional aligned columns and country codes
-- Album thumbnails, search/filter, sort by artist / title / year / price
+- Album thumbnails, search/filter, sort by artist / title / year / **genre** / price
 - **Wishlist** tab synced from your Discogs wantlist; check marketplace availability (Pro)
 - **Manual order mode**: drag rows to match your physical shelves (Pro)
 - **Audio preview** for selected releases (Pro)
@@ -89,7 +89,7 @@ No Discogs account — sort a CSV or JSON export:
 python discogs_app.py --from-file ./my_collection.csv
 ```
 
-The file needs **Artist** and/or **Title**. Spindle's own CSV/JSON exports import as-is. Optional columns: Year, Label, CatNo, Country, Format, Notes, DiscogsURL, CoverURL.
+The file needs **Artist** and/or **Title**. Spindle's own CSV/JSON exports import as-is. Optional columns: Year, Label, CatNo, Country, Format, Genre, Notes, DiscogsURL, CoverURL. Multiple genres in CSV use a semicolon (`Jazz; Rock`) so Discogs names like `Folk, World, & Country` stay one genre.
 
 Outputs:
 
@@ -98,6 +98,12 @@ Outputs:
 - `vinyl_shelf_order.json` — optional, with `--json`
 
 ### Customization
+
+Sort by Discogs primary genre (then artist → title → year). Albums with no genre file under **Unknown** at the end. TXT uses `=== Jazz ===` section headers instead of letter dividers:
+
+```bash
+python discogs_app.py --sort-by genre
+```
 
 Push Various Artists to the end:
 

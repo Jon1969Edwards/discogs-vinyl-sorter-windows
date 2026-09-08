@@ -119,6 +119,7 @@ class SettingsPanel:
 
     a._settings_muted_labels = []
     a._settings_heading_labels = []
+    a._settings_section_frames = []
 
     def muted_label(parent, text, **kwargs):
       lbl = ctk.CTkLabel(
@@ -167,6 +168,9 @@ class SettingsPanel:
       heading.grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
       a._settings_heading_labels.append(heading)
       return section
+
+    self._build_pro_section(settings)
+    _section_row[0] = 1
 
     auth_section = make_section("Authentication", "🔐")
     muted_label(
@@ -410,7 +414,7 @@ class SettingsPanel:
     ).grid(row=4, column=0, sticky="w", padx=16, pady=(4, 14))
 
     sort_section = make_section("Sorting", "🔤")
-    muted_label(sort_section, text="Default sort order").grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+    muted_label(sort_section, text="Default sort order (genre uses the first Discogs genre)").grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
     a._sort_row = ctk.CTkFrame(sort_section, fg_color="transparent")
     a._sort_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
     self._build_sort_content(a._sort_row)
@@ -437,7 +441,6 @@ class SettingsPanel:
       "Show every item regardless of format (overrides the other checkboxes).",
     )
     self.update_format_checks_state()
-    self._build_pro_section(settings)
 
   def _build_pro_section(self, settings) -> None:
     a = self._a
@@ -450,7 +453,7 @@ class SettingsPanel:
       border_width=1,
       border_color=a._colors.get("card_border", a._colors.get("border", "#e5e7eb")),
     )
-    a._pro_section.grid(row=999, column=0, sticky="ew", padx=20, pady=(0, 16))
+    a._pro_section.grid(row=0, column=0, sticky="ew", padx=20, pady=(0, 16))
     a._pro_section.columnconfigure(0, weight=1)
     if not hasattr(a, "_settings_section_frames"):
       a._settings_section_frames = []
@@ -511,7 +514,7 @@ class SettingsPanel:
     a._sort_combo = ctk.CTkOptionMenu(
       sort_row,
       variable=a.v_sort_by,
-      values=["artist", "title", "year", "price_asc", "price_desc"],
+      values=["artist", "title", "year", "genre", "price_asc", "price_desc"],
       width=160,
       corner_radius=8,
       fg_color=a._colors.get("panel2", a._colors["panel"]),

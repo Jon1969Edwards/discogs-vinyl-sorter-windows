@@ -11,9 +11,9 @@ import json
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
-from core.models import ReleaseRow
+from core.models import ReleaseRow, UNKNOWN_GENRE
 
-DividerMode = Literal["none", "letter", "abc"]
+DividerMode = Literal["none", "letter", "abc", "genre"]
 
 SHELF_A_RANGE = "A–H"
 SHELF_B_RANGE = "I–P"
@@ -26,11 +26,21 @@ SHELF_DIVIDER_TITLES = {
 }
 
 
-def resolve_divider_mode(dividers: bool = False, divider_mode: Optional[str] = None) -> DividerMode:
-    """Resolve divider mode from legacy bool and/or explicit mode string."""
-    if divider_mode in ("none", "letter", "abc"):
+def resolve_divider_mode(
+    dividers: bool = False,
+    divider_mode: Optional[str] = None,
+    sort_by: Optional[str] = None,
+) -> DividerMode:
+    """Resolve divider mode from legacy bool, explicit mode, and current sort."""
+    if (sort_by or "") == "genre":
+        return "genre"
+    if divider_mode in ("none", "letter", "abc", "genre"):
         return divider_mode  # type: ignore[return-value]
     return "letter" if dividers else "none"
+
+
+def genre_divider_from_row(r: ReleaseRow) -> str:
+    return r.genre_label() if hasattr(r, "genre_label") else ((r.genre or "").strip() or UNKNOWN_GENRE)
 
 
 def sort_letter_from_row(r: ReleaseRow) -> str:
@@ -64,6 +74,11 @@ def get_divider_line(
         first = sort_letter_from_row(r)
         if current != first:
             return first, f"=== {first} ==="
+        return current, None
+    if mode == "genre":
+        genre = genre_divider_from_row(r)
+        if current != genre:
+            return genre, f"=== {genre} ==="
         return current, None
     # abc: one divider per physical shelf section
     letter = sort_letter_from_row(r)
@@ -111,13 +126,15 @@ def generate_txt_lines(
     align: bool = False,
     show_country: bool = False,
     show_price: bool = False,
+    sort_by: Optional[str] = None,
 ) -> List[str]:
     """Return the lines that would appear in the TXT output.
 
     Used by both CLI writer and GUI preview to avoid duplication.
-    divider_mode: none | letter (=== A ===) | abc (=== SHELF A (A–H) ===).
+    divider_mode: none | letter (=== A ===) | abc (=== SHELF A (A–H) ===) | genre.
+    When sort_by is genre, letter/abc dividers become genre section headers.
     """
-    mode = resolve_divider_mode(dividers, divider_mode)
+    mode = resolve_divider_mode(dividers, divider_mode, sort_by=sort_by)
     artist_width = max((len(r.artist_display) for r in rows), default=0) if align else 0
     title_width = max((len(r.title) for r in rows), default=0) if align else 0
 
@@ -139,6 +156,7 @@ def write_txt(
     align: bool = False,
     show_country: bool = False,
     show_price: bool = False,
+    sort_by: Optional[str] = None,
 ) -> None:
     lines = generate_txt_lines(
         rows,
@@ -147,6 +165,7 @@ def write_txt(
         align=align,
         show_country=show_country,
         show_price=show_price,
+        sort_by=sort_by,
     )
     with out_path.open("w", encoding="utf-8") as f:
         for line in lines:
@@ -171,6 +190,9 @@ def _row_json_dict(r: ReleaseRow) -> Dict[str, object]:
         "item_id": r.item_id,
         "thumb_url": r.thumb_url,
         "cover_image_url": r.cover_image_url,
+        "genre": r.genre_label() if hasattr(r, "genre_label") else (r.genre or ""),
+        "genres": list(getattr(r, "genres", ()) or ()),
+        "styles": list(getattr(r, "styles", ()) or ()),
     }
 
 
@@ -192,6 +214,7 @@ def write_csv(rows: List[ReleaseRow], out_path: Path) -> None:
         "CatNo",
         "Country",
         "Format",
+        "Genre",
         "DiscogsURL",
         "Notes",
         "ReleaseID",
@@ -211,6 +234,7 @@ def write_csv(rows: List[ReleaseRow], out_path: Path) -> None:
                     r.catno,
                     r.country,
                     r.format_str,
+                    "; ".join(r.genres) if getattr(r, "genres", ()) else (r.genre or ""),
                     r.discogs_url,
                     r.notes,
                     r.release_id or "",

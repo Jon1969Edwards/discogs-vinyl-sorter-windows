@@ -298,7 +298,14 @@ def build_once(
       report("update", f"Sorting {len(rows)} releases…", 0.9)
       rows_sorted = sort_rows(rows, "normal", sort_by=cfg.sort_by)
       report("update", "Preparing shelf order…", 0.96)
-      lines = generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=need_prices)
+      lines = generate_txt_lines(
+        rows_sorted,
+        dividers=False,
+        align=False,
+        show_country=False,
+        show_price=need_prices,
+        sort_by=cfg.sort_by,
+      )
       report("done", "Done!", 1.0)
       return BuildResult(username=username, rows_sorted=rows_sorted, lines=lines)
     except Exception as e:
@@ -361,7 +368,14 @@ def _build_from_local(
   report("update", f"Sorting {len(rows)} releases…", 0.9)
   rows_sorted = sort_rows(rows, "normal", sort_by=cfg.sort_by)
   report("update", "Preparing shelf order…", 0.96)
-  lines = generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=False)
+  lines = generate_txt_lines(
+    rows_sorted,
+    dividers=False,
+    align=False,
+    show_country=False,
+    show_price=False,
+    sort_by=cfg.sort_by,
+  )
   report("done", "Done!", 1.0)
   return BuildResult(username=LOCAL_USERNAME, rows_sorted=rows_sorted, lines=lines)
 

@@ -591,7 +591,7 @@ class App:
     self.v_poll.trace_add("write", lambda *_: self._save_settings())
     self.v_show_prices.trace_add("write", lambda *_: self._on_show_prices_change())
     self.v_currency.trace_add("write", lambda *_: self._save_settings())
-    self.v_sort_by.trace_add("write", lambda *_: self._save_settings())
+    self.v_sort_by.trace_add("write", lambda *_: self._on_sort_by_change())
     for _fvar in self.v_formats.values():
       _fvar.trace_add("write", lambda *_: self._on_format_filter_change())
 
@@ -1683,6 +1683,8 @@ class App:
       ("Artist", getattr(row, "artist_display", "")),
       ("Title", getattr(row, "title", "")),
       ("Year", getattr(row, "year", "")),
+      ("Genre", row.genres_display() if hasattr(row, "genres_display") else getattr(row, "genre", "")),
+      ("Style", row.styles_display() if hasattr(row, "styles_display") else ""),
       ("Format", getattr(row, "format_str", getattr(row, "format", ""))),
       ("Label", getattr(row, "label", "")),
       ("Catalog #", getattr(row, "catno", "")),
@@ -1825,13 +1827,13 @@ class App:
     ToolTip(self._json_check, "Also save output as JSON file")
     ToolTip(self._prices_check, "Fetch marketplace prices. Cached locally for 7 days.\nEnable this, then click Refresh to load prices.")
     ToolTip(self._currency_combo, "Currency for price display")
-    ToolTip(self._sort_combo, "How to sort your collection:\n• artist: A-Z by artist name\n• title: A-Z by album title\n• year: Chronological\n• price_asc/desc: By price")
+    ToolTip(self._sort_combo, "How to sort your collection:\n• artist: A-Z by artist name\n• title: A-Z by album title\n• year: Chronological\n• genre: Discogs primary genre, then artist\n• price_asc/desc: By price")
     
     # Theme button
     ToolTip(self.theme_btn, "Switch between dark and light mode")
     
     # Search
-    ToolTip(self._search_entry, "Filter your collection - type to search artist, title, or label (Ctrl+F)")
+    ToolTip(self._search_entry, "Filter your collection - type to search artist, title, genre, or label (Ctrl+F)")
     ToolTip(self._clear_btn, "Clear the search filter (Esc)")
     
     # Action buttons
@@ -2992,6 +2994,9 @@ class App:
       return
 
     rows = self._apply_manual_order_if_enabled(result)
+    if not self.v_manual_order_enabled.get():
+      from core.sorting import sort_rows
+      rows = sort_rows(list(rows), "normal", sort_by=self.v_sort_by.get().strip() or "artist")
     rows = self._filter_rows_by_format(rows)
     if not rows:
       self._tree_rows = []
@@ -3135,10 +3140,12 @@ class App:
       price_str = self._format_price(row, show_prices)
       label_str = f"{row.label} {row.catno}".strip() if row.label or row.catno else ""
       year_str = str(row.year) if row.year else ""
+      genre_str = row.genre_label() if hasattr(row, "genre_label") else (getattr(row, "genre", "") or "")
       values = (
         str(i + 1),
         row.artist_display,
         row.title,
+        genre_str,
         year_str,
         label_str,
         price_str,
@@ -3355,6 +3362,12 @@ class App:
       self._update_collection_count(self._last_result)
       self._update_total_value_section(self._last_result)
 
+  def _on_sort_by_change(self) -> None:
+    """Persist sort choice and re-order the current list without re-fetching."""
+    self._save_settings()
+    if getattr(self, "_last_result", None) is not None:
+      self._render_order(self._last_result)
+
   def _get_cfg(self) -> AutoConfig:
     return AutoConfig(
       token=self.v_token.get().strip(),
@@ -3438,6 +3451,7 @@ class App:
       align=False,
       show_country=False,
       show_price=bool(self.v_show_prices.get()),
+      sort_by=self.v_sort_by.get().strip() or "artist",
     )
     write_csv(rows_to_export, csv_path)
     self._log(f"Exported: {txt_path.name}")
@@ -3475,6 +3489,7 @@ class App:
       rows,
       divider_mode=self._divider_mode_value(),
       show_price=bool(self.v_show_prices.get()),
+      sort_by=self.v_sort_by.get().strip() or "artist",
     )
 
     # Try Windows printing first, fall back to lpr

@@ -102,6 +102,12 @@ def parse_args() -> argparse.Namespace:
     help="How to treat 'Various' artists when sorting: normal sort, push to end, or sort by title (so they file under the release title).",
   )
   parser.add_argument(
+    "--sort-by",
+    choices=["artist", "title", "year", "genre"],
+    default="artist",
+    help="Shelf order: artist (default), title, year, or Discogs primary genre.",
+  )
+  parser.add_argument(
     "--articles-extra",
     default="",
     help="Comma-separated extra leading articles to strip for sorting (e.g., 'le,la,les,el,los,las,der,die,das').",
@@ -227,7 +233,7 @@ def main() -> None:
     if not rows:
         return
 
-    rows_sorted = sort_rows(rows, args.various_policy)
+    rows_sorted = sort_rows(rows, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
     write_main_outputs(args, out_dir, rows_sorted)
 
     rows45_sorted = handle_optional_45s(args, headers, username, extra_articles, out_dir)
@@ -249,7 +255,7 @@ def _run_from_file(args, out_dir: Path) -> None:
     except CollectionImportError as exc:
         sys.exit(f"Error: {exc}")
     print(f"Loaded {len(rows)} albums from {args.from_file}")
-    rows_sorted = sort_rows(rows, args.various_policy)
+    rows_sorted = sort_rows(rows, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
     write_main_outputs(args, out_dir, rows_sorted)
     print_category_summary(rows_sorted, [], [])
 
@@ -303,6 +309,7 @@ def write_main_outputs(args, out_dir, rows_sorted):
         divider_mode=_divider_mode_from_args(args),
         align=bool(args.txt_align),
         show_country=bool(args.show_country),
+        sort_by=getattr(args, "sort_by", "artist") or "artist",
     )
     write_csv(rows_sorted, csv_path)
     if args.json:
@@ -328,7 +335,7 @@ def handle_optional_45s(args, headers, username, extra_articles, out_dir):
             lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
             lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
         )
-        rows45_sorted = sort_rows(rows45, args.various_policy)
+        rows45_sorted = sort_rows(rows45, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
         txt45 = out_dir / "vinyl45_shelf_order.txt"
         csv45 = out_dir / "vinyl45_shelf_order.csv"
         write_txt(
@@ -338,6 +345,7 @@ def handle_optional_45s(args, headers, username, extra_articles, out_dir):
             divider_mode=_divider_mode_from_args(args),
             align=bool(args.txt_align),
             show_country=bool(args.show_country),
+            sort_by=getattr(args, "sort_by", "artist") or "artist",
         )
         write_csv(rows45_sorted, csv45)
         if args.json:
@@ -364,7 +372,7 @@ def handle_optional_cds(args, headers, username, extra_articles, out_dir):
             lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
             lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
         )
-        rows_cd_sorted = sort_rows(rows_cd, args.various_policy)
+        rows_cd_sorted = sort_rows(rows_cd, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
         txtcd = out_dir / "cd_shelf_order.txt"
         csvcd = out_dir / "cd_shelf_order.csv"
         write_txt(
@@ -374,6 +382,7 @@ def handle_optional_cds(args, headers, username, extra_articles, out_dir):
             divider_mode=_divider_mode_from_args(args),
             align=bool(args.txt_align),
             show_country=bool(args.show_country),
+            sort_by=getattr(args, "sort_by", "artist") or "artist",
         )
         write_csv(rows_cd_sorted, csvcd)
         if args.json:

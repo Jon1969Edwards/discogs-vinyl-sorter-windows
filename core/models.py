@@ -4,6 +4,7 @@ from typing import Optional
 SOURCE_DISCOGS = "discogs"
 SOURCE_LOCAL = "local"
 LOCAL_USERNAME = "Imported"
+UNKNOWN_GENRE = "Unknown"
 
 
 @dataclass
@@ -30,6 +31,9 @@ class ReleaseRow:
     format_categories: frozenset = field(default_factory=frozenset)
     source: str = SOURCE_DISCOGS
     item_id: str = ""
+    genre: str = ""
+    genres: tuple = field(default_factory=tuple)
+    styles: tuple = field(default_factory=tuple)
 
     def key(self) -> str:
         """Stable identity for manual order, thumbnails, and caches."""
@@ -49,6 +53,17 @@ class ReleaseRow:
 
     def artwork_url(self) -> str:
         return self.cover_image_url or self.thumb_url
+
+    def genre_label(self) -> str:
+        return (self.genre or "").strip() or UNKNOWN_GENRE
+
+    def genres_display(self) -> str:
+        if self.genres:
+            return ", ".join(self.genres)
+        return self.genre_label()
+
+    def styles_display(self) -> str:
+        return ", ".join(self.styles) if self.styles else ""
 
 
 @dataclass

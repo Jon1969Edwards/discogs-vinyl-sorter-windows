@@ -106,7 +106,7 @@ class OrderPanel:
     order_wrap.columnconfigure(0, weight=1)
     order_scroll = ttk.Scrollbar(order_wrap, orient="vertical")
     order_scroll.grid(row=0, column=1, sticky="ns", pady=3, padx=(0, 3))
-    columns = ("#", "Artist", "Title", "Year", "Label", "Price")
+    columns = ("#", "Artist", "Title", "Genre", "Year", "Label", "Price")
     tree_style = "Dark.Treeview" if a.v_dark_mode.get() else "Light.Treeview"
     a.order_tree = ttk.Treeview(
       order_wrap,
@@ -188,12 +188,14 @@ class OrderPanel:
     a.order_tree.heading("#", text="#", anchor="center")
     a.order_tree.heading("Artist", text="Artist", anchor="w")
     a.order_tree.heading("Title", text="Title", anchor="w")
+    a.order_tree.heading("Genre", text="Genre", anchor="w")
     a.order_tree.heading("Year", text="Year", anchor="center")
     a.order_tree.heading("Label", text="Label / Cat#", anchor="w")
     a.order_tree.heading("Price", text="Price", anchor="e")
     a.order_tree.column("#", width=35, minwidth=30, stretch=False, anchor="center")
-    a.order_tree.column("Artist", width=200, minwidth=100, stretch=True, anchor="w")
-    a.order_tree.column("Title", width=260, minwidth=120, stretch=True, anchor="w")
+    a.order_tree.column("Artist", width=180, minwidth=100, stretch=True, anchor="w")
+    a.order_tree.column("Title", width=220, minwidth=120, stretch=True, anchor="w")
+    a.order_tree.column("Genre", width=110, minwidth=70, stretch=False, anchor="w")
     a.order_tree.column("Year", width=50, minwidth=45, stretch=False, anchor="center")
     a.order_tree.column("Label", width=280, minwidth=100, stretch=True, anchor="w")
     a.order_tree.column("Price", width=80, minwidth=70, stretch=False, anchor="e")

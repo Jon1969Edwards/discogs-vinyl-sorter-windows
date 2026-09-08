@@ -125,6 +125,45 @@ def main():
         "Discogs 'With' joins should be spaced before the credited artist",
     )
 
+    from core.sorting import genres_from_basic, parse_genre_list, primary_genre, sort_rows
+
+    assert_eq(parse_genre_list("Folk, World, & Country"), ("Folk, World, & Country",))
+    assert_eq(parse_genre_list("Jazz; Funk / Soul"), ("Jazz", "Funk / Soul"))
+    assert_eq(parse_genre_list(["Jazz", "Jazz", "Rock"]), ("Jazz", "Rock"))
+    assert_eq(genres_from_basic({"genres": ["Funk / Soul", "Jazz"]}), ("Funk / Soul", "Jazz"))
+    assert_eq(primary_genre(("Funk / Soul", "Jazz")), "Funk / Soul")
+    assert_eq(primary_genre(()), "Unknown")
+
+    def _genre_row(artist, title, genre, year=1970):
+        row = ReleaseRow(
+            artist_display=artist,
+            title=title,
+            year=year,
+            label="",
+            catno="",
+            country="",
+            format_str="",
+            discogs_url="",
+            notes="",
+            genre=genre,
+            genres=(genre,) if genre and genre != "Unknown" else (),
+        )
+        row.sort_artist, row.sort_title = app.make_sort_keys(
+            artist, title, extra_articles=[], last_name_first=False, lnf_allow_3=False, lnf_exclude=set(), lnf_safe_bands=True
+        )
+        return row
+
+    jazz_z = _genre_row("Zebra", "Late Jazz", "Jazz", 1980)
+    jazz_a = _genre_row("Alpha", "Early Jazz", "Jazz", 1960)
+    rock = _genre_row("The Beatles", "Abbey Road", "Rock", 1969)
+    unknown = _genre_row("Mystery", "No Tags", "", 2000)
+    by_genre = sort_rows([unknown, rock, jazz_z, jazz_a], "normal", sort_by="genre")
+    assert_eq(
+        [r.title for r in by_genre],
+        ["Early Jazz", "Late Jazz", "Abbey Road", "No Tags"],
+        "Genre sort: Jazz (artist A then Z), then Rock, Unknown last",
+    )
+
     print("All sorting assertions passed.")
 
 

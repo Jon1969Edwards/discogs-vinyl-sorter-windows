@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from core.models import ReleaseRow
+from core.models import ReleaseRow, UNKNOWN_GENRE
 from core.api import iterate_collection
 
 
@@ -391,6 +391,47 @@ def label_and_catno(basic: Dict) -> Tuple[str, str]:
   return (first.get("name") or "", first.get("catno") or "")
 
 
+def parse_genre_list(values: Any) -> Tuple[str, ...]:
+  """Normalize Discogs/CSV genre or style lists to a tuple of unique names.
+
+  CSV uses semicolons so names like 'Folk, World, & Country' and 'Funk / Soul'
+  stay intact. JSON lists are kept as-is.
+  """
+  if not values:
+    return ()
+  if isinstance(values, str):
+    text = values.strip()
+    if not text:
+      return ()
+    if ";" in text or "|" in text:
+      parts = [p.strip() for p in re.split(r"[;|]", text) if p.strip()]
+    else:
+      parts = [text]
+  else:
+    parts = [str(v).strip() for v in values if str(v).strip()]
+  seen: set[str] = set()
+  out: List[str] = []
+  for part in parts:
+    key = part.lower()
+    if key in seen:
+      continue
+    seen.add(key)
+    out.append(part)
+  return tuple(out)
+
+
+def genres_from_basic(basic: Dict) -> Tuple[str, ...]:
+  return parse_genre_list(basic.get("genres"))
+
+
+def styles_from_basic(basic: Dict) -> Tuple[str, ...]:
+  return parse_genre_list(basic.get("styles"))
+
+
+def primary_genre(genres: Tuple[str, ...]) -> str:
+  return genres[0] if genres else UNKNOWN_GENRE
+
+
 # ============================================================================
 # Build release row
 # ============================================================================
@@ -426,6 +467,8 @@ def build_release_row(
   cover_image_url = basic.get("cover_image") or ""
 
   parsed_id = int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None
+  genres = genres_from_basic(basic)
+  styles = styles_from_basic(basic)
   return ReleaseRow(
     artist_display=artist_disp,
     title=title,
@@ -443,6 +486,9 @@ def build_release_row(
     cover_image_url=cover_image_url,
     source="discogs",
     item_id=f"discogs:{parsed_id}" if parsed_id is not None else "",
+    genre=primary_genre(genres),
+    genres=genres,
+    styles=styles,
   )
 
 
@@ -502,6 +548,8 @@ def _lp_build_row(
         lnf_safe_bands=lnf_safe_bands,
     )
     parsed_id = int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None
+    genres = genres_from_basic(basic)
+    styles = styles_from_basic(basic)
     return ReleaseRow(
         artist_display=artist_disp,
         title=title,
@@ -520,6 +568,9 @@ def _lp_build_row(
         cover_image_url=cover_image_url,
         source="discogs",
         item_id=f"discogs:{parsed_id}" if parsed_id is not None else "",
+        genre=primary_genre(genres),
+        genres=genres,
+        styles=styles,
     )
 
 def _lp_should_exclude(basic: Dict, lp_strict: bool, lp_probable: bool) -> bool:
@@ -758,6 +809,11 @@ def sort_key_price_asc(r: ReleaseRow):
 def sort_key_year(r: ReleaseRow):
     return (r.year or 9999, r.sort_artist, r.sort_title)
 
+def sort_key_genre(r: ReleaseRow):
+    label = r.genre_label()
+    unknown = label.lower() == UNKNOWN_GENRE.lower()
+    return (1 if unknown else 0, label.lower(), r.sort_artist, r.sort_title, r.year or 9999)
+
 def sort_key_general(r: ReleaseRow, various_policy: str, sort_by: str) -> tuple:
     is_var = is_various_artist(r.artist_display)
     var_flag = 1 if (various_policy == "last" and is_var) else 0
@@ -784,7 +840,7 @@ def sort_rows(rows: List[ReleaseRow], various_policy: str, sort_by: str = "artis
     Args:
         rows: List of ReleaseRow objects
         various_policy: How to handle Various Artists ("normal", "last", "title")
-        sort_by: Field to sort by ("artist", "title", "price_asc", "price_desc", "year")
+        sort_by: Field to sort by ("artist", "title", "price_asc", "price_desc", "year", "genre")
     """
     if sort_by == "price_desc":
         return sorted(rows, key=sort_key_price_desc)
@@ -794,5 +850,8 @@ def sort_rows(rows: List[ReleaseRow], various_policy: str, sort_by: str = "artis
 
     if sort_by == "year":
         return sorted(rows, key=sort_key_year)
+
+    if sort_by == "genre":
+        return sorted(rows, key=sort_key_genre)
 
     return sorted(rows, key=lambda r: sort_key_general(r, various_policy, sort_by))

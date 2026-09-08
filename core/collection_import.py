@@ -1,8 +1,10 @@
 """Load a vinyl collection from CSV or JSON into ReleaseRow records.
 
 Accepts Spindle's own CSV/JSON exports and the common spreadsheet columns
-(Artist, Title, Year, Label, CatNo, Country, Format, Notes). Optional
+(Artist, Title, Year, Label, CatNo, Country, Format, Genre, Notes). Optional
 DiscogsURL / ReleaseID / CoverURL / ThumbURL columns round-trip extra fields.
+Multiple genres in CSV use a semicolon (Jazz; Rock) so names like
+Folk, World, & Country stay intact.
 """
 
 from __future__ import annotations
@@ -14,8 +16,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-from core.models import SOURCE_LOCAL, ReleaseRow
-from core.sorting import detect_format_categories, make_sort_keys
+from core.models import SOURCE_LOCAL, UNKNOWN_GENRE, ReleaseRow
+from core.sorting import detect_format_categories, make_sort_keys, parse_genre_list, primary_genre
 
 _DISCOGS_RELEASE_RE = re.compile(
     r"(?:discogs\.com/(?:[^/]+/)?release/|api\.discogs\.com/releases/)(\d+)",
@@ -80,6 +82,10 @@ _HEADER_ALIASES = {
     "sort_artist": "sort_artist",
     "sort_title": "sort_title",
     "format_categories": "format_categories",
+    "genre": "genre",
+    "genres": "genres",
+    "style": "styles",
+    "styles": "styles",
 }
 
 
@@ -173,6 +179,9 @@ def row_to_record(row: ReleaseRow) -> Dict[str, Any]:
         "format_categories": sorted(row.format_categories),
         "sort_artist": row.sort_artist,
         "sort_title": row.sort_title,
+        "genre": row.genre,
+        "genres": list(row.genres),
+        "styles": list(row.styles),
     }
 
 
@@ -203,6 +212,9 @@ def _normalize_record(raw: Mapping[str, Any]) -> Dict[str, Any]:
             "sort_artist",
             "sort_title",
             "format_categories",
+            "genre",
+            "genres",
+            "styles",
         }:
             if mapped not in out or out[mapped] in (None, ""):
                 out[mapped] = value
@@ -268,6 +280,8 @@ def _record_to_row(mapped: Mapping[str, Any], *, default_source: str) -> Optiona
             lnf_exclude=set(),
             lnf_safe_bands=True,
         )
+    genres = parse_genre_list(mapped.get("genres") or mapped.get("genre"))
+    styles = parse_genre_list(mapped.get("styles"))
     return ReleaseRow(
         artist_display=artist,
         title=title,
@@ -286,6 +300,9 @@ def _record_to_row(mapped: Mapping[str, Any], *, default_source: str) -> Optiona
         format_categories=categories,
         source=_as_str(mapped.get("source")) or default_source,
         item_id=item_id,
+        genre=primary_genre(genres) if genres else UNKNOWN_GENRE,
+        genres=genres,
+        styles=styles,
     )
 
 

@@ -46,6 +46,9 @@ def _row(**kwargs) -> ReleaseRow:
         format_categories=frozenset({"lp", "vinyl"}),
         source="discogs",
         item_id="discogs:12345",
+        genre="Jazz",
+        genres=("Jazz", "Modal"),
+        styles=("Hard Bop",),
     )
     defaults.update(kwargs)
     return ReleaseRow(**defaults)
@@ -87,6 +90,8 @@ def test_csv_round_trip(tmp: Path):
     assert_eq(loaded[0].title, "Kind of Blue")
     assert_true("lp" in loaded[1].format_categories)
     assert_true(loaded[1].item_id.startswith("local:"))
+    assert_eq(loaded[0].genre, "Jazz")
+    assert_eq(loaded[0].genres, ("Jazz", "Modal"))
 
 
 def test_json_round_trip(tmp: Path):
@@ -97,6 +102,9 @@ def test_json_round_trip(tmp: Path):
     assert_eq(len(loaded), 1)
     assert_eq(loaded[0].catno, "CL 1355")
     assert_eq(loaded[0].release_id, 12345)
+    assert_eq(loaded[0].genre, "Jazz")
+    assert_eq(loaded[0].genres, ("Jazz", "Modal"))
+    assert_eq(loaded[0].styles, ("Hard Bop",))
 
 
 def test_spreadsheet_headers(tmp: Path):
@@ -112,6 +120,29 @@ def test_spreadsheet_headers(tmp: Path):
     assert_true(any(r.artist_display == "David Bowie" for r in loaded))
     bowie = next(r for r in loaded if r.artist_display == "David Bowie")
     assert_true("lp" in bowie.format_categories)
+
+
+def test_genre_csv_and_sort(tmp: Path):
+    csv_path = tmp / "genres.csv"
+    csv_path.write_text(
+        "Artist,Title,Genre\n"
+        "Mystery Act,No Tags,\n"
+        "The Beatles,Abbey Road,Rock; Pop\n"
+        "Folk Person,Folk Album,\"Folk, World, & Country\"\n",
+        encoding="utf-8",
+    )
+    loaded = load_collection_file(csv_path)
+    by_title = {r.title: r for r in loaded}
+    assert_eq(by_title["Abbey Road"].genre, "Rock")
+    assert_eq(by_title["Abbey Road"].genres, ("Rock", "Pop"))
+    assert_eq(by_title["Folk Album"].genre, "Folk, World, & Country")
+    assert_eq(by_title["No Tags"].genre, "Unknown")
+    sorted_rows = sort_rows(loaded, "normal", sort_by="genre")
+    assert_eq(
+        [r.title for r in sorted_rows],
+        ["Folk Album", "Abbey Road", "No Tags"],
+        "Genre sort should keep Unknown last",
+    )
 
 
 def test_empty_and_bad_files(tmp: Path):
@@ -204,6 +235,7 @@ def main():
         test_csv_round_trip(tmp)
         test_json_round_trip(tmp)
         test_spreadsheet_headers(tmp)
+        test_genre_csv_and_sort(tmp)
         test_empty_and_bad_files(tmp)
         test_local_store_and_build_once(tmp)
     print("All collection import assertions passed.")

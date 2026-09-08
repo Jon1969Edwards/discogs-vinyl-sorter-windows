@@ -54,6 +54,25 @@ def main():
   assert_eq(letter_lines[2], "=== I ===")
   assert_eq(letter_lines[4], "=== Q ===")
 
+  jazz = _row("Miles Davis", "davis, miles")
+  jazz.genre = "Jazz"
+  jazz.genres = ("Jazz",)
+  rock = _row("The Beatles", "beatles")
+  rock.genre = "Rock"
+  rock.genres = ("Rock",)
+  unknown = _row("Mystery", "mystery")
+  unknown.genre = ""
+  unknown.genres = ()
+  genre_lines = generate_txt_lines([jazz, rock, unknown], divider_mode="abc", sort_by="genre")
+  assert_eq(genre_lines[0], "=== Jazz ===")
+  assert "Miles Davis" in genre_lines[1]
+  assert_eq(genre_lines[2], "=== Rock ===")
+  assert "The Beatles" in genre_lines[3]
+  assert_eq(genre_lines[4], "=== Unknown ===")
+  assert "Mystery" in genre_lines[5]
+  assert_eq(resolve_divider_mode(False, None), "none")
+  assert_eq(resolve_divider_mode(True, "letter", sort_by="genre"), "genre")
+
   print("All export divider assertions passed.")
 
 
