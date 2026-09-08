@@ -1,8 +1,10 @@
 # Spindle
 
-**Spindle** connects to your [Discogs](https://www.discogs.com) collection, filters to the formats you care about (33⅓ RPM LPs by default), sorts them for physical shelving (Artist → Title → Year, with article stripping and Discogs suffix cleanup), and exports printable shelf lists.
+**Spindle** sorts physical vinyl collections for real-world shelves (Artist → Title → Year, with article stripping and Discogs suffix cleanup) and exports printable lists.
 
-The **Auto-Sort GUI** is the recommended way to use the app: sign in with Discogs, watch your collection for changes, search and browse with cover art, and export TXT, CSV, or JSON. A full **CLI** is available for scripting and one-shot runs.
+Connect your [Discogs](https://www.discogs.com) collection, **or import a CSV/JSON file** if you do not use Discogs. Filter to the formats you care about (33⅓ RPM LPs by default).
+
+The **Auto-Sort GUI** is the recommended way to use the app: sign in with Discogs or import a collection, watch for changes, search and browse with cover art, and export TXT, CSV, or JSON. A full **CLI** is available for scripting and one-shot runs.
 
 > Not affiliated with Discogs. See [TERMS.md](TERMS.md) and [PRIVACY.md](PRIVACY.md).
 
@@ -19,13 +21,14 @@ pip install -r requirements.txt
 python autosort_gui.py
 ```
 
-On first launch, use **Sign in with Discogs** in Settings (OAuth), or paste a Personal Access Token under Advanced. See [OAUTH_SETUP.md](OAUTH_SETUP.md).
+On first launch, use **Sign in with Discogs** in Settings (OAuth), paste a Personal Access Token under Advanced, or **import a CSV/JSON** collection (no Discogs account required). See [OAUTH_SETUP.md](OAUTH_SETUP.md).
 
 ## Features
 
 | | Free | Pro |
 |---|------|-----|
 | Collection sort + export | Up to **100 records** | **Unlimited** |
+| Import CSV/JSON (no Discogs account) | ✓ | ✓ |
 | Search, album info, Discogs links | ✓ | ✓ |
 | Auto-watch collection changes | ✓ | ✓ |
 | Letter dividers in TXT export | ✓ | ✓ |
@@ -42,7 +45,8 @@ On Windows, user data (config, caches, wishlist, thumbnails) lives under `%LOCAL
 ### Auto-Sort GUI highlights
 
 - **Sign in with Discogs** (OAuth) or Personal Access Token
-- Auto-watch: regenerates shelf order when your collection changes
+- **Import CSV/JSON** to sort a collection without Discogs (Settings, first-run wizard, or CLI `--from-file`)
+- Auto-watch: regenerates shelf order when your Discogs collection changes
 - Export **TXT / CSV / JSON**, print, optional aligned columns and country codes
 - Album thumbnails, search/filter, sort by artist / title / year / price
 - **Wishlist** tab synced from your Discogs wantlist; check marketplace availability (Pro)
@@ -78,6 +82,14 @@ Tip: set `DISCOGS_TOKEN` in a `.env` file (copy from `.env.example`) to skip re-
 ```bash
 python discogs_app.py --user-agent "Spindle/1.0 (you@example.com)"
 ```
+
+No Discogs account — sort a CSV or JSON export:
+
+```bash
+python discogs_app.py --from-file ./my_collection.csv
+```
+
+The file needs **Artist** and/or **Title**. Spindle's own CSV/JSON exports import as-is. Optional columns: Year, Label, CatNo, Country, Format, Notes, DiscogsURL, CoverURL.
 
 Outputs:
 

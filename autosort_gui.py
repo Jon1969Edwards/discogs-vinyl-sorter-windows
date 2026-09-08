@@ -34,8 +34,10 @@ import tkinter as tk
 from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 
 from core.api import discogs_headers
+from core.collection_import import CollectionImportError, load_collection_file
 from core.export import generate_txt_lines, write_csv, write_json, write_txt
-from core.models import ReleaseRow, BuildResult
+from core.local_collection import LocalCollectionStore
+from core.models import SOURCE_DISCOGS, SOURCE_LOCAL, ReleaseRow, BuildResult
 from gui.spinning_record import SpinningRecord
 from gui.thumbnails import ImagePreviewPopup, ThumbnailCache
 from gui.tooltip import ToolTip
@@ -81,6 +83,29 @@ DEFAULT_USER_AGENT = "Mozilla/5.0"
 
 # Button style constants
 SECONDARY_TBUTTON_STYLE = "Secondary.TButton"
+
+
+def _row_lookup_keys(row: ReleaseRow) -> list:
+  keys = []
+  item_id = getattr(row, "item_id", "") or ""
+  if item_id:
+    keys.append(item_id)
+  rid = getattr(row, "release_id", None)
+  if rid is not None:
+    keys.extend([rid, str(rid), f"discogs:{rid}"])
+  cache_id = row.cache_id() if hasattr(row, "cache_id") else ""
+  if cache_id:
+    keys.append(cache_id)
+  return keys
+
+
+def _row_order_key(row: ReleaseRow):
+  key = row.key() if hasattr(row, "key") else ""
+  if key:
+    return key
+  if getattr(row, "release_id", None) is not None:
+    return row.release_id
+  return None
 
 
 class ManualOrderManager:
@@ -143,11 +168,11 @@ class ManualOrderManager:
     self._data["enabled"] = enabled
     self._save()
   
-  def get_order(self) -> list[int]:
+  def get_order(self) -> list:
     """Get the list of release IDs in manual order."""
     return self._data.get("order", [])
   
-  def set_order(self, release_ids: list[int]) -> None:
+  def set_order(self, release_ids: list) -> None:
     """Set the manual order."""
     self._data["order"] = release_ids
     self._data["enabled"] = True
@@ -165,28 +190,26 @@ class ManualOrderManager:
     order = self.get_order()
     if not order:
       return rows
-    
-    # Create lookup by release_id
-    row_by_id = {r.release_id: r for r in rows if r.release_id}
-    
-    # Build ordered list
+
+    row_by_id: dict = {}
+    for r in rows:
+      for key in _row_lookup_keys(r):
+        row_by_id.setdefault(key, r)
+
     ordered = []
-    seen_ids = set()
-    
-    # Add items in manual order
+    seen: set[int] = set()
     for rid in order:
-      if rid in row_by_id and rid not in seen_ids:
-        ordered.append(row_by_id[rid])
-        seen_ids.add(rid)
-    
-    # Append any new items not in manual order
+      row = row_by_id.get(rid)
+      if row is None:
+        row = row_by_id.get(str(rid))
+      if row is not None and id(row) not in seen:
+        ordered.append(row)
+        seen.add(id(row))
+
     for row in rows:
-      if row.release_id and row.release_id not in seen_ids:
+      if id(row) not in seen:
         ordered.append(row)
-        seen_ids.add(row.release_id)
-      elif not row.release_id:
-        ordered.append(row)
-    
+        seen.add(id(row))
     return ordered
   
   def clear(self) -> None:
@@ -522,6 +545,11 @@ class App:
     self.v_token = StringVar(value=saved_cfg.get("token", ""))
     self._oauth_access_token = saved_cfg.get("oauth_access_token") or ""
     self._oauth_access_secret = saved_cfg.get("oauth_access_secret") or ""
+    self._local_store = LocalCollectionStore()
+    src = saved_cfg.get("collection_source") or SOURCE_DISCOGS
+    if src == SOURCE_LOCAL and not self._local_store.has_rows():
+      src = SOURCE_DISCOGS
+    self._collection_source = src
     self.v_user_agent = StringVar(value=saved_cfg.get("user_agent", "Spindle/1.0 (+contact)"))
     self.v_output_dir = StringVar(value=saved_cfg.get("output_dir", str(Path.cwd())))
     self.v_per_page = IntVar(value=saved_cfg.get("per_page", 100))
@@ -1607,14 +1635,15 @@ class App:
       headers = {"User-Agent": "Mozilla/5.0"}
     
     # Try to load high-quality popup image for the release
-    if hasattr(self, '_thumbnail_cache') and getattr(row, 'release_id', None):
+    cache_id = row.cache_id() if hasattr(row, "cache_id") else getattr(row, "release_id", None)
+    if hasattr(self, '_thumbnail_cache') and cache_id:
       cover_url = getattr(row, 'cover_image_url', None) or getattr(row, 'thumb_url', None)
-      cover_img = self._thumbnail_cache.load_popup_image(row.release_id, cover_url, headers)
+      cover_img = self._thumbnail_cache.load_popup_image(cache_id, cover_url, headers)
       if not cover_img:
         # Fall back to preview size
-        cover_img = self._thumbnail_cache.load_preview(row.release_id, cover_url, headers)
+        cover_img = self._thumbnail_cache.load_preview(cache_id, cover_url, headers)
       if not cover_img:
-        cover_img = self._thumbnail_cache.load_photo(row.release_id)
+        cover_img = self._thumbnail_cache.load_photo(cache_id)
     # Always fall back to placeholder if no image is found
     if not cover_img and hasattr(self, '_thumbnail_cache'):
       cover_img = self._thumbnail_cache.get_placeholder()
@@ -1806,7 +1835,7 @@ class App:
     ToolTip(self._clear_btn, "Clear the search filter (Esc)")
     
     # Action buttons
-    ToolTip(self._refresh_btn, "Fetch your collection from Discogs and rebuild the shelf order (F5)")
+    ToolTip(self._refresh_btn, "Rebuild the shelf order (F5). Discogs: fetch collection. Imported file: reload saved list.")
     ToolTip(self._export_btn, "Save the current shelf order to files in the output directory (Ctrl+S)")
     ToolTip(self._print_btn, "Print the current shelf order (Ctrl+P)")
     ToolTip(self._stop_btn, "Stop the auto-refresh timer and exit (Ctrl+Q)")
@@ -1887,7 +1916,7 @@ class App:
       self._log("Manual order mode enabled. Drag rows to reorder.")
       # Save current order as the starting point
       if self._tree_rows:
-        release_ids = [r.release_id for r in self._tree_rows if r.release_id]
+        release_ids = [k for k in (_row_order_key(r) for r in self._tree_rows) if k]
         self._manual_order.set_order(release_ids)
     else:
       self._log("Manual order mode disabled. Using automatic sort.")
@@ -1935,10 +1964,11 @@ class App:
         return
 
       row = self._tree_rows[idx]
-      if not row.release_id or row.release_id == self._hover_release_id:
+      cache_id = row.cache_id() if hasattr(row, "cache_id") else (str(row.release_id) if row.release_id else "")
+      if not cache_id or cache_id == self._hover_release_id:
         return
 
-      self._hover_release_id = row.release_id
+      self._hover_release_id = cache_id
 
       try:
         headers = discogs_headers(self.v_token.get(), self.v_user_agent.get())
@@ -1948,7 +1978,7 @@ class App:
       screen_x = event.x_root
       screen_y = event.y_root
       cover_url = getattr(row, 'cover_image_url', '') or row.thumb_url
-      self._image_preview.show(row.release_id, cover_url, headers, screen_x, screen_y)
+      self._image_preview.show(cache_id, cover_url, headers, screen_x, screen_y)
     except Exception as e:
       print(f"Hover error: {e}")
   
@@ -2023,7 +2053,7 @@ class App:
     
     # Save the new order if manual mode is enabled
     if self.v_manual_order_enabled.get() and self._tree_rows:
-      release_ids = [r.release_id for r in self._tree_rows if r.release_id]
+      release_ids = [k for k in (_row_order_key(r) for r in self._tree_rows) if k]
       self._manual_order.set_order(release_ids)
       self._log(f"Order saved. {len(release_ids)} items.")
     
@@ -2104,7 +2134,7 @@ class App:
   def _save_current_order(self) -> None:
     """Save the current order to the manual order manager."""
     if self._tree_rows:
-      release_ids = [r.release_id for r in self._tree_rows if r.release_id]
+      release_ids = [k for k in (_row_order_key(r) for r in self._tree_rows) if k]
       self._manual_order.set_order(release_ids)
       self._log(f"Order saved. {len(release_ids)} items.")
 
@@ -2146,6 +2176,7 @@ class App:
         "sort_by": self.v_sort_by.get().strip(),
         "formats": self._selected_formats(),
         "divider_mode": self._divider_mode_value(),
+        "collection_source": getattr(self, "_collection_source", SOURCE_DISCOGS),
       })
       if getattr(self, "_oauth_access_token", None):
         config["oauth_access_token"] = self._oauth_access_token
@@ -2189,6 +2220,133 @@ class App:
         text="Signed in to Discogs" if signed_in else "Not signed in",
         text_color=self._colors["success"] if signed_in else self._colors["muted"],
       )
+    self._update_collection_source_ui()
+
+  def _update_collection_source_ui(self) -> None:
+    """Refresh imported-collection status and action buttons in Settings."""
+    if not hasattr(self, "_collection_status_label"):
+      return
+    using_local = getattr(self, "_collection_source", SOURCE_DISCOGS) == SOURCE_LOCAL
+    has_local = bool(getattr(self, "_local_store", None) and self._local_store.has_rows())
+    count = self._local_store.count() if has_local else 0
+    origin = ""
+    if has_local and self._local_store.imported_from():
+      origin = Path(self._local_store.imported_from()).name
+    if using_local and has_local:
+      text = f"Using imported collection ({count} albums"
+      text += f" from {origin})" if origin else ")"
+      color = self._colors["success"]
+    elif has_local:
+      text = f"Imported list saved ({count} albums). Currently using Discogs."
+      color = self._colors["muted"]
+    else:
+      text = "No imported file. Sign in with Discogs, or import CSV/JSON."
+      color = self._colors["muted"]
+    self._collection_status_label.configure(text=text, text_color=color)
+
+    def _show(widget, visible: bool) -> None:
+      if widget is None:
+        return
+      if visible:
+        if not widget.winfo_ismapped():
+          widget.pack(side="left", padx=(0, 8))
+      else:
+        widget.pack_forget()
+
+    signed_in = bool((getattr(self, "_oauth_access_token", "") or "").strip() or self.v_token.get().strip())
+    _show(getattr(self, "_use_local_btn", None), has_local and not using_local)
+    _show(getattr(self, "_use_discogs_btn", None), using_local and signed_in)
+    _show(getattr(self, "_clear_local_btn", None), has_local)
+
+  def _import_collection_file(self, path: Path | None = None, *, refresh: bool = True) -> int:
+    """Import CSV/JSON into the local collection. Returns the number of albums."""
+    if path is None:
+      chosen = filedialog.askopenfilename(
+        title="Import collection",
+        filetypes=[
+          ("Collection files", "*.csv *.json"),
+          ("CSV files", "*.csv"),
+          ("JSON files", "*.json"),
+          ("All files", "*.*"),
+        ],
+      )
+      if not chosen:
+        return 0
+      path = Path(chosen)
+    try:
+      rows = load_collection_file(path)
+    except CollectionImportError as exc:
+      messagebox.showerror("Import failed", str(exc))
+      return 0
+    except Exception as exc:
+      messagebox.showerror("Import failed", f"Could not import that file:\n{exc}")
+      return 0
+    self._local_store.save_rows(rows, imported_from=str(path))
+    self._collection_source = SOURCE_LOCAL
+    self._last_count = None
+    self._ensure_formats_show_imported(rows)
+    self._save_settings()
+    self._update_collection_source_ui()
+    self._log(f"Imported {len(rows)} albums from {path.name}.")
+    if refresh:
+      self._refresh_now()
+    return len(rows)
+
+  def _ensure_formats_show_imported(self, rows) -> None:
+    """If the current format filter would hide every imported row, show everything."""
+    from core.format_filter import filter_rows_by_format
+
+    selected = set(self._selected_formats())
+    if filter_rows_by_format(rows, selected):
+      return
+    if "everything" in self.v_formats:
+      self.v_formats["everything"].set(True)
+
+  def _use_local_collection(self) -> None:
+    if not self._local_store.has_rows():
+      messagebox.showinfo("Imported collection", "Import a CSV or JSON file first.")
+      return
+    self._collection_source = SOURCE_LOCAL
+    self._last_count = None
+    self._save_settings()
+    self._update_collection_source_ui()
+    self._log("Using imported collection.")
+    self._refresh_now()
+
+  def _use_discogs_collection(self) -> None:
+    cfg = self._get_cfg()
+    if not self._has_valid_token(cfg):
+      messagebox.showinfo("Discogs", "Sign in with Discogs first, then switch back.")
+      return
+    self._collection_source = SOURCE_DISCOGS
+    self._last_count = None
+    self._save_settings()
+    self._update_collection_source_ui()
+    self._log("Using Discogs collection.")
+    self._refresh_now()
+
+  def _clear_local_collection(self) -> None:
+    if not self._local_store.has_rows():
+      return
+    if not messagebox.askyesno(
+      "Clear import",
+      "Remove the imported collection from this computer?\n\nYour original CSV/JSON file is not deleted.",
+    ):
+      return
+    self._local_store.clear()
+    if self._collection_source == SOURCE_LOCAL:
+      self._collection_source = SOURCE_DISCOGS
+      self._last_count = None
+      self._last_result = None
+      self._tree_rows = []
+      if hasattr(self, "order_tree"):
+        self._clear_treeview()
+      self._show_order_empty_state(True)
+    self._save_settings()
+    self._update_collection_source_ui()
+    self._log("Imported collection cleared.")
+    if self._has_valid_token(self._get_cfg()):
+      self._refresh_now()
 
   def _divider_mode_value(self) -> str:
     mode = DIVIDER_MODE_BY_LABEL.get(self.v_divider_mode.get(), "none")
@@ -2328,6 +2486,8 @@ class App:
           self._oauth_signin_busy = False
           self._oauth_access_token = access_token
           self._oauth_access_secret = access_secret
+          self._collection_source = SOURCE_DISCOGS
+          self._last_count = None
           self._save_settings()
           self._update_auth_buttons_state()
           self._log("Signed in successfully. Refresh to load your collection.")
@@ -2867,9 +3027,17 @@ class App:
           self._order_loading_spinner.start()
         self._loading_started_at = time.time()
         self._start_loading_elapsed_timer()
-        self._update_loading_progress("Connecting to Discogs…", 0.0)
+        self._update_loading_progress(
+          "Loading imported collection…" if getattr(self, "_collection_source", "") == SOURCE_LOCAL else "Connecting to Discogs…",
+          0.0,
+        )
         if hasattr(self, "_order_loading_label"):
-          self._order_loading_label.configure(text="Loading your collection…")
+          loading_text = (
+            "Loading imported collection…"
+            if getattr(self, "_collection_source", "") == SOURCE_LOCAL
+            else "Loading your collection…"
+          )
+          self._order_loading_label.configure(text=loading_text)
       else:
         self._stop_loading_elapsed_timer()
         if hasattr(self, "_order_loading_spinner"):
@@ -2917,10 +3085,16 @@ class App:
         pass
     self._loading_elapsed_job = self.root.after(1000, self._tick_loading_elapsed)
 
+  def _order_empty_message(self) -> str:
+    if getattr(self, "_collection_source", SOURCE_DISCOGS) == SOURCE_LOCAL:
+      return "No albums in the imported collection. Import a CSV or JSON file in Settings."
+    return "No albums yet. Sign in with Discogs, or import a CSV/JSON collection in Settings."
+
   def _show_order_empty_state(self, show: bool) -> None:
-    """Show or hide the empty shelf placeholder message."""
+    """Show or hide the empty-state overlay over the treeview."""
     if hasattr(self, "_order_empty_label"):
       if show:
+        self._order_empty_label.configure(text=self._order_empty_message())
         self._order_empty_label.grid()
       else:
         self._order_empty_label.grid_remove()
@@ -2988,8 +3162,9 @@ class App:
     """Get the thumbnail image for a row, or placeholder if missing."""
     img = None
     if self._thumbnails_enabled:
-      if row.release_id:
-        img = self._thumbnail_cache.load_photo(row.release_id)
+      cache_id = row.cache_id() if hasattr(row, "cache_id") else None
+      if cache_id:
+        img = self._thumbnail_cache.load_photo(cache_id)
       if img is None:
         img = placeholder
     return img
@@ -2999,9 +3174,11 @@ class App:
     # Collect rows that need thumbnail downloads
     to_download = []
     for row in rows:
-      if row.release_id and row.thumb_url:
-        if not self._thumbnail_cache.has_cached(row.release_id):
-          to_download.append((row.release_id, row.thumb_url))
+      cache_id = row.cache_id() if hasattr(row, "cache_id") else None
+      url = row.artwork_url() if hasattr(row, "artwork_url") else (row.thumb_url or "")
+      if cache_id and url:
+        if not self._thumbnail_cache.has_cached(cache_id):
+          to_download.append((cache_id, url))
     
     if not to_download:
       return
@@ -3036,8 +3213,9 @@ class App:
       rows = self._tree_rows
       
       for i, (item, row) in enumerate(zip(items, rows)):
-        if row.release_id:
-          img = self._thumbnail_cache.load_photo(row.release_id)
+        cache_id = row.cache_id() if hasattr(row, "cache_id") else None
+        if cache_id:
+          img = self._thumbnail_cache.load_photo(cache_id)
           if img:
             self.order_tree.item(item, image=img)
     
@@ -3191,6 +3369,7 @@ class App:
       oauth_access_token=(self._oauth_access_token or "").strip() or None,
       oauth_access_secret=(self._oauth_access_secret or "").strip() or None,
       formats=self._selected_formats(),
+      collection_source=getattr(self, "_collection_source", SOURCE_DISCOGS),
     )
 
   def _refresh_worker_cfg(self) -> None:
@@ -3337,6 +3516,10 @@ class App:
     while not self._stop.is_set():
       cfg = self._get_worker_cfg()
       try:
+        if self._using_local_collection(cfg):
+          self._watch_local_collection(cfg, progress_callback)
+          continue
+
         if not self._has_valid_token(cfg):
           self._handle_missing_token(cfg)
           continue
@@ -3374,6 +3557,26 @@ class App:
       (cfg.oauth_access_token and cfg.oauth_access_secret)
     )
 
+  def _using_local_collection(self, cfg) -> bool:
+    return (getattr(cfg, "collection_source", "") or "") == SOURCE_LOCAL
+
+  def _watch_local_collection(self, cfg, progress_callback) -> None:
+    store = getattr(self, "_local_store", None) or LocalCollectionStore()
+    if not store.has_rows():
+      self._log("No imported collection. Import a CSV or JSON file in Settings.")
+      self._set_status_async("Import a collection file in Settings")
+      self._report_build_progress("error", "Import a CSV or JSON file in Settings.", None)
+      self._wake.clear()
+      self._wake.wait(timeout=cfg.poll_seconds)
+      return
+    force = self._force_rebuild
+    count = store.count()
+    self._force_rebuild = False
+    if self._should_build_initial(force):
+      self._handle_initial_build(cfg, count, progress_callback)
+    else:
+      self._set_status_async("Imported collection. Click Refresh to reload.")
+
   def _oauth_signin_available(self) -> bool:
     from core.oauth_discogs import oauth_is_configured
 
@@ -3386,34 +3589,40 @@ class App:
 
   def _prompt_first_run_auth(self) -> None:
     """First-run wizard, then optional sign-in when no Discogs auth is configured."""
+    wizard_ran = False
     saved = load_config()
     if not saved.get("wizard_completed"):
       from gui.first_run_wizard import FirstRunWizard
       FirstRunWizard(self).run()
+      wizard_ran = True
     if self._auth_prompt_shown:
+      return
+    if getattr(self, "_collection_source", "") == SOURCE_LOCAL and self._local_store.has_rows():
+      if wizard_ran:
+        self._refresh_now()
       return
     cfg = self._get_cfg()
     if self._has_valid_token(cfg):
       return
     self._auth_prompt_shown = True
     if not self._oauth_signin_available():
-      self._log("Discogs sign-in is not available in this build.")
+      self._log("Discogs sign-in is not available in this build. You can still import a CSV/JSON file.")
       return
     if messagebox.askyesno(
-      "Connect to Discogs",
-      "Sign in with your Discogs account to load your vinyl collection.\n\n"
-      "Your web browser will open. Click Approve on Discogs, then return here.",
+      "Connect a collection",
+      "Sign in with Discogs to load your vinyl collection, or skip and import a CSV/JSON file in Settings.\n\n"
+      "Sign in now? Your browser will open so you can Approve access.",
     ):
       self._do_oauth_signin()
     else:
-      self._log("No Discogs sign-in yet — use Sign in with Discogs in Settings.")
+      self._log("No Discogs sign-in yet — use Sign in with Discogs, or import a CSV/JSON file in Settings.")
 
   def _handle_missing_token(self, cfg):
-    self._log("Error: Not signed in to Discogs. Click Sign in with Discogs in Settings.")
-    self._set_status_async("Error: Sign in required (see Settings)")
+    self._log("Not signed in to Discogs. Sign in, or import a CSV/JSON file in Settings.")
+    self._set_status_async("Sign in or import a collection (see Settings)")
     self._report_build_progress(
       "error",
-      "Not signed in. Use Sign in with Discogs in Settings.",
+      "Sign in with Discogs, or import a CSV/JSON file in Settings.",
       None,
     )
     self._wake.clear()
@@ -3464,15 +3673,21 @@ class App:
       self._log(f"Initial collection count: {count}")
     else:
       self._log(f"Forced refresh. Collection count: {count}")
-    self._report_build_progress("update", f"Found {count} items — starting download…", 0.02)
+    if self._using_local_collection(cfg):
+      self._report_build_progress("update", f"Loaded {count} imported albums…", 0.02)
+    else:
+      self._report_build_progress("update", f"Found {count} items — starting download…", 0.02)
     self._log("Building shelf order…")
     self._set_status_async("Building…")
     result = build_once(cfg, self._log, progress_callback, self._collection_cache, self.progress_q)
     self.result_q.put(result)
     self._last_built_at = time.time()
     self._log(f"Build complete. Items: {len(result.rows_sorted)}")
-    self._set_status_async(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
-    self._update_wishlist_background(cfg)
+    if self._using_local_collection(cfg):
+      self._set_status_async(f"Built {len(result.rows_sorted)} items from imported collection.")
+    else:
+      self._set_status_async(f"Built {len(result.rows_sorted)} items. Polling every {cfg.poll_seconds}s")
+      self._update_wishlist_background(cfg)
 
   def _handle_collection_changed(self, cfg, count, progress_callback):
     self._log(f"Collection changed: {self._last_count} → {count}")

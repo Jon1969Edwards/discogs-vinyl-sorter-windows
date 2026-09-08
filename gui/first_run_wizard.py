@@ -22,7 +22,7 @@ class FirstRunWizard:
         self.top.title(f"Welcome to {APP_NAME}")
         self.top.transient(app.root)
         self.top.grab_set()
-        self.top.geometry("520x400")
+        self.top.geometry("520x440")
         self.top.resizable(False, False)
 
         self._step = 0
@@ -42,7 +42,8 @@ class FirstRunWizard:
             ctk.CTkLabel(
                 self.body,
                 text=(
-                    "Sort your Discogs vinyl collection for real-world shelves.\n\n"
+                    "Sort your vinyl collection for real-world shelves.\n\n"
+                    "Connect Discogs, or import a CSV/JSON list if you do not use that site.\n\n"
                     f"{DISCOGS_DISCLAIMER}\n\n"
                     "Your collection data stays on this computer. See Privacy Policy in Help → About."
                 ),
@@ -52,15 +53,16 @@ class FirstRunWizard:
             ).pack(anchor="w", pady=(12, 0))
             ctk.CTkButton(nav, text="Next", command=lambda: self._goto(1)).pack(side="right")
         elif self._step == 1:
-            ctk.CTkLabel(self.body, text="Sign in with Discogs", font=("Segoe UI Semibold", 20)).pack(anchor="w")
+            ctk.CTkLabel(self.body, text="Connect a collection", font=("Segoe UI Semibold", 20)).pack(anchor="w")
             ctk.CTkLabel(
                 self.body,
-                text="Connect your account to load your collection. Your browser opens once to approve access.",
+                text="Sign in with Discogs, or import a CSV/JSON file (including a Spindle export). You can do either later from Settings.",
                 wraplength=460,
                 justify="left",
             ).pack(anchor="w", pady=(12, 16))
             ctk.CTkButton(nav, text="Back", command=lambda: self._goto(0)).pack(side="left")
             ctk.CTkButton(nav, text="Sign in", command=self._signin).pack(side="right", padx=(8, 0))
+            ctk.CTkButton(nav, text="Import file…", command=self._import_file).pack(side="right", padx=(8, 0))
             ctk.CTkButton(nav, text="Skip for now", command=lambda: self._goto(2)).pack(side="right")
         elif self._step == 2:
             ctk.CTkLabel(self.body, text="Output folder", font=("Segoe UI Semibold", 20)).pack(anchor="w")
@@ -133,6 +135,11 @@ class FirstRunWizard:
                 pass
 
         self.app._do_oauth_signin(on_done=after_signin)
+
+    def _import_file(self) -> None:
+        count = self.app._import_collection_file(refresh=False)
+        if count:
+            self._goto(2)
 
     def _browse(self) -> None:
         d = filedialog.askdirectory(initialdir=self.app.v_output_dir.get())

@@ -83,6 +83,10 @@ def parse_args() -> argparse.Namespace:
     help="Show program's version number and exit.",
   )
   parser.add_argument(
+    "--from-file",
+    help="Load collection from a CSV or JSON file instead of Discogs (no token required).",
+  )
+  parser.add_argument(
     "--token",
     help="Discogs Personal Access Token. If omitted, reads DISCOGS_TOKEN env var.",
   )
@@ -201,6 +205,14 @@ def _normalize_exclude_name(s: str) -> str:
 
 def main() -> None:
     args = parse_args()
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if getattr(args, "from_file", None):
+      _run_from_file(args, out_dir)
+      return
+
+    extra_articles = [a.strip() for a in (args.articles_extra or "").split(",") if a.strip()]
+
     token = get_token(args.token)
     headers = discogs_headers(token, args.user_agent)
 
@@ -210,10 +222,6 @@ def main() -> None:
     username = ident.get("username")
     if not username:
         sys.exit("Error: Could not determine username from token.")
-
-    out_dir = Path(args.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    extra_articles = [a.strip() for a in (args.articles_extra or "").split(",") if a.strip()]
 
     rows, _ = fetch_and_report_lp_rows(args, headers, username, extra_articles)
     if not rows:
@@ -230,6 +238,20 @@ def main() -> None:
     handle_combined_json(args, out_dir, rows_sorted, rows45_sorted, rows_cd_sorted)
     handle_probable_exclusions(args, out_dir, rows)
     handle_valuable_export(args, out_dir, headers, rows_sorted, rows45_sorted, rows_cd_sorted)
+
+
+def _run_from_file(args, out_dir: Path) -> None:
+    from core.collection_import import CollectionImportError, load_collection_file
+
+    print(f"Spindle v{VERSION} (local file)")
+    try:
+        rows = load_collection_file(Path(args.from_file))
+    except CollectionImportError as exc:
+        sys.exit(f"Error: {exc}")
+    print(f"Loaded {len(rows)} albums from {args.from_file}")
+    rows_sorted = sort_rows(rows, args.various_policy)
+    write_main_outputs(args, out_dir, rows_sorted)
+    print_category_summary(rows_sorted, [], [])
 
 def fetch_and_report_lp_rows(args, headers, username, extra_articles):
     from core.models import ReleaseRow

@@ -215,6 +215,72 @@ class SettingsPanel:
     a._auth_status_label.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 14))
     a._update_auth_buttons_state()
 
+    collection_section = make_section("Collection", "📀")
+    muted_label(
+      collection_section,
+      text="Load albums from Discogs, or import a CSV/JSON file (including a Spindle export) and use the app without an account.",
+      wraplength=360,
+      justify="left",
+    ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 10))
+    a._collection_status_label = ctk.CTkLabel(
+      collection_section,
+      text="No imported file.",
+      font=(ui.FONT_SEGOE_UI, ui.FONT_SM),
+      text_color=a._colors["muted"],
+      wraplength=360,
+      justify="left",
+    )
+    a._collection_status_label.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 8))
+    coll_btns = ctk.CTkFrame(collection_section, fg_color="transparent")
+    coll_btns.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 14))
+    a._import_collection_btn = ctk.CTkButton(
+      coll_btns,
+      text="📥 Import CSV/JSON…",
+      command=a._import_collection_file,
+      width=200,
+      height=38,
+      corner_radius=8,
+      fg_color=a._colors["accent"],
+      hover_color=a._colors["button_hover"],
+      font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_SM),
+    )
+    a._import_collection_btn.pack(side="left", padx=(0, 8))
+    ToolTip(a._import_collection_btn, "Import a spreadsheet or a Spindle CSV/JSON export. No Discogs account required.")
+    a._use_local_btn = ctk.CTkButton(
+      coll_btns,
+      text="Use imported list",
+      command=a._use_local_collection,
+      width=150,
+      height=38,
+      corner_radius=8,
+      fg_color=a._colors.get("secondary_btn", "#4a5568"),
+      hover_color=a._colors.get("secondary_btn_hover", "#2d3748"),
+    )
+    ToolTip(a._use_local_btn, "Switch to the imported collection instead of Discogs")
+    a._use_discogs_btn = ctk.CTkButton(
+      coll_btns,
+      text="Use Discogs",
+      command=a._use_discogs_collection,
+      width=120,
+      height=38,
+      corner_radius=8,
+      fg_color=a._colors.get("secondary_btn", "#4a5568"),
+      hover_color=a._colors.get("secondary_btn_hover", "#2d3748"),
+    )
+    ToolTip(a._use_discogs_btn, "Switch back to your live Discogs collection")
+    a._clear_local_btn = ctk.CTkButton(
+      coll_btns,
+      text="Clear import",
+      command=a._clear_local_collection,
+      width=120,
+      height=38,
+      corner_radius=8,
+      fg_color=a._colors.get("secondary_btn", "#4a5568"),
+      hover_color=a._colors.get("secondary_btn_hover", "#2d3748"),
+    )
+    ToolTip(a._clear_local_btn, "Remove the imported list from this computer. The original file is not deleted.")
+    a._update_collection_source_ui()
+
     output_section = make_section("Output Settings", "📁")
     muted_label(output_section, text="Output directory").grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
     a._out_row = ctk.CTkFrame(output_section, fg_color="transparent")
@@ -518,7 +584,7 @@ class SettingsPanel:
         self._sync_scrollable_canvas(a._settings_scroll, panel)
 
       # Buttons / menus that keep stale theme colors
-      for btn_name in ("_signin_btn", "_browse_btn", "_refresh_prices_btn", "_settings_collapse_btn", "_settings_expand_btn"):
+      for btn_name in ("_signin_btn", "_browse_btn", "_refresh_prices_btn", "_settings_collapse_btn", "_settings_expand_btn", "_import_collection_btn"):
         btn = getattr(a, btn_name, None)
         if btn is not None:
           try:
@@ -530,6 +596,13 @@ class SettingsPanel:
           a._signout_btn.configure(fg_color=secondary, hover_color=secondary_hover)
         except Exception:
           pass
+      for extra_btn in ("_use_local_btn", "_use_discogs_btn", "_clear_local_btn"):
+        btn = getattr(a, extra_btn, None)
+        if btn is not None:
+          try:
+            btn.configure(fg_color=secondary, hover_color=secondary_hover)
+          except Exception:
+            pass
       for menu_name in ("_divider_mode_combo", "_currency_combo", "_sort_combo"):
         menu = getattr(a, menu_name, None)
         if menu is not None:

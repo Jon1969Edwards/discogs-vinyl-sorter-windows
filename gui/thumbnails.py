@@ -25,10 +25,12 @@ def _is_low_quality_discogs_url(url: str) -> bool:
   return "/q:40/" in url or "/h:150/" in url or "/w:150/" in url
 
 
-def _fetch_hires_image_url(release_id: int, headers: dict) -> str | None:
+def _fetch_hires_image_url(release_id: int | str, headers: dict) -> str | None:
   """Fetch the high-resolution primary image URL for a release from the Discogs API."""
   import requests
 
+  if not str(release_id).isdigit():
+    return None
   try:
     url = f"https://api.discogs.com/releases/{release_id}"
     resp = requests.get(url, headers=headers, timeout=10)
@@ -52,9 +54,9 @@ class ThumbnailCache:
   def __init__(self):
     self.cache_dir = THUMBNAIL_CACHE_DIR
     self.cache_dir.mkdir(exist_ok=True)
-    self._photo_cache: dict[int, ImageTk.PhotoImage] = {}
-    self._preview_cache: dict[int, ImageTk.PhotoImage] = {}
-    self._popup_cache: dict[int, ImageTk.PhotoImage] = {}
+    self._photo_cache: dict[int | str, ImageTk.PhotoImage] = {}
+    self._preview_cache: dict[int | str, ImageTk.PhotoImage] = {}
+    self._popup_cache: dict[int | str, ImageTk.PhotoImage] = {}
     self._placeholder: ImageTk.PhotoImage | None = None
     self._pil_available = False
     self._check_pil()
@@ -70,14 +72,15 @@ class ThumbnailCache:
   def is_available(self) -> bool:
     return self._pil_available
 
-  def _get_cache_path(self, release_id: int, preview: bool = False) -> Path:
+  def _get_cache_path(self, release_id: int | str, preview: bool = False) -> Path:
     suffix = "_preview" if preview else ""
-    return self.cache_dir / f"{release_id}{suffix}.png"
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in str(release_id))
+    return self.cache_dir / f"{safe}{suffix}.png"
 
-  def has_cached(self, release_id: int) -> bool:
+  def has_cached(self, release_id: int | str) -> bool:
     return self._get_cache_path(release_id).exists()
 
-  def get_photo(self, release_id: int) -> ImageTk.PhotoImage | None:
+  def get_photo(self, release_id: int | str) -> ImageTk.PhotoImage | None:
     return self._photo_cache.get(release_id)
 
   def get_placeholder(self) -> ImageTk.PhotoImage | None:
@@ -149,8 +152,9 @@ class ThumbnailCache:
     self._popup_cache.clear()
     self._placeholder = None
 
-  def _get_popup_cache_path(self, release_id: int) -> Path:
-    return self.cache_dir / f"{release_id}_popup.png"
+  def _get_popup_cache_path(self, release_id: int | str) -> Path:
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in str(release_id))
+    return self.cache_dir / f"{safe}_popup.png"
 
   def load_popup_image(
     self, release_id: int, cover_url: str = None, headers: dict = None

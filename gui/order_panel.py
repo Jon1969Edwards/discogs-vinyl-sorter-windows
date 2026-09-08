@@ -121,7 +121,7 @@ class OrderPanel:
 
     a._order_empty_label = ctk.CTkLabel(
       order_wrap,
-      text="No albums yet. Sign in with Discogs and click Refresh to load your collection.",
+      text="No albums yet. Sign in with Discogs, or import a CSV/JSON collection in Settings.",
       font=(ui.FONT_SEGOE_UI, ui.FONT_LG),
       text_color=a._colors["muted"],
       justify="center",

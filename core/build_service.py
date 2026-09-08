@@ -25,7 +25,8 @@ from core.api import (
     get_identity,
 )
 from core.export import generate_txt_lines
-from core.models import BuildResult
+from core.local_collection import LocalCollectionStore
+from core.models import SOURCE_LOCAL, LOCAL_USERNAME, BuildResult
 from core.oauth_discogs import get_oauth_session, _get_consumer_credentials
 from core.paths import migrate_user_file
 from core.sorting import collect_all_rows, sort_rows
@@ -52,6 +53,7 @@ class AutoConfig:
   oauth_access_token: str | None = None
   oauth_access_secret: str | None = None
   formats: list[str] | None = None
+  collection_source: str = "discogs"
 
 
 class CollectionCache:
@@ -219,12 +221,22 @@ def get_collection_count(headers: dict | None = None, username: str = "", sessio
   return int(data.get("pagination", {}).get("items", 0))
 
 
-def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = None, cache: CollectionCache = None, main_progress_q=None) -> BuildResult:
+def build_once(
+  cfg: AutoConfig,
+  log: callable,
+  progress_callback: callable = None,
+  cache: CollectionCache = None,
+  main_progress_q=None,
+  local_store: LocalCollectionStore | None = None,
+) -> BuildResult:
   """Build the shelf order once, with granular progress updates."""
 
   def report(action, message, fraction=None):
     if main_progress_q:
       main_progress_q.put((action, message, fraction))
+
+  if (cfg.collection_source or "") == SOURCE_LOCAL:
+    return _build_from_local(cfg, log, report, local_store)
 
   def get_headers_and_username():
     report("update", "Connecting to Discogs…", 0.03)
@@ -254,13 +266,7 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
         log("No matching items found.")
         report("error", "No matching items found.")
         return []
-      from core.format_filter import DEFAULT_FORMAT_SELECTION, filter_rows_by_format
-
-      selected = set(cfg.formats or DEFAULT_FORMAT_SELECTION)
-      before = len(rows)
-      rows = filter_rows_by_format(rows, selected)
-      if selected and "everything" not in selected and before != len(rows):
-        log(f"Format filter {sorted(selected)}: {len(rows)} of {before} items.")
+      rows = _filter_cfg_formats(cfg, rows, log)
       if not rows:
         log("No items match the selected format filters.")
         report("error", "No items match the selected format filters.")
@@ -310,6 +316,54 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
     return BuildResult(username=username, rows_sorted=[], lines=[])
   need_prices = handle_prices_if_needed(headers, session, rows)
   return sort_and_generate_output(rows, need_prices, username)
+
+
+def _filter_cfg_formats(cfg: AutoConfig, rows, log: callable):
+  from core.format_filter import DEFAULT_FORMAT_SELECTION, filter_rows_by_format
+
+  selected = set(cfg.formats or DEFAULT_FORMAT_SELECTION)
+  before = len(rows)
+  rows = filter_rows_by_format(rows, selected)
+  if selected and "everything" not in selected and before != len(rows):
+    log(f"Format filter {sorted(selected)}: {len(rows)} of {before} items.")
+  return rows
+
+
+def _build_from_local(
+  cfg: AutoConfig,
+  log: callable,
+  report: callable,
+  local_store: LocalCollectionStore | None,
+) -> BuildResult:
+  """Build shelf order from a persisted imported collection (no Discogs)."""
+  store = local_store or LocalCollectionStore()
+  out_dir = Path(cfg.output_dir)
+  out_dir.mkdir(parents=True, exist_ok=True)
+  report("update", "Loading imported collection…", 0.1)
+  log("Loading imported collection…")
+  rows = store.load_rows()
+  if not rows:
+    log("No imported collection found. Import a CSV or JSON file in Settings.")
+    report("error", "No imported collection found.")
+    return BuildResult(username=LOCAL_USERNAME, rows_sorted=[], lines=[])
+
+  log(f"Imported collection: {len(rows)} items.")
+  report("update", f"Loaded {len(rows)} imported albums…", 0.5)
+  rows = _filter_cfg_formats(cfg, rows, log)
+  if not rows:
+    log("No items match the selected format filters.")
+    report("error", "No items match the selected format filters.")
+    return BuildResult(username=LOCAL_USERNAME, rows_sorted=[], lines=[])
+
+  if cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc"):
+    log("Marketplace prices need a Discogs collection. Skipped for imported files.")
+
+  report("update", f"Sorting {len(rows)} releases…", 0.9)
+  rows_sorted = sort_rows(rows, "normal", sort_by=cfg.sort_by)
+  report("update", "Preparing shelf order…", 0.96)
+  lines = generate_txt_lines(rows_sorted, dividers=False, align=False, show_country=False, show_price=False)
+  report("done", "Done!", 1.0)
+  return BuildResult(username=LOCAL_USERNAME, rows_sorted=rows_sorted, lines=lines)
 
 
 def _get_user_headers(cfg: AutoConfig, log: callable):

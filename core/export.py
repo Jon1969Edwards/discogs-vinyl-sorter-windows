@@ -153,44 +153,34 @@ def write_txt(
             f.write(line + "\n")
 
 
+def _row_json_dict(r: ReleaseRow) -> Dict[str, object]:
+    return {
+        "artist": r.artist_display,
+        "title": r.title,
+        "year": r.year,
+        "label": r.label,
+        "catno": r.catno,
+        "country": r.country,
+        "format": r.format_str,
+        "discogs_url": r.discogs_url,
+        "notes": r.notes,
+        "sort_artist": r.sort_artist,
+        "sort_title": r.sort_title,
+        "release_id": r.release_id,
+        "source": r.source,
+        "item_id": r.item_id,
+        "thumb_url": r.thumb_url,
+        "cover_image_url": r.cover_image_url,
+    }
+
+
 def write_json(rows: List[ReleaseRow], out_path: Path) -> None:
-    data = [
-        {
-            "artist": r.artist_display,
-            "title": r.title,
-            "year": r.year,
-            "label": r.label,
-            "catno": r.catno,
-            "country": r.country,
-            "format": r.format_str,
-            "discogs_url": r.discogs_url,
-            "notes": r.notes,
-            "sort_artist": r.sort_artist,
-            "sort_title": r.sort_title,
-        }
-        for r in rows
-    ]
     with out_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump([_row_json_dict(r) for r in rows], f, ensure_ascii=False, indent=2)
 
 
 def rows_to_json(rows: List[ReleaseRow]) -> List[Dict[str, object]]:
-    return [
-        {
-            "artist": r.artist_display,
-            "title": r.title,
-            "year": r.year,
-            "label": r.label,
-            "catno": r.catno,
-            "country": r.country,
-            "format": r.format_str,
-            "discogs_url": r.discogs_url,
-            "notes": r.notes,
-            "sort_artist": r.sort_artist,
-            "sort_title": r.sort_title,
-        }
-        for r in rows
-    ]
+    return [_row_json_dict(r) for r in rows]
 
 
 def write_csv(rows: List[ReleaseRow], out_path: Path) -> None:
@@ -204,6 +194,9 @@ def write_csv(rows: List[ReleaseRow], out_path: Path) -> None:
         "Format",
         "DiscogsURL",
         "Notes",
+        "ReleaseID",
+        "CoverURL",
+        "ThumbURL",
     ]
     with out_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -220,5 +213,8 @@ def write_csv(rows: List[ReleaseRow], out_path: Path) -> None:
                     r.format_str,
                     r.discogs_url,
                     r.notes,
+                    r.release_id or "",
+                    r.cover_image_url,
+                    r.thumb_url,
                 ]
             )

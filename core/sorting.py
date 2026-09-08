@@ -425,6 +425,7 @@ def build_release_row(
   thumb_url = basic.get("thumb") or ""
   cover_image_url = basic.get("cover_image") or ""
 
+  parsed_id = int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None
   return ReleaseRow(
     artist_display=artist_disp,
     title=title,
@@ -435,11 +436,13 @@ def build_release_row(
     format_str=fmt_desc,
     discogs_url=url,
     notes=(item.get("notes") or ""),
-    release_id=int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None,
+    release_id=parsed_id,
     sort_artist=sort_artist,
     sort_title=sort_title,
     thumb_url=thumb_url,
     cover_image_url=cover_image_url,
+    source="discogs",
+    item_id=f"discogs:{parsed_id}" if parsed_id is not None else "",
   )
 
 
@@ -498,6 +501,7 @@ def _lp_build_row(
         lnf_exclude=lnf_exclude,
         lnf_safe_bands=lnf_safe_bands,
     )
+    parsed_id = int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None
     return ReleaseRow(
         artist_display=artist_disp,
         title=title,
@@ -508,12 +512,14 @@ def _lp_build_row(
         format_str=fmt_desc,
         discogs_url=url,
         notes=(item.get("notes") or ""),
-        release_id=int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None,
+        release_id=parsed_id,
         master_id=int(master_id_raw) if isinstance(master_id_raw, int) or (isinstance(master_id_raw, str) and master_id_raw.isdigit()) else None,
         sort_artist=sort_artist,
         sort_title=sort_title,
         thumb_url=thumb_url,
         cover_image_url=cover_image_url,
+        source="discogs",
+        item_id=f"discogs:{parsed_id}" if parsed_id is not None else "",
     )
 
 def _lp_should_exclude(basic: Dict, lp_strict: bool, lp_probable: bool) -> bool:
