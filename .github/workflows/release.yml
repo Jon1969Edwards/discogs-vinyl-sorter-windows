@@ -47,6 +47,7 @@ jobs:
           python test_sorting.py
           python test_format_filter.py
           python test_audio_preview.py
+          python test_export_dividers.py
 
       - name: Build PyInstaller bundle
         run: |

@@ -7,7 +7,7 @@ match FORMAT_FILTERS except "everything", which means no category restriction.
 
 from __future__ import annotations
 
-from typing import Iterable, List, Sequence, Set, TypeVar
+from typing import List, Sequence, Set, TypeVar
 
 T = TypeVar("T")
 
@@ -34,11 +34,6 @@ def parse_saved_formats(saved: object) -> List[str]:
     return list(DEFAULT_FORMAT_SELECTION)
   keys = [k for k in saved if isinstance(k, str) and k in VALID_FORMAT_KEYS]
   return keys if keys else list(DEFAULT_FORMAT_SELECTION)
-
-
-def selected_format_keys(checked: Iterable[str]) -> List[str]:
-  """Return format keys that are currently selected (for persistence)."""
-  return list(checked)
 
 
 def filter_rows_by_format(rows: Sequence[T], selected: Set[str]) -> List[T]:

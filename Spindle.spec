@@ -5,7 +5,6 @@ datas = []
 binaries = []
 hiddenimports = [
     'core.discogs_oauth_secrets',
-    'core.discogs_oauth_app',
     'core.license_secrets',
     'core.config_store',
     'core.format_filter',

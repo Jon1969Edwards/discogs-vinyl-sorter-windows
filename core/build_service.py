@@ -315,7 +315,7 @@ def build_once(cfg: AutoConfig, log: callable, progress_callback: callable = Non
 def _get_user_headers(cfg: AutoConfig, log: callable):
     """Return (token, headers, session, username). Use OAuth if available, else token."""
     if cfg.oauth_access_token and cfg.oauth_access_secret:
-        creds = _get_consumer_credentials(None)
+        creds = _get_consumer_credentials()
         if not creds:
             raise RuntimeError(
                 "Discogs sign-in is saved but this build is missing OAuth credentials. "

@@ -11,11 +11,10 @@ This module provides functions for:
 from __future__ import annotations
 
 import re
-import sys
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from core.models import ReleaseRow
-from core.api import iterate_collection, fetch_release_price, api_get, API_BASE
+from core.api import iterate_collection
 
 
 # ============================================================================

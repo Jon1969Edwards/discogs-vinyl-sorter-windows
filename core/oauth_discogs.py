@@ -4,7 +4,7 @@ Discogs OAuth 1.0a flow for user sign-in.
 Runs the 3-legged OAuth flow with a local callback server.
 Consumer key/secret: DISCOGS_CONSUMER_KEY / DISCOGS_CONSUMER_SECRET (env or .env),
 or optional bundled defaults in core.discogs_oauth_secrets (gitignored; see
-discogs_oauth_secrets.example.py) or core.discogs_oauth_app (same variable names).
+discogs_oauth_secrets.example.py).
 """
 
 from __future__ import annotations
@@ -43,38 +43,31 @@ CALLBACK_PORT = 8765
 CALLBACK_PATH = "/callback"
 
 
-def _get_consumer_credentials(config: Optional[dict] = None) -> Optional[Tuple[str, str]]:
-    """Get consumer key and secret from config, environment, or bundled app defaults."""
+def _get_consumer_credentials() -> Optional[Tuple[str, str]]:
+    """Get consumer key and secret from environment or bundled secrets."""
     _ensure_dotenv_loaded()
-    key = None
-    secret = None
-    if config:
-        key = config.get("consumer_key") or config.get("consumer_key_encrypted")
-        secret = config.get("consumer_secret") or config.get("consumer_secret_encrypted")
-    if not key:
-        key = os.environ.get("DISCOGS_CONSUMER_KEY")
-    if not secret:
-        secret = os.environ.get("DISCOGS_CONSUMER_SECRET")
+    key = os.environ.get("DISCOGS_CONSUMER_KEY")
+    secret = os.environ.get("DISCOGS_CONSUMER_SECRET")
     if key and secret:
         return (key.strip(), secret.strip())
-    for mod_name in ("core.discogs_oauth_secrets", "core.discogs_oauth_app"):
-        try:
-            if mod_name in sys.modules:
-                mod = importlib.reload(sys.modules[mod_name])
-            else:
-                mod = importlib.import_module(mod_name)
-            bk = (getattr(mod, "BUNDLED_DISCOGS_CONSUMER_KEY", "") or "").strip()
-            bs = (getattr(mod, "BUNDLED_DISCOGS_CONSUMER_SECRET", "") or "").strip()
-            if bk and bs:
-                return (bk, bs)
-        except ImportError:
-            continue
+    try:
+        mod_name = "core.discogs_oauth_secrets"
+        if mod_name in sys.modules:
+            mod = importlib.reload(sys.modules[mod_name])
+        else:
+            mod = importlib.import_module(mod_name)
+        bk = (getattr(mod, "BUNDLED_DISCOGS_CONSUMER_KEY", "") or "").strip()
+        bs = (getattr(mod, "BUNDLED_DISCOGS_CONSUMER_SECRET", "") or "").strip()
+        if bk and bs:
+            return (bk, bs)
+    except ImportError:
+        pass
     return None
 
 
-def oauth_is_configured(config: Optional[dict] = None) -> bool:
+def oauth_is_configured() -> bool:
     """Return True when this build can offer one-click Discogs sign-in."""
-    return _get_consumer_credentials(config) is not None
+    return _get_consumer_credentials() is not None
 
 
 def save_consumer_credentials(consumer_key: str, consumer_secret: str) -> None:

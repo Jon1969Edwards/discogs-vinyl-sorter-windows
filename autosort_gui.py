@@ -2285,7 +2285,7 @@ class App:
     """Return consumer credentials from the bundled production build."""
     from core.oauth_discogs import _get_consumer_credentials
 
-    creds = _get_consumer_credentials(None)
+    creds = _get_consumer_credentials()
     if creds:
       return creds
     messagebox.showerror(

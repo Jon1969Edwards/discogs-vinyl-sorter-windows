@@ -27,6 +27,7 @@ jobs:
           python test_sorting.py
           python test_format_filter.py
           python test_audio_preview.py
+          python test_export_dividers.py
 
       - name: Smoke import GUI module
         run: python -c "import autosort_gui; print('import ok')"
