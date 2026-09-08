@@ -36,6 +36,7 @@ from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 from core.api import discogs_headers
 from core.collection_import import CollectionImportError, load_collection_file
 from core.export import generate_txt_lines, write_csv, write_json, write_txt
+from core.genre_overrides import GenreOverrides
 from core.local_collection import LocalCollectionStore
 from core.models import SOURCE_DISCOGS, SOURCE_LOCAL, ReleaseRow, BuildResult
 from gui.spinning_record import SpinningRecord
@@ -576,6 +577,7 @@ class App:
     # Initialize the manual order manager
     self._manual_order = ManualOrderManager()
     self.v_manual_order_enabled = BooleanVar(value=self._manual_order.is_enabled())
+    self._genre_overrides = GenreOverrides()
     
     # Initialize thumbnail cache and preview popup
     self._thumbnail_cache = ThumbnailCache()
@@ -1369,13 +1371,7 @@ class App:
     idx = self.wishlist_tree.index(item[0])
     if idx < 0 or idx >= len(self._wishlist_rows):
       return
-    row = self._wishlist_rows[idx]
-    popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
-    _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
-    details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
-    self._populate_album_details(details_frame, row, fg, bg, row_offset)
-    self._setup_details_scroll(details_frame, details_canvas)
-    self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg, show_wishlist_button=True)
+    self._show_album_popup(self._wishlist_rows[idx], show_wishlist_button=True)
 
   def _on_wishlist_right_click(self, event):
     from core.wishlist import remove_from_wishlist
@@ -1552,17 +1548,104 @@ class App:
     log_scroll.config(command=self.log.yview)
 
   def _on_album_double_click(self, event):
-    """Show a popup with album details when a row is double-clicked."""
+    """Show album details, or edit genre when the Genre cell is double-clicked."""
     item_id = self.order_tree.identify_row(event.y)
     row = self._get_row_from_item_id(item_id)
     if not row:
       return
+    if self.order_tree.identify_column(event.x) == "#4":
+      self._edit_row_genre(row)
+      return
+    self._show_album_popup(row)
+
+  def _on_order_tree_right_click(self, event):
+    item_id = self.order_tree.identify_row(event.y)
+    row = self._get_row_from_item_id(item_id)
+    if not row:
+      return
+    self.order_tree.selection_set(item_id)
+    menu = tk.Menu(self.root, tearoff=0)
+    menu.add_command(label="Edit genre…", command=lambda: self._edit_row_genre(row))
+    menu.add_command(label="Album info", command=lambda: self._show_album_popup(row))
+    try:
+      menu.tk_popup(event.x_root, event.y_root)
+    finally:
+      menu.grab_release()
+
+  def _show_album_popup(self, row, *, show_wishlist_button: bool = False):
     popup, bg, fg, accent, btn_bg, btn_fg = self._create_album_popup_window(row)
     _, row_offset = self._add_album_cover_to_popup(popup, row, bg)
     details_frame, details_canvas = self._add_scrollable_details_area(popup, bg)
-    self._populate_album_details(details_frame, row, fg, bg, row_offset)
+    self._populate_album_details(
+      details_frame, row, fg, bg, row_offset,
+      popup=popup,
+      allow_edit_genre=not show_wishlist_button,
+    )
     self._setup_details_scroll(details_frame, details_canvas)
-    self._add_popup_buttons(popup, row, accent, btn_bg, btn_fg, bg)
+    self._add_popup_buttons(
+      popup, row, accent, btn_bg, btn_fg, bg,
+      show_wishlist_button=show_wishlist_button,
+      allow_edit_genre=not show_wishlist_button,
+    )
+
+  def _genre_suggestions(self) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    rows = list(getattr(self, "_last_result", None) and self._last_result.rows_sorted or [])
+    for row in rows:
+      names = list(getattr(row, "source_genres", ()) or ())
+      names.extend(getattr(row, "genres", ()) or ())
+      names.append(row.genre_label() if hasattr(row, "genre_label") else (getattr(row, "genre", "") or ""))
+      for name in names:
+        text = str(name).strip()
+        if not text:
+          continue
+        key = text.lower()
+        if key in seen:
+          continue
+        seen.add(key)
+        out.append(text)
+    return sorted(out, key=str.lower)
+
+  def _edit_row_genre(self, row, popup=None) -> None:
+    from gui.genre_dialog import prompt_edit_genre
+
+    key = row.key() if hasattr(row, "key") else ""
+    if not key:
+      messagebox.showwarning(
+        "Edit genre",
+        "This album has no id, so a genre edit cannot be saved.",
+      )
+      return
+    current = "; ".join(row.genres) if getattr(row, "genres", ()) else (
+      row.genre_label() if hasattr(row, "genre_label") else (getattr(row, "genre", "") or "")
+    )
+    result = prompt_edit_genre(
+      popup or self.root,
+      album_label=f"{getattr(row, 'artist_display', '')} — {getattr(row, 'title', '')}",
+      current=current,
+      suggestions=self._genre_suggestions(),
+      has_override=self._genre_overrides.has(row),
+      colors=getattr(self, "_colors", {}),
+    )
+    if not result:
+      return
+    action, text = result
+    if action == "reset":
+      self._genre_overrides.clear_for_row(row)
+      self._log(f"Genre reset: {row.artist_display} — {row.title}")
+    elif not self._genre_overrides.set_for_row(row, text):
+      messagebox.showwarning("Edit genre", "Could not save this genre edit.")
+      return
+    else:
+      self._log(f"Genre set to {row.genre_label()}: {row.artist_display} — {row.title}")
+    if popup is not None:
+      try:
+        popup.destroy()
+      except Exception:
+        pass
+    if getattr(self, "_last_result", None) is not None:
+      self._render_order(self._last_result)
 
   def _get_row_from_item_id(self, item_id):
     if not item_id:
@@ -1678,7 +1761,7 @@ class App:
     details_canvas.create_window((0,0), window=details_frame, anchor="nw")
     return details_frame, details_canvas
 
-  def _populate_album_details(self, details_frame, row, fg, bg, row_offset):
+  def _populate_album_details(self, details_frame, row, fg, bg, row_offset, *, popup=None, allow_edit_genre: bool = False):
     details = [
       ("Artist", getattr(row, "artist_display", "")),
       ("Title", getattr(row, "title", "")),
@@ -1698,11 +1781,29 @@ class App:
       details.append(("Your notes", notes))
 
     for i, (label, value) in enumerate(details):
-      if value:
+      if not value and not (label == "Genre" and allow_edit_genre):
+        continue
+      tk.Label(
+        details_frame, text=label + ":", anchor="e",
+        font=(FONT_SEGOE_UI, FONT_LG, "bold"), bg=bg, fg=fg,
+      ).grid(row=i + row_offset, column=0, sticky="e", padx=(0, 18), pady=10)
+      if label == "Genre" and allow_edit_genre:
+        value_fr = tk.Frame(details_frame, bg=bg)
+        value_fr.grid(row=i + row_offset, column=1, sticky="w", padx=(0, 12), pady=10)
         tk.Label(
-          details_frame, text=label + ":", anchor="e",
-          font=(FONT_SEGOE_UI, FONT_LG, "bold"), bg=bg, fg=fg,
-        ).grid(row=i + row_offset, column=0, sticky="e", padx=(0, 18), pady=10)
+          value_fr, text=str(value or "Unknown"), anchor="w",
+          font=(FONT_SEGOE_UI, FONT_LG), bg=bg, fg=fg,
+          wraplength=360, justify="left",
+        ).pack(side="left")
+        tk.Button(
+          value_fr, text="Edit",
+          command=lambda: self._edit_row_genre(row, popup=popup),
+          font=(FONT_SEGOE_UI, FONT_SM),
+          bg=self._colors.get("accent", "#6c63ff") if hasattr(self, "_colors") else "#6c63ff",
+          fg=self._colors.get("button_fg", "#ffffff") if hasattr(self, "_colors") else "#ffffff",
+          relief="groove",
+        ).pack(side="left", padx=(12, 0))
+      else:
         tk.Label(
           details_frame, text=str(value), anchor="w",
           font=(FONT_SEGOE_UI, FONT_LG), bg=bg, fg=fg,
@@ -1734,7 +1835,7 @@ class App:
       details_canvas.unbind_all("<Button-5>")
     details_canvas.master.master.protocol("WM_DELETE_WINDOW", lambda: (details_canvas.master.master.destroy(), _unbind_mousewheel()))
 
-  def _add_popup_buttons(self, popup, row, accent, btn_bg, btn_fg, bg, *, show_wishlist_button: bool = False):
+  def _add_popup_buttons(self, popup, row, accent, btn_bg, btn_fg, bg, *, show_wishlist_button: bool = False, allow_edit_genre: bool = False):
     import webbrowser
 
     # Use the stacked button frame if present (from _add_album_cover_to_popup)
@@ -1810,6 +1911,14 @@ class App:
         btn_frame, textvariable=wishlist_state, command=toggle_wishlist,
         font=(FONT_SEGOE_UI, FONT_MD), bg="#ffb347", fg="#222",
         activebackground="#ffd580", activeforeground="#222", relief="groove",
+      ).pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
+
+    if allow_edit_genre:
+      tk.Button(
+        btn_frame, text="Edit genre",
+        command=lambda: self._edit_row_genre(row, popup=popup),
+        font=(FONT_SEGOE_UI, FONT_MD), bg=btn_bg, fg=btn_fg,
+        activebackground=accent, activeforeground=btn_fg, relief="groove",
       ).pack(side="top", fill="x", padx=12, pady=(0, 8), ipadx=12, ipady=4)
 
     tk.Button(btn_frame, text="Close", command=popup.destroy, font=(FONT_SEGOE_UI, FONT_MD), bg=btn_bg, fg=btn_fg, activebackground=accent, activeforeground=btn_fg, relief="groove").pack(side="top", fill="x", padx=12, pady=(0, 0), ipadx=12, ipady=4)

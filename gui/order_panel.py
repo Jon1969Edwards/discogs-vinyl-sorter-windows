@@ -216,6 +216,7 @@ class OrderPanel:
     a.order_tree.bind("<Motion>", a._on_tree_motion)
     a.order_tree.bind("<Leave>", a._on_tree_leave)
     a.order_tree.bind("<Double-1>", a._on_album_double_click)
+    a.order_tree.bind("<Button-3>", a._on_order_tree_right_click)
     a._image_preview = ImagePreviewPopup(a.root, a._thumbnail_cache)
     a._hover_release_id = None
     a.order_text = tk.Text(order_wrap, height=1, width=1)

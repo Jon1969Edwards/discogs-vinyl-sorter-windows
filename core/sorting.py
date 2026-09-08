@@ -489,6 +489,8 @@ def build_release_row(
     genre=primary_genre(genres),
     genres=genres,
     styles=styles,
+    source_genre=primary_genre(genres),
+    source_genres=genres,
   )
 
 
@@ -571,6 +573,8 @@ def _lp_build_row(
         genre=primary_genre(genres),
         genres=genres,
         styles=styles,
+        source_genre=primary_genre(genres),
+        source_genres=genres,
     )
 
 def _lp_should_exclude(basic: Dict, lp_strict: bool, lp_probable: bool) -> bool:

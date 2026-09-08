@@ -303,6 +303,8 @@ def _record_to_row(mapped: Mapping[str, Any], *, default_source: str) -> Optiona
         genre=primary_genre(genres) if genres else UNKNOWN_GENRE,
         genres=genres,
         styles=styles,
+        source_genre=primary_genre(genres) if genres else UNKNOWN_GENRE,
+        source_genres=genres,
     )
 
 

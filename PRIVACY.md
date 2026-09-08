@@ -19,6 +19,7 @@ stays on your computer under a local app-data folder (on Windows:
 | Discogs OAuth tokens | `config.json` | Sign in and access your collection |
 | Collection / price cache | `collection_cache.json` | Faster reloads |
 | Manual shelf order | `manual_order.json` | Your custom sort order |
+| Genre edits | `genre_overrides.json` | Your corrections when Discogs genre is wrong |
 | Wishlist | `wishlist.json` | Local wishlist and availability checks |
 | Thumbnail cache | `thumbnails/` | Album artwork |
 | License key (Pro) | `config.json` | Unlock Pro features offline |

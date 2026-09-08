@@ -34,6 +34,8 @@ class ReleaseRow:
     genre: str = ""
     genres: tuple = field(default_factory=tuple)
     styles: tuple = field(default_factory=tuple)
+    source_genre: str = ""
+    source_genres: tuple = field(default_factory=tuple)
 
     def key(self) -> str:
         """Stable identity for manual order, thumbnails, and caches."""
@@ -64,6 +66,20 @@ class ReleaseRow:
 
     def styles_display(self) -> str:
         return ", ".join(self.styles) if self.styles else ""
+
+    def capture_source_genre(self) -> None:
+        """Remember Discogs/import genre once, so a later edit can be undone."""
+        if self.source_genre or self.source_genres:
+            return
+        self.source_genre = self.genre
+        self.source_genres = tuple(self.genres or ())
+
+    def restore_source_genre(self) -> None:
+        self.capture_source_genre()
+        self.genre = self.source_genre
+        self.genres = tuple(self.source_genres or ())
+        if not (self.genre or "").strip() and not self.genres:
+            self.genre = UNKNOWN_GENRE
 
 
 @dataclass

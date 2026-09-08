@@ -233,6 +233,9 @@ def main() -> None:
     if not rows:
         return
 
+    from core.genre_overrides import apply_genre_overrides
+    apply_genre_overrides(rows)
+
     rows_sorted = sort_rows(rows, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
     write_main_outputs(args, out_dir, rows_sorted)
 
@@ -255,6 +258,8 @@ def _run_from_file(args, out_dir: Path) -> None:
     except CollectionImportError as exc:
         sys.exit(f"Error: {exc}")
     print(f"Loaded {len(rows)} albums from {args.from_file}")
+    from core.genre_overrides import apply_genre_overrides
+    apply_genre_overrides(rows)
     rows_sorted = sort_rows(rows, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
     write_main_outputs(args, out_dir, rows_sorted)
     print_category_summary(rows_sorted, [], [])
@@ -335,6 +340,8 @@ def handle_optional_45s(args, headers, username, extra_articles, out_dir):
             lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
             lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
         )
+        from core.genre_overrides import apply_genre_overrides
+        apply_genre_overrides(rows45)
         rows45_sorted = sort_rows(rows45, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
         txt45 = out_dir / "vinyl45_shelf_order.txt"
         csv45 = out_dir / "vinyl45_shelf_order.csv"
@@ -372,6 +379,8 @@ def handle_optional_cds(args, headers, username, extra_articles, out_dir):
             lnf_exclude={_normalize_exclude_name(s) for s in (getattr(args, "lnf_exclude", "").split(";") if getattr(args, "lnf_exclude", "") else []) if s.strip()},
             lnf_safe_bands=bool(getattr(args, "lnf_safe_bands", False)),
         )
+        from core.genre_overrides import apply_genre_overrides
+        apply_genre_overrides(rows_cd)
         rows_cd_sorted = sort_rows(rows_cd, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
         txtcd = out_dir / "cd_shelf_order.txt"
         csvcd = out_dir / "cd_shelf_order.csv"

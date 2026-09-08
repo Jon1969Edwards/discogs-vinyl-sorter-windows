@@ -40,7 +40,7 @@ On first launch, use **Sign in with Discogs** in Settings (OAuth), paste a Perso
 
 Activate Pro in **Settings → Pro License**. Details: [docs/PRICING.md](docs/PRICING.md).
 
-On Windows, user data (config, caches, wishlist, thumbnails) lives under `%LOCALAPPDATA%\Spindle\` — not next to the `.exe`. See [PRIVACY.md](PRIVACY.md).
+On Windows, user data (config, caches, wishlist, genre edits, thumbnails) lives under `%LOCALAPPDATA%\Spindle\` — not next to the `.exe`. See [PRIVACY.md](PRIVACY.md).
 
 ### Auto-Sort GUI highlights
 
@@ -49,6 +49,7 @@ On Windows, user data (config, caches, wishlist, thumbnails) lives under `%LOCAL
 - Auto-watch: regenerates shelf order when your Discogs collection changes
 - Export **TXT / CSV / JSON**, print, optional aligned columns and country codes
 - Album thumbnails, search/filter, sort by artist / title / year / **genre** / price
+- **Edit genre** on any album (double-click the Genre cell, right-click, or Album info → Edit). Corrections persist across Discogs refreshes.
 - **Wishlist** tab synced from your Discogs wantlist; check marketplace availability (Pro)
 - **Manual order mode**: drag rows to match your physical shelves (Pro)
 - **Audio preview** for selected releases (Pro)
@@ -99,7 +100,7 @@ Outputs:
 
 ### Customization
 
-Sort by Discogs primary genre (then artist → title → year). Albums with no genre file under **Unknown** at the end. TXT uses `=== Jazz ===` section headers instead of letter dividers:
+Sort by Discogs primary genre (then artist → title → year). Albums with no genre file under **Unknown** at the end. TXT uses `=== Jazz ===` section headers instead of letter dividers. In the GUI you can correct a wrong genre; that edit is saved locally and kept after the next Discogs refresh.
 
 ```bash
 python discogs_app.py --sort-by genre

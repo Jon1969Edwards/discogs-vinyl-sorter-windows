@@ -25,6 +25,7 @@ from core.api import (
     get_identity,
 )
 from core.export import generate_txt_lines
+from core.genre_overrides import apply_genre_overrides
 from core.local_collection import LocalCollectionStore
 from core.models import SOURCE_LOCAL, LOCAL_USERNAME, BuildResult
 from core.oauth_discogs import get_oauth_session, _get_consumer_credentials
@@ -271,6 +272,9 @@ def build_once(
         log("No items match the selected format filters.")
         report("error", "No items match the selected format filters.")
         return []
+      n = apply_genre_overrides(rows)
+      if n:
+        log(f"Applied {n} saved genre edit(s).")
       return rows
     except Exception as e:
       report("error", f"Failed to collect rows: {e}")
@@ -361,6 +365,10 @@ def _build_from_local(
     log("No items match the selected format filters.")
     report("error", "No items match the selected format filters.")
     return BuildResult(username=LOCAL_USERNAME, rows_sorted=[], lines=[])
+
+  n = apply_genre_overrides(rows)
+  if n:
+    log(f"Applied {n} saved genre edit(s).")
 
   if cfg.show_prices or cfg.sort_by in ("price_asc", "price_desc"):
     log("Marketplace prices need a Discogs collection. Skipped for imported files.")
