@@ -35,15 +35,9 @@ def prompt_edit_genre(
     win.transient(parent)
     win.resizable(False, False)
     win.configure(bg=bg)
-    width, height = 460, 250 if has_override else 220
-    win.geometry(f"{width}x{height}")
-    win.update_idletasks()
-    x = (win.winfo_screenwidth() // 2) - (width // 2)
-    y = (win.winfo_screenheight() // 2) - (height // 2)
-    win.geometry(f"{width}x{height}+{x}+{y}")
-    win.grab_set()
+    win.withdraw()
 
-    outer = tk.Frame(win, bg=bg, padx=20, pady=16)
+    outer = tk.Frame(win, bg=bg, padx=24, pady=20)
     outer.pack(fill="both", expand=True)
 
     tk.Label(
@@ -69,12 +63,12 @@ def prompt_edit_genre(
     ).pack(fill="x", pady=(0, 8))
 
     combo = ttk.Combobox(outer, values=suggestions, font=(FONT_SEGOE_UI, FONT_MD))
-    combo.pack(fill="x", pady=(0, 16), ipady=4)
+    combo.pack(fill="x", pady=(4, 20), ipady=6)
     combo.set(current)
     combo.focus_set()
 
     btn_row = tk.Frame(outer, bg=bg)
-    btn_row.pack(fill="x", side="bottom")
+    btn_row.pack(fill="x")
 
     def finish(action: str, text: str = "") -> None:
         result["value"] = (action, text)
@@ -97,7 +91,7 @@ def prompt_edit_genre(
         activeforeground=btn_fg,
         relief="groove",
         width=10,
-    ).pack(side="right")
+    ).pack(side="right", ipady=6)
 
     tk.Button(
         btn_row,
@@ -110,7 +104,7 @@ def prompt_edit_genre(
         activeforeground=btn_fg,
         relief="groove",
         width=10,
-    ).pack(side="right", padx=(0, 8))
+    ).pack(side="right", padx=(0, 8), ipady=6)
 
     if has_override:
         tk.Button(
@@ -123,9 +117,20 @@ def prompt_edit_genre(
             activebackground=btn_bg,
             activeforeground=btn_fg,
             relief="groove",
-        ).pack(side="left")
+        ).pack(side="left", ipady=6)
 
+    win.update_idletasks()
+    width = max(480, win.winfo_reqwidth(), outer.winfo_reqwidth() + 32)
+    height = max(300, win.winfo_reqheight(), outer.winfo_reqheight() + 56)
+    win.minsize(width, height)
+    x = (win.winfo_screenwidth() // 2) - (width // 2)
+    y = (win.winfo_screenheight() // 2) - (height // 2)
+    win.geometry(f"{width}x{height}+{x}+{y}")
+    win.deiconify()
+    win.lift()
+    win.grab_set()
     win.bind("<Return>", lambda *_: on_save())
     win.bind("<Escape>", lambda *_: win.destroy())
+    combo.focus_set()
     win.wait_window()
     return result["value"]
