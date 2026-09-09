@@ -125,6 +125,42 @@ def api_get(url: str, headers: Optional[Dict[str, str]] = None,
     raise RuntimeError("Discogs API request failed after retries")
 
 
+def api_post(url: str, headers: Optional[Dict[str, str]] = None,
+             session: Optional[Any] = None,
+             params: Optional[Dict[str, str]] = None,
+             retries: int = 3, backoff: float = 1.0):
+    """Execute a POST request to Discogs API with retry logic."""
+    if requests is None:
+        raise RuntimeError("Missing dependency 'requests'. Install requirements.txt (pip install -r requirements.txt).")
+    if session is None and headers is None:
+        raise ValueError("api_post requires either headers or session")
+    last_error: Optional[Exception] = None
+    for attempt in range(retries):
+        try:
+            if session is not None:
+                resp = session.post(url, params=params, timeout=30)
+            else:
+                resp = requests.post(url, headers=headers, params=params, timeout=30)
+            status = resp.status_code
+            if status < 400:
+                _polite_rate_limit_pause(resp)
+                return resp
+            if _should_retry(status):
+                time.sleep(_retry_sleep_seconds(resp, attempt, backoff))
+                last_error = RuntimeError(f"Transient API error {status}")
+                continue
+            raise RuntimeError(f"Discogs API error {status}: {resp.text[:200]}")
+        except Exception as e:
+            if requests is not None and isinstance(e, requests.RequestException):
+                last_error = e
+                time.sleep(min(backoff * (2 ** attempt), 10.0))
+                continue
+            raise
+    if last_error:
+        raise last_error
+    raise RuntimeError("Discogs API request failed after retries")
+
+
 def get_identity(headers: Optional[Dict[str, str]] = None, session: Optional[Any] = None) -> Dict:
     """Get the authenticated user's identity from Discogs API. Use headers or session."""
     url = f"{API_BASE}/oauth/identity"

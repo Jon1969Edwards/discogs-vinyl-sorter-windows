@@ -267,14 +267,28 @@ def build_once(
         log("No matching items found.")
         report("error", "No matching items found.")
         return []
+      from core.genre_overrides import get_genre_overrides
+      from core.genre_sync import sync_genre_overrides_with_discogs
+      store = get_genre_overrides()
+      try:
+        sync_genre_overrides_with_discogs(
+          rows,
+          store,
+          username=username,
+          headers=headers,
+          session=session,
+          log=log,
+        )
+      except Exception as exc:
+        log(f"Genre sync skipped: {exc}")
+      n = apply_genre_overrides(rows, store=store)
+      if n:
+        log(f"Applied {n} saved genre edit(s).")
       rows = _filter_cfg_formats(cfg, rows, log)
       if not rows:
         log("No items match the selected format filters.")
         report("error", "No items match the selected format filters.")
         return []
-      n = apply_genre_overrides(rows)
-      if n:
-        log(f"Applied {n} saved genre edit(s).")
       return rows
     except Exception as e:
       report("error", f"Failed to collect rows: {e}")

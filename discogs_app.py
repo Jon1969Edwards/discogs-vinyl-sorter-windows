@@ -233,8 +233,16 @@ def main() -> None:
     if not rows:
         return
 
-    from core.genre_overrides import apply_genre_overrides
-    apply_genre_overrides(rows)
+    from core.genre_overrides import apply_genre_overrides, get_genre_overrides
+    from core.genre_sync import sync_genre_overrides_with_discogs
+    store = get_genre_overrides()
+    try:
+        sync_genre_overrides_with_discogs(
+            rows, store, username=username, headers=headers, log=print
+        )
+    except Exception as exc:
+        print(f"Genre sync skipped: {exc}")
+    apply_genre_overrides(rows, store=store)
 
     rows_sorted = sort_rows(rows, args.various_policy, sort_by=getattr(args, "sort_by", "artist") or "artist")
     write_main_outputs(args, out_dir, rows_sorted)

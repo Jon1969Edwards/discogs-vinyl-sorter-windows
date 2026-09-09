@@ -31,6 +31,11 @@ class ReleaseRow:
     format_categories: frozenset = field(default_factory=frozenset)
     source: str = SOURCE_DISCOGS
     item_id: str = ""
+    instance_id: Optional[int] = None
+    folder_id: Optional[int] = None
+    collection_notes: object = None
+    spindle_genre_edit: str = ""
+    notes_field_id: Optional[int] = None
     genre: str = ""
     genres: tuple = field(default_factory=tuple)
     styles: tuple = field(default_factory=tuple)

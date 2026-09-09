@@ -36,7 +36,7 @@ from tkinter import ttk  # Keep ttk for Treeview (no CTk replacement yet)
 from core.api import discogs_headers
 from core.collection_import import CollectionImportError, load_collection_file
 from core.export import generate_txt_lines, write_csv, write_json, write_txt
-from core.genre_overrides import GenreOverrides
+from core.genre_overrides import get_genre_overrides
 from core.local_collection import LocalCollectionStore
 from core.models import SOURCE_DISCOGS, SOURCE_LOCAL, ReleaseRow, BuildResult
 from gui.spinning_record import SpinningRecord
@@ -577,7 +577,7 @@ class App:
     # Initialize the manual order manager
     self._manual_order = ManualOrderManager()
     self.v_manual_order_enabled = BooleanVar(value=self._manual_order.is_enabled())
-    self._genre_overrides = GenreOverrides()
+    self._genre_overrides = get_genre_overrides()
     
     # Initialize thumbnail cache and preview popup
     self._thumbnail_cache = ThumbnailCache()
@@ -1634,11 +1634,16 @@ class App:
     if action == "reset":
       self._genre_overrides.clear_for_row(row)
       self._log(f"Genre reset: {row.artist_display} — {row.title}")
+      self._queue_genre_discogs_sync(row, genres_text=None)
     elif not self._genre_overrides.set_for_row(row, text):
       messagebox.showwarning("Edit genre", "Could not save this genre edit.")
       return
     else:
       self._log(f"Genre set to {row.genre_label()}: {row.artist_display} — {row.title}")
+      genres_text = "; ".join(row.genres) if getattr(row, "genres", ()) else (
+        row.genre_label() if hasattr(row, "genre_label") else (getattr(row, "genre", "") or "")
+      )
+      self._queue_genre_discogs_sync(row, genres_text=genres_text)
     if popup is not None:
       try:
         popup.destroy()
@@ -2459,60 +2464,28 @@ class App:
     if self._has_valid_token(self._get_cfg()):
       self._refresh_now()
 
-  def _export_genre_edits(self) -> None:
-    n = self._genre_overrides.count()
-    if n == 0:
-      messagebox.showinfo("Genre edits", "No genre edits to export yet.")
+  def _queue_genre_discogs_sync(self, row, *, genres_text: str | None) -> None:
+    if getattr(self, "_collection_source", SOURCE_DISCOGS) == SOURCE_LOCAL:
       return
-    path = filedialog.asksaveasfilename(
-      title="Export genre edits",
-      defaultextension=".json",
-      initialfile="genre_overrides.json",
-      initialdir=self.v_output_dir.get() or str(Path.cwd()),
-      filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-    )
-    if not path:
+    if not getattr(row, "release_id", None) or not getattr(row, "instance_id", None):
       return
-    try:
-      self._genre_overrides.export_to_path(Path(path))
-    except Exception as exc:
-      messagebox.showerror("Export failed", f"Could not write that file:\n{exc}")
-      return
-    self._log(f"Exported {n} genre edit(s) to {Path(path).name}")
-    messagebox.showinfo(
-      "Genre edits",
-      f"Exported {n} genre edit(s) to:\n{path}\n\nCopy this file to your phone and import it in Settings.",
-    )
 
-  def _import_genre_edits(self) -> None:
-    chosen = filedialog.askopenfilename(
-      title="Import genre edits",
-      initialdir=self.v_output_dir.get() or str(Path.cwd()),
-      filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-    )
-    if not chosen:
-      return
-    try:
-      n = self._genre_overrides.import_from_path(Path(chosen))
-    except ValueError as exc:
-      messagebox.showerror("Import failed", str(exc))
-      return
-    except Exception as exc:
-      messagebox.showerror("Import failed", f"Could not import that file:\n{exc}")
-      return
-    if n == 0:
-      messagebox.showinfo("Genre edits", "No genre edits found in that file.")
-      return
-    if getattr(self, "_last_result", None) is not None:
-      self._genre_overrides.apply_to_rows(self._last_result.rows_sorted)
-      if getattr(self, "_tree_rows", None):
-        self._genre_overrides.apply_to_rows(self._tree_rows)
-      self._render_order(self._last_result)
-    self._log(f"Imported {n} genre edit(s) from {Path(chosen).name}")
-    messagebox.showinfo(
-      "Genre edits",
-      f"Imported {n} genre edit(s).\n\nMatching albums in the current collection are updated.",
-    )
+    def work():
+      try:
+        from core.genre_sync import push_genre_edit
+        cfg = self._get_cfg()
+        _, headers, session, username = _get_user_headers(cfg, lambda _m: None)
+        push_genre_edit(
+          row,
+          username=username,
+          headers=headers,
+          session=session,
+          genres_text=genres_text,
+        )
+      except Exception as exc:
+        self._log(f"Genre sync skipped: {exc}")
+
+    threading.Thread(target=work, daemon=True).start()
 
   def _divider_mode_value(self) -> str:
     mode = DIVIDER_MODE_BY_LABEL.get(self.v_divider_mode.get(), "none")
@@ -3625,21 +3598,12 @@ class App:
       json_path = out_dir / "vinyl_shelf_order.json"
       write_json(rows_to_export, json_path)
       self._log(f"Exported: {json_path.name}")
-
-    sidecar = None
-    if self._genre_overrides.count():
-      sidecar = out_dir / "genre_overrides.json"
-      self._genre_overrides.export_to_path(sidecar)
-      self._log(f"Exported: {sidecar.name}")
     
     # Note if manual order was used
     if self.v_manual_order_enabled.get():
       self._log("(Exported with manual ordering)")
 
-    done = f"Wrote files to:\n{out_dir}"
-    if sidecar:
-      done += f"\n\nGenre edits: {sidecar.name}\nImport this file on your phone in Settings."
-    messagebox.showinfo("Export", done)
+    messagebox.showinfo("Export", f"Wrote files to:\n{out_dir}")
     self.v_status.set(f"Exported to: {out_dir}")
 
   def _print_current(self) -> None:

@@ -16,6 +16,15 @@ from core.sorting import parse_genre_list, primary_genre
 
 GENRE_OVERRIDES_FILE = migrate_user_file("genre_overrides.json")
 
+_default_store: GenreOverrides | None = None
+
+
+def get_genre_overrides() -> "GenreOverrides":
+    global _default_store
+    if _default_store is None:
+        _default_store = GenreOverrides()
+    return _default_store
+
 
 def override_lookup_keys(row: ReleaseRow) -> List[str]:
     keys: List[str] = []
@@ -211,4 +220,4 @@ class GenreOverrides:
 
 def apply_genre_overrides(rows: List[ReleaseRow], store: GenreOverrides | None = None) -> int:
     """Apply saved genre edits to freshly loaded/fetched rows."""
-    return (store or GenreOverrides()).apply_to_rows(rows)
+    return (store or get_genre_overrides()).apply_to_rows(rows)

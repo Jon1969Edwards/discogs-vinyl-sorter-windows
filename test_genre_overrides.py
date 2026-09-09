@@ -91,32 +91,25 @@ def main():
         )
         assert_eq(store.set_for_row(no_id, "Rock"), False)
 
-        payload = {
-            "version": 1,
-            "overrides": {
-                "19000885": {"genre": "Punk/Hardcore, Reggae", "genres": ["Punk/Hardcore, Reggae"]},
-                "discogs:6057905": {"genre": "Indie", "genres": ["Indie"]},
-            },
-        }
-        from core.genre_overrides import parse_overrides_payload
-        parsed = parse_overrides_payload(payload)
-        assert_eq("discogs:19000885" in parsed, True)
-        assert_eq(parsed["discogs:6057905"]["genre"], "Indie")
-        other = Path(td) / "incoming.json"
-        store.export_to_path(other)
-        incoming = GenreOverrides(Path(td) / "empty.json")
-        added = incoming.import_from_path(other)
-        assert_eq(added >= 1, True)
-        rows_json = [
-            {"release_id": 6171913, "genre": "Oi!/Streetpunk", "genres": ["Oi!/Streetpunk"]},
-        ]
-        from_rows = parse_overrides_payload(rows_json)
-        assert_eq(from_rows["discogs:6171913"]["genre"], "Oi!/Streetpunk")
-        merged = incoming.merge_overrides(from_rows)
-        assert_eq(merged, 1)
-        fresh_oi = _row(6171913, "Rock")
-        apply_genre_overrides([fresh_oi], store=incoming)
-        assert_eq(fresh_oi.genre, "Oi!/Streetpunk")
+        from core.collection_notes import (
+            extract_spindle_genre,
+            extract_from_notes,
+            format_display_notes,
+            inject_spindle_genre,
+            pick_notes_field_id,
+            strip_spindle_genre,
+        )
+        notes = "Gift from dad\nspindle-genre: Indie"
+        assert_eq(extract_spindle_genre(notes), "Indie")
+        assert_eq(strip_spindle_genre(notes), "Gift from dad")
+        assert_eq(inject_spindle_genre("Gift from dad", "Oi!/Streetpunk"), "Gift from dad\nspindle-genre: Oi!/Streetpunk")
+        fields = [{"id": 3, "name": "Notes", "type": "textarea"}]
+        item_notes = [{"field_id": 3, "value": "spindle-genre: Punk/Hardcore, Reggae"}]
+        genre, fid = extract_from_notes(item_notes)
+        assert_eq(genre, "Punk/Hardcore, Reggae")
+        assert_eq(fid, 3)
+        assert_eq(pick_notes_field_id(fields, item_notes), 3)
+        assert_eq(format_display_notes(item_notes), "")
 
     print("All genre override assertions passed.")
 

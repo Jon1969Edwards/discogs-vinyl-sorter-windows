@@ -49,7 +49,7 @@ On Windows, user data (config, caches, wishlist, genre edits, thumbnails) lives 
 - Auto-watch: regenerates shelf order when your Discogs collection changes
 - Export **TXT / CSV / JSON**, print, optional aligned columns and country codes
 - Album thumbnails, search/filter, sort by artist / title / year / **genre** / price
-- **Edit genre** on any album (double-click the Genre cell, right-click, or Album info → Edit). Corrections persist across Discogs refreshes. Export/import `genre_overrides.json` in Settings to copy edits to your phone.
+- **Edit genre** on any album (double-click the Genre cell, right-click, or Album info → Edit). Corrections persist across Discogs refreshes and sync to your phone on the next collection load.
 - **Wishlist** tab synced from your Discogs wantlist; check marketplace availability (Pro)
 - **Manual order mode**: drag rows to match your physical shelves (Pro)
 - **Audio preview** for selected releases (Pro)

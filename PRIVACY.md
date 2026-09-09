@@ -19,7 +19,7 @@ stays on your computer under a local app-data folder (on Windows:
 | Discogs OAuth tokens | `config.json` | Sign in and access your collection |
 | Collection / price cache | `collection_cache.json` | Faster reloads |
 | Manual shelf order | `manual_order.json` | Your custom sort order |
-| Genre edits | `genre_overrides.json` | Your corrections when Discogs genre is wrong |
+| Genre edits | `genre_overrides.json` | Your corrections when Discogs genre is wrong. Also written to your Discogs collection notes so desktop and phone stay in sync. |
 | Wishlist | `wishlist.json` | Local wishlist and availability checks |
 | Thumbnail cache | `thumbnails/` | Album artwork |
 | License key (Pro) | `config.json` | Unlock Pro features offline |
@@ -36,7 +36,7 @@ are migrated automatically into the AppData location on first launch.
 
 When you use the app, it contacts:
 
-- **Discogs API** — to load your collection, wishlist, and marketplace prices (per your sign-in)
+- **Discogs API** — to load your collection, wishlist, and marketplace prices (per your sign-in). Genre corrections are stored on your Discogs collection notes so they follow your account.
 - **iTunes / Deezer** — to find 30-second audio preview URLs (artist + album search only)
 - **Spotify** — only if you click "Search on Spotify" (opens your browser)
 - **YouTube** — only if you click a Discogs-linked video preview (opens your browser)

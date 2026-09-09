@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from core.models import ReleaseRow, UNKNOWN_GENRE
 from core.api import iterate_collection
+from core.collection_notes import attach_collection_notes
 
 
 # ============================================================================
@@ -469,7 +470,7 @@ def build_release_row(
   parsed_id = int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None
   genres = genres_from_basic(basic)
   styles = styles_from_basic(basic)
-  return ReleaseRow(
+  row = ReleaseRow(
     artist_display=artist_disp,
     title=title,
     year=year,
@@ -478,7 +479,7 @@ def build_release_row(
     country=basic.get("country") or "",
     format_str=fmt_desc,
     discogs_url=url,
-    notes=(item.get("notes") or ""),
+    notes="",
     release_id=parsed_id,
     sort_artist=sort_artist,
     sort_title=sort_title,
@@ -492,6 +493,8 @@ def build_release_row(
     source_genre=primary_genre(genres),
     source_genres=genres,
   )
+  attach_collection_notes(row, item)
+  return row
 
 
 # ============================================================================
@@ -552,7 +555,7 @@ def _lp_build_row(
     parsed_id = int(rel_id) if isinstance(rel_id, int) or (isinstance(rel_id, str) and rel_id.isdigit()) else None
     genres = genres_from_basic(basic)
     styles = styles_from_basic(basic)
-    return ReleaseRow(
+    row = ReleaseRow(
         artist_display=artist_disp,
         title=title,
         year=year,
@@ -561,7 +564,7 @@ def _lp_build_row(
         country=basic.get("country") or "",
         format_str=fmt_desc,
         discogs_url=url,
-        notes=(item.get("notes") or ""),
+        notes="",
         release_id=parsed_id,
         master_id=int(master_id_raw) if isinstance(master_id_raw, int) or (isinstance(master_id_raw, str) and master_id_raw.isdigit()) else None,
         sort_artist=sort_artist,
@@ -576,6 +579,8 @@ def _lp_build_row(
         source_genre=primary_genre(genres),
         source_genres=genres,
     )
+    attach_collection_notes(row, item)
+    return row
 
 def _lp_should_exclude(basic: Dict, lp_strict: bool, lp_probable: bool) -> bool:
     return not is_lp_33(basic, strict=lp_strict, probable=lp_probable)
