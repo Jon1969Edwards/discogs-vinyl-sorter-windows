@@ -2459,6 +2459,61 @@ class App:
     if self._has_valid_token(self._get_cfg()):
       self._refresh_now()
 
+  def _export_genre_edits(self) -> None:
+    n = self._genre_overrides.count()
+    if n == 0:
+      messagebox.showinfo("Genre edits", "No genre edits to export yet.")
+      return
+    path = filedialog.asksaveasfilename(
+      title="Export genre edits",
+      defaultextension=".json",
+      initialfile="genre_overrides.json",
+      initialdir=self.v_output_dir.get() or str(Path.cwd()),
+      filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+    )
+    if not path:
+      return
+    try:
+      self._genre_overrides.export_to_path(Path(path))
+    except Exception as exc:
+      messagebox.showerror("Export failed", f"Could not write that file:\n{exc}")
+      return
+    self._log(f"Exported {n} genre edit(s) to {Path(path).name}")
+    messagebox.showinfo(
+      "Genre edits",
+      f"Exported {n} genre edit(s) to:\n{path}\n\nCopy this file to your phone and import it in Settings.",
+    )
+
+  def _import_genre_edits(self) -> None:
+    chosen = filedialog.askopenfilename(
+      title="Import genre edits",
+      initialdir=self.v_output_dir.get() or str(Path.cwd()),
+      filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+    )
+    if not chosen:
+      return
+    try:
+      n = self._genre_overrides.import_from_path(Path(chosen))
+    except ValueError as exc:
+      messagebox.showerror("Import failed", str(exc))
+      return
+    except Exception as exc:
+      messagebox.showerror("Import failed", f"Could not import that file:\n{exc}")
+      return
+    if n == 0:
+      messagebox.showinfo("Genre edits", "No genre edits found in that file.")
+      return
+    if getattr(self, "_last_result", None) is not None:
+      self._genre_overrides.apply_to_rows(self._last_result.rows_sorted)
+      if getattr(self, "_tree_rows", None):
+        self._genre_overrides.apply_to_rows(self._tree_rows)
+      self._render_order(self._last_result)
+    self._log(f"Imported {n} genre edit(s) from {Path(chosen).name}")
+    messagebox.showinfo(
+      "Genre edits",
+      f"Imported {n} genre edit(s).\n\nMatching albums in the current collection are updated.",
+    )
+
   def _divider_mode_value(self) -> str:
     mode = DIVIDER_MODE_BY_LABEL.get(self.v_divider_mode.get(), "none")
     if mode != "none" and not can_use_abc_dividers():
@@ -3570,12 +3625,21 @@ class App:
       json_path = out_dir / "vinyl_shelf_order.json"
       write_json(rows_to_export, json_path)
       self._log(f"Exported: {json_path.name}")
+
+    sidecar = None
+    if self._genre_overrides.count():
+      sidecar = out_dir / "genre_overrides.json"
+      self._genre_overrides.export_to_path(sidecar)
+      self._log(f"Exported: {sidecar.name}")
     
     # Note if manual order was used
     if self.v_manual_order_enabled.get():
       self._log("(Exported with manual ordering)")
 
-    messagebox.showinfo("Export", f"Wrote files to:\n{out_dir}")
+    done = f"Wrote files to:\n{out_dir}"
+    if sidecar:
+      done += f"\n\nGenre edits: {sidecar.name}\nImport this file on your phone in Settings."
+    messagebox.showinfo("Export", done)
     self.v_status.set(f"Exported to: {out_dir}")
 
   def _print_current(self) -> None:

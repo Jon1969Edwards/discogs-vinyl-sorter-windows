@@ -416,8 +416,42 @@ class SettingsPanel:
     sort_section = make_section("Sorting", "🔤")
     muted_label(sort_section, text="Default sort order (genre uses the first Discogs genre)").grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
     a._sort_row = ctk.CTkFrame(sort_section, fg_color="transparent")
-    a._sort_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
+    a._sort_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 8))
     self._build_sort_content(a._sort_row)
+    muted_label(
+      sort_section,
+      text="Genre edits stay on this PC. Export a JSON file and import it on your phone (or vice versa).",
+      wraplength=360,
+      justify="left",
+    ).grid(row=3, column=0, sticky="w", padx=16, pady=(0, 8))
+    genre_btns = ctk.CTkFrame(sort_section, fg_color="transparent")
+    genre_btns.grid(row=4, column=0, sticky="w", padx=16, pady=(0, 14))
+    a._export_genre_edits_btn = ctk.CTkButton(
+      genre_btns,
+      text="Export genre edits…",
+      command=a._export_genre_edits,
+      width=180,
+      height=38,
+      corner_radius=8,
+      fg_color=a._colors["accent"],
+      hover_color=a._colors["button_hover"],
+      font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_SM),
+    )
+    a._export_genre_edits_btn.pack(side="left", padx=(0, 8))
+    ToolTip(a._export_genre_edits_btn, "Save genre_overrides.json to copy to your phone.")
+    a._import_genre_edits_btn = ctk.CTkButton(
+      genre_btns,
+      text="Import genre edits…",
+      command=a._import_genre_edits,
+      width=180,
+      height=38,
+      corner_radius=8,
+      fg_color=a._colors.get("secondary_btn", "#4a5568"),
+      hover_color=a._colors.get("secondary_btn_hover", "#2d3748"),
+      font=(ui.FONT_SEGOE_UI_SEMIBOLD, ui.FONT_SM),
+    )
+    a._import_genre_edits_btn.pack(side="left")
+    ToolTip(a._import_genre_edits_btn, "Load genre_overrides.json from your phone or another PC.")
 
     formats_section = make_section("Formats", "💿")
     muted_label(formats_section, text="Show these formats in your collection").grid(
@@ -587,7 +621,7 @@ class SettingsPanel:
         self._sync_scrollable_canvas(a._settings_scroll, panel)
 
       # Buttons / menus that keep stale theme colors
-      for btn_name in ("_signin_btn", "_browse_btn", "_refresh_prices_btn", "_settings_collapse_btn", "_settings_expand_btn", "_import_collection_btn"):
+      for btn_name in ("_signin_btn", "_browse_btn", "_refresh_prices_btn", "_settings_collapse_btn", "_settings_expand_btn", "_import_collection_btn", "_export_genre_edits_btn"):
         btn = getattr(a, btn_name, None)
         if btn is not None:
           try:
@@ -599,7 +633,7 @@ class SettingsPanel:
           a._signout_btn.configure(fg_color=secondary, hover_color=secondary_hover)
         except Exception:
           pass
-      for extra_btn in ("_use_local_btn", "_use_discogs_btn", "_clear_local_btn"):
+      for extra_btn in ("_use_local_btn", "_use_discogs_btn", "_clear_local_btn", "_import_genre_edits_btn"):
         btn = getattr(a, extra_btn, None)
         if btn is not None:
           try:

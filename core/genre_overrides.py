@@ -29,6 +29,68 @@ def override_lookup_keys(row: ReleaseRow) -> List[str]:
     return keys
 
 
+def parse_overrides_payload(data: object) -> Dict[str, dict]:
+    """Parse genre_overrides.json or a Spindle collection JSON into override entries."""
+    if isinstance(data, list):
+        return _overrides_from_rows(data)
+    if not isinstance(data, dict):
+        raise ValueError("Not a JSON object or array.")
+    raw = data.get("overrides")
+    if isinstance(raw, dict):
+        return _normalize_override_map(raw)
+    rows = data.get("rows")
+    if isinstance(rows, list):
+        return _overrides_from_rows(rows)
+    raise ValueError("Unrecognized genre edits file.")
+
+
+def _normalize_override_key(key: str) -> str:
+    text = str(key).strip()
+    if text.isdigit():
+        return f"discogs:{text}"
+    return text
+
+
+def _entry_from_value(raw: object) -> Optional[dict]:
+    if isinstance(raw, str):
+        parsed = parse_genre_list(raw)
+        return {"genre": primary_genre(parsed) if parsed else UNKNOWN_GENRE, "genres": list(parsed)}
+    if isinstance(raw, dict):
+        parsed = parse_genre_list(raw.get("genres") or raw.get("genre"))
+        return {"genre": primary_genre(parsed) if parsed else UNKNOWN_GENRE, "genres": list(parsed)}
+    return None
+
+
+def _normalize_override_map(raw: dict) -> Dict[str, dict]:
+    out: Dict[str, dict] = {}
+    for key, value in raw.items():
+        entry = _entry_from_value(value)
+        if entry is None:
+            continue
+        out[_normalize_override_key(str(key))] = entry
+    return out
+
+
+def _overrides_from_rows(rows: list) -> Dict[str, dict]:
+    out: Dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        rid = row.get("release_id") or row.get("releaseId")
+        item_id = str(row.get("item_id") or "").strip()
+        if not item_id and rid is not None and str(rid).strip():
+            item_id = f"discogs:{rid}"
+        if not item_id:
+            continue
+        genre_val = row.get("genres") or row.get("genre")
+        if genre_val in (None, "", []):
+            continue
+        entry = _entry_from_value({"genre": row.get("genre"), "genres": row.get("genres")})
+        if entry:
+            out[_normalize_override_key(item_id)] = entry
+    return out
+
+
 class GenreOverrides:
     """Persistent primary-genre edits for collection rows."""
 
@@ -114,6 +176,37 @@ class GenreOverrides:
             if self.apply_to_row(row):
                 count += 1
         return count
+
+    def to_dict(self) -> dict:
+        return {"version": 1, "overrides": dict(self._overrides())}
+
+    def count(self) -> int:
+        return len(self._overrides())
+
+    def export_to_path(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, ensure_ascii=False, indent=2)
+
+    def merge_overrides(self, incoming: Dict[str, dict]) -> int:
+        stored = self._overrides()
+        added = 0
+        for key, entry in incoming.items():
+            if not isinstance(entry, dict):
+                continue
+            stored[_normalize_override_key(key)] = {
+                "genre": entry.get("genre") or UNKNOWN_GENRE,
+                "genres": list(entry.get("genres") or []),
+            }
+            added += 1
+        if added:
+            self._save()
+        return added
+
+    def import_from_path(self, path: Path) -> int:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return self.merge_overrides(parse_overrides_payload(data))
 
 
 def apply_genre_overrides(rows: List[ReleaseRow], store: GenreOverrides | None = None) -> int:
